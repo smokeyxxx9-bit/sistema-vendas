@@ -6,6 +6,7 @@
 <title>Painel de Vendas — Oficina</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{
     --bg:#14181c;
@@ -57,6 +58,10 @@
   }
   .brand h1{font-size:22px;color:var(--text);}
   .brand span.tag{color:var(--text-faint);font-size:12.5px;font-family:'IBM Plex Mono',monospace;}
+  .sync-badge{font-size:10px;padding:3px 9px;border-radius:20px;border:1px solid var(--border-soft);color:var(--text-faint);margin-left:10px;letter-spacing:.03em;text-transform:uppercase;font-family:'IBM Plex Mono',monospace;}
+  .sync-badge.on{color:var(--green);border-color:var(--green);}
+  .sync-badge.connecting{color:var(--yellow);border-color:var(--yellow);}
+  .sync-badge.error{color:var(--red);border-color:var(--red);}
   .auth-zone{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end;}
   .pill{
     font-size:12.5px;padding:6px 12px;border:1px solid var(--border);border-radius:3px;
@@ -347,6 +352,76 @@
   var K_VENDA_SEQ = "vo_venda_seq";
   var K_NOTAS = "vo_notas";
 
+  // ---------- sincronização em nuvem (Supabase) ----------
+  // Preencha as duas linhas abaixo com os dados do SEU projeto Supabase
+  // (Project Settings → API, na dashboard do supabase.com) para ativar
+  // a sincronização automática entre computadores/celulares. Deixando
+  // como está, o sistema continua funcionando 100% normalmente, só que
+  // sem sincronizar — cada aparelho fica com seus próprios dados.
+  var SUPABASE_URL = "https://vvkpkqmhboaridolxylb.supabase.co";
+  var SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ2a3BrcW1oYm9hcmlkb2x4eWxiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0NzgwNTYsImV4cCI6MjEwNDA1NDA1Nn0.4T9KMXkoQlt2UkvBHg8BjNFP21pEKHyyurwkDd2XDXc";
+
+  var cloudStatus = "off"; // off | connecting | on | error
+  var sb = null;
+  if (window.supabase && SUPABASE_URL.indexOf("COLE_AQUI")===-1 && SUPABASE_ANON_KEY.indexOf("COLE_AQUI")===-1){
+    try{ sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); cloudStatus = "connecting"; }
+    catch(e){ sb = null; }
+  }
+
+  function syncBadgeHtml(){
+    if (!sb) return '<span id="syncBadge" class="sync-badge off" title="Configure o Supabase no início do arquivo para sincronizar entre aparelhos">○ somente local</span>';
+    if (cloudStatus==="on") return '<span id="syncBadge" class="sync-badge on" title="Sincronizado com a nuvem">● nuvem conectada</span>';
+    if (cloudStatus==="error") return '<span id="syncBadge" class="sync-badge error" title="Falha ao conectar com a nuvem — dados continuam salvos localmente">⚠ erro de conexão</span>';
+    return '<span id="syncBadge" class="sync-badge connecting" title="Conectando à nuvem...">○ conectando…</span>';
+  }
+
+  // envia uma chave (já salva localmente) para a tabela kv_store no Supabase
+  function cloudPush(key, value){
+    if (!sb) return;
+    sb.from("kv_store").upsert({key:key, value:value, updated_at:new Date().toISOString()})
+      .then(function(res){
+        if (res && res.error){ cloudStatus = "error"; console.error("Erro ao sincronizar", key, res.error); }
+        else if (cloudStatus!=="on"){ cloudStatus = "on"; refreshSyncBadge(); }
+      });
+  }
+
+  // baixa tudo da nuvem e grava no localStorage (usado ao abrir o app)
+  function cloudPullAll(cb){
+    if (!sb) return cb();
+    sb.from("kv_store").select("key,value").then(function(res){
+      if (res && !res.error && res.data){
+        res.data.forEach(function(row){
+          try{ localStorage.setItem(row.key, JSON.stringify(row.value)); }catch(e){}
+        });
+        cloudStatus = "on";
+      } else {
+        cloudStatus = "error";
+        if (res && res.error) console.error("Erro ao baixar dados da nuvem", res.error);
+      }
+      cb();
+    }).catch(function(err){ cloudStatus = "error"; console.error(err); cb(); });
+  }
+
+  // escuta mudanças feitas em OUTROS aparelhos e atualiza a tela na hora
+  function initCloudSync(onRemoteChange){
+    if (!sb) return;
+    sb.channel("kv_store_changes")
+      .on("postgres_changes", {event:"*", schema:"public", table:"kv_store"}, function(payload){
+        var row = payload.new;
+        if (!row || !row.key) return;
+        try{ localStorage.setItem(row.key, JSON.stringify(row.value)); }catch(e){}
+        onRemoteChange(row.key);
+      })
+      .subscribe(function(status){
+        if (status==="SUBSCRIBED"){ cloudStatus = "on"; refreshSyncBadge(); }
+      });
+  }
+
+  function refreshSyncBadge(){
+    var el = document.getElementById("syncBadge");
+    if (el) el.outerHTML = syncBadgeHtml();
+  }
+
   var EMPRESA = {
     nome: "BIGUA PNEUS BORRACHARIA E AUTO CENTER",
     telefone: "47996919175",
@@ -363,7 +438,11 @@
     }catch(e){ return fallback; }
   }
   function lsSetJSON(key, obj){
-    try{ localStorage.setItem(key, JSON.stringify(obj)); return true; }
+    try{
+      localStorage.setItem(key, JSON.stringify(obj));
+      cloudPush(key, obj);
+      return true;
+    }
     catch(e){ return false; }
   }
   function getRows(date){
@@ -432,7 +511,9 @@
   function nextVendaNumber(){
     var n = parseInt(localStorage.getItem(K_VENDA_SEQ)||"0",10);
     if (isNaN(n)) n = 0;
-    localStorage.setItem(K_VENDA_SEQ, String(n+1));
+    var next = n+1;
+    localStorage.setItem(K_VENDA_SEQ, String(next));
+    cloudPush(K_VENDA_SEQ, next);
     return n;
   }
 
@@ -860,7 +941,7 @@
 
       root.innerHTML =
         '<div class="topbar">'+
-          '<div class="brand"><span class="mark"></span><h1>Painel de Vendas</h1><span class="tag">OFICINA · CONTROLE DIÁRIO</span></div>'+
+          '<div class="brand"><span class="mark"></span><h1>Painel de Vendas</h1><span class="tag">OFICINA · CONTROLE DIÁRIO</span>'+syncBadgeHtml()+'</div>'+
           authZoneHtml()+
         '</div>'+
 
@@ -1153,6 +1234,7 @@
     root.innerHTML =
       '<div class="topbar">'+
         '<button class="backlink" data-act="back">‹ Painel</button>'+
+        syncBadgeHtml()+
         authZoneHtml()+
       '</div>'+
 
@@ -1555,7 +1637,31 @@
     });
   }
 
-  render();
+  // ---------- reage a mudanças feitas em outro aparelho ----------
+  function handleRemoteChange(key){
+    if (key.indexOf(K_ROWS)===0){
+      var date = key.slice(K_ROWS.length);
+      var month = date.slice(0,7);
+      delete state.monthSummaryCache[month];
+      delete state.monthPartsCache[month];
+      // se a linha alterada é do dia aberto na tela e não há edição pendente,
+      // recarrega para não perder digitação em andamento
+      if (state.view==="table" && state.date===date && !state.saving){
+        getRows(date).then(function(rows){ state.rows = rows; render(); });
+        return;
+      }
+    } else if (key.indexOf(K_SUMMARY)===0){
+      var m = key.slice(K_SUMMARY.length);
+      delete state.monthSummaryCache[m];
+      delete state.monthPartsCache[m];
+    }
+    render();
+  }
+
+  cloudPullAll(function(){
+    render();
+    initCloudSync(handleRemoteChange);
+  });
 })();
 </script>
 </body>
