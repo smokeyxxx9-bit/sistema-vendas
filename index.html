@@ -386,10 +386,13 @@
   }
 
   // baixa tudo da nuvem e grava no localStorage (usado ao abrir o app)
+  // cb recebe true se a nuvem já tinha dados, false se estava vazia
   function cloudPullAll(cb){
-    if (!sb) return cb();
+    if (!sb) return cb(false);
     sb.from("kv_store").select("key,value").then(function(res){
+      var hadData = false;
       if (res && !res.error && res.data){
+        hadData = res.data.length>0;
         res.data.forEach(function(row){
           try{ localStorage.setItem(row.key, JSON.stringify(row.value)); }catch(e){}
         });
@@ -398,8 +401,25 @@
         cloudStatus = "error";
         if (res && res.error) console.error("Erro ao baixar dados da nuvem", res.error);
       }
-      cb();
-    }).catch(function(err){ cloudStatus = "error"; console.error(err); cb(); });
+      cb(hadData);
+    }).catch(function(err){ cloudStatus = "error"; console.error(err); cb(false); });
+  }
+
+  // envia TUDO que já está salvo neste navegador pra nuvem de uma vez
+  // (usado na primeira ativação, e também pelo botão manual "Enviar pra nuvem")
+  function pushAllLocalToCloud(){
+    if (!sb) return 0;
+    var n = 0;
+    for (var i=0;i<localStorage.length;i++){
+      var k = localStorage.key(i);
+      if (!k || k.indexOf("vo_")!==0 || k===K_AUTOBACKUP) continue;
+      try{
+        var val = JSON.parse(localStorage.getItem(k));
+        cloudPush(k, val);
+        n++;
+      }catch(e){ /* ignora chave que não seja JSON válido */ }
+    }
+    return n;
   }
 
   // escuta mudanças feitas em OUTROS aparelhos e atualiza a tela na hora
@@ -1158,7 +1178,8 @@
       '<button class="btn ghost small" data-act="exportbackup" title="Baixa um arquivo com todos os dados salvos neste navegador">Backup</button>'+
       '<label class="btn ghost small" for="importInput" style="margin:0;">Importar'+
         '<input type="file" id="importInput" accept="application/json" style="display:none;">'+
-      '</label>';
+      '</label>'+
+      (sb ? '<button class="btn ghost small" data-act="pushcloud" title="Envia tudo que está salvo neste navegador para a nuvem">↑ Enviar p/ nuvem</button>' : '');
     if (state.authed){
       return '<div class="auth-zone"><span class="pill on">✓ edição de dias anteriores liberada</span>'+backupBtns+'<button class="btn ghost small" data-act="logout">Sair</button></div>';
     }
@@ -1198,6 +1219,10 @@
     else if (act==="prevday"){ openDate(addDays(state.date,-1)); }
     else if (act==="nextday"){ openDate(addDays(state.date,1)); }
     else if (act==="exportbackup"){ exportBackup(); }
+    else if (act==="pushcloud"){
+      var n = pushAllLocalToCloud();
+      alert(n>0 ? "Enviando "+n+" registro(s) deste navegador para a nuvem…" : "Não há dados salvos neste navegador para enviar.");
+    }
     else if (act==="togglehide"){
       state.hideValues = !state.hideValues;
       sessionStorage.setItem("vf_hide", state.hideValues?"1":"0");
@@ -1658,8 +1683,9 @@
     render();
   }
 
-  cloudPullAll(function(){
+  cloudPullAll(function(hadRemoteData){
     render();
+    if (sb && !hadRemoteData) pushAllLocalToCloud(); // primeira ativação: sobe o histórico local pra nuvem
     initCloudSync(handleRemoteChange);
   });
 })();
