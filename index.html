@@ -536,6 +536,10 @@
   function saveNotas(list){
     return lsSetJSON(K_NOTAS, list);
   }
+  function deleteNota(notaId){
+    var list = loadNotas().filter(function(n){ return n.id !== notaId; });
+    saveNotas(list);
+  }
   function addNota(obj){
     var list = loadNotas();
     list.push(obj);
@@ -1200,9 +1204,10 @@
       var sub = [customer.cpf, customer.telefone, customer.email].filter(Boolean).join(" · ");
       var notasHtml = notas.length
         ? notas.map(function(n){
-            return '<div class="arow" data-nota="'+escAttr(n.id)+'" role="button" tabindex="0">'+
-              '<span class="d">Venda #'+n.vendaNum+' · '+fmtDateBR(n.date)+'</span>'+
-              '<span class="stats"><span><b>'+fmtCurrency(n.totalProdutos)+'</b></span><span>'+escHtml(n.formaPagamento||"")+'</span></span>'+
+            return '<div class="arow">'+
+              '<span class="d" data-nota="'+escAttr(n.id)+'" role="button" tabindex="0" style="cursor:pointer;">Venda #'+n.vendaNum+' · '+fmtDateBR(n.date)+'</span>'+
+              '<span class="stats"><span><b>'+fmtCurrency(n.totalProdutos)+'</b></span><span>'+escHtml(n.formaPagamento||"")+'</span>'+
+              '<button class="icon-btn" data-delnota="'+escAttr(n.id)+'" title="Apagar nota">✕</button></span>'+
             '</div>';
           }).join("")
         : '<div class="arow-empty">Nenhuma nota registrada para este cliente ainda.</div>';
@@ -1223,6 +1228,15 @@
           var notaId = node.getAttribute("data-nota");
           var nota = notas.filter(function(n){return n.id===notaId;})[0];
           if (nota) reprintNota(nota);
+        });
+      });
+      area.querySelectorAll("[data-delnota]").forEach(function(node){
+        node.addEventListener("click", function(e){
+          e.stopPropagation();
+          var notaId = node.getAttribute("data-delnota");
+          if (!window.confirm("Tem certeza que deseja apagar esta nota? Essa ação não pode ser desfeita.")) return;
+          deleteNota(notaId);
+          drawDetail();
         });
       });
     }
