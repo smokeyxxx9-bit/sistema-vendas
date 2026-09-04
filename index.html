@@ -1835,7 +1835,7 @@
       if (!email || !pass){ renderLoginScreen("Preencha e-mail e senha."); return; }
       btn.disabled = true; btn.textContent = "Entrando...";
       sb.auth.signInWithPassword({email:email, password:pass}).then(function(res){
-        if (res.error){ renderLoginScreen("E-mail ou senha inválidos."); }
+        if (res.error){ renderLoginScreen((res.error && res.error.message) ? res.error.message : "E-mail ou senha inválidos."); }
         else { bootApp(); }
       });
     }
