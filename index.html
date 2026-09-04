@@ -7,6 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   :root{
     --bg:#14181c;
@@ -238,6 +240,7 @@
   }
   .icon-btn:hover{border-color:var(--red);color:var(--red);}
   .icon-btn.print-btn:hover{border-color:var(--teal);color:var(--teal);}
+  .icon-btn.wa-btn:hover{border-color:var(--green);color:var(--green);}
 
   .detail-toggle-row{grid-column:1/-1;padding:0;background:var(--panel-alt);}
   .detail-toggle{
@@ -303,6 +306,19 @@
   .cust-detail-sub{color:var(--text-faint);font-size:12px;margin-top:2px;}
 
   .backlink{color:var(--text-dim);font-size:13px;display:flex;align-items:center;gap:6px;border:none;background:transparent;padding:6px 0;}
+
+  /* ---- login de acesso ao site ---- */
+  .login-screen{min-height:82vh;display:flex;align-items:center;justify-content:center;}
+  .login-card{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:34px 32px;width:100%;max-width:360px;}
+  .login-card .brand{margin-bottom:18px;}
+  .login-card p.hint{font-size:12.5px;color:var(--text-dim);margin:0 0 20px;line-height:1.5;}
+  .login-card input{
+    width:100%;background:var(--panel-alt);border:1px solid var(--border);border-radius:3px;color:var(--text);
+    padding:10px 12px;font-size:14px;margin-bottom:10px;
+  }
+  .login-card input:focus{outline:none;border-color:var(--yellow);}
+  .login-card .err{color:var(--red);font-size:12px;margin:-2px 0 12px;min-height:14px;}
+  .login-card button.btn{width:100%;justify-content:center;padding:11px;font-size:14px;margin-top:4px;}
   .backlink:hover{color:var(--yellow);}
 </style>
 </head>
@@ -671,12 +687,107 @@
     openPrintWindow(buildNotaHtml(nota));
   }
 
+  // ---------- gerar o PDF da nota (mesmo layout da impressão) ----------
+  function renderNotaToCanvas(nota, cb){
+    var full = buildNotaHtml(nota);
+    var styleMatch = full.match(/<style>[\s\S]*?<\/style>/);
+    var bodyMatch = full.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+    var container = document.createElement("div");
+    container.style.position = "fixed";
+    container.style.left = "-10000px";
+    container.style.top = "0";
+    container.style.width = "780px";
+    container.style.background = "#ffffff";
+    container.innerHTML = (styleMatch?styleMatch[0]:"") + (bodyMatch?bodyMatch[1]:full);
+    document.body.appendChild(container);
+    window.html2canvas(container, {scale:2, backgroundColor:"#ffffff"}).then(function(canvas){
+      document.body.removeChild(container);
+      cb(canvas);
+    }).catch(function(err){
+      document.body.removeChild(container);
+      console.error("Erro ao gerar PDF", err);
+      cb(null);
+    });
+  }
+  function canvasToPdfBlob(canvas){
+    var imgData = canvas.toDataURL("image/jpeg", 0.92);
+    var pdf = new window.jspdf.jsPDF({unit:"pt", format:"a4"});
+    var pageWidth = pdf.internal.pageSize.getWidth();
+    var pageHeight = pdf.internal.pageSize.getHeight();
+    var imgWidth = pageWidth;
+    var imgHeight = canvas.height * (imgWidth/canvas.width);
+    var heightLeft = imgHeight;
+    var position = 0;
+    pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
+    heightLeft -= pageHeight;
+    while (heightLeft > 0){
+      position = heightLeft - imgHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+    }
+    return pdf.output("blob");
+  }
+
+  // ---------- enviar o PDF da nota por WhatsApp ----------
+  function sendNotaPdfWhatsapp(row, customer){
+    if (!window.html2canvas || !window.jspdf){
+      alert("As bibliotecas de PDF ainda estão carregando (ou não carregaram por falta de internet). Tente novamente em alguns segundos.");
+      return;
+    }
+    var vendaNum = nextVendaNumber();
+    var nota = {
+      id: uid(), vendaNum: vendaNum, date: state.date, rowId: row.id, customerId: customer.id,
+      customer: {
+        nome: customer.nome||"", cpf: customer.cpf||"", email: customer.email||"",
+        telefone: customer.telefone||"", endereco: customer.endereco||""
+      },
+      items: buildNotaItems(row),
+      totalProdutos: computeValor(row),
+      formaPagamento: row.formaPagamento||"",
+      pago: row.pago||"",
+      createdAt: Date.now()
+    };
+    addNota(nota);
+
+    renderNotaToCanvas(nota, function(canvas){
+      if (!canvas){ alert("Não foi possível gerar o PDF da nota."); return; }
+      var blob = canvasToPdfBlob(canvas);
+      var fileName = "nota-venda-"+nota.vendaNum+".pdf";
+      var caption = "Olá"+(customer.nome?" "+customer.nome:"")+"! Segue em anexo a nota da sua compra na "+EMPRESA.nome+".";
+      var phoneDigits = String(customer.telefone||"").replace(/\D/g,"");
+      var phone = phoneDigits ? (phoneDigits.length<=11 ? "55"+phoneDigits : phoneDigits) : "";
+
+      var file;
+      try{ file = new File([blob], fileName, {type:"application/pdf"}); }catch(e){ file = null; }
+
+      if (file && navigator.canShare && navigator.canShare({files:[file]})){
+        // celular/navegador com suporte: abre a folha de compartilhar nativa,
+        // já com o PDF anexado — o usuário só escolhe o WhatsApp na lista.
+        navigator.share({files:[file], title:fileName, text:caption}).catch(function(){ /* usuário cancelou — sem problema */ });
+      } else {
+        // fallback (principalmente desktop): baixa o PDF e abre o WhatsApp
+        // com a mensagem, pedindo pra anexar o arquivo que acabou de baixar.
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement("a");
+        a.href = url; a.download = fileName;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+        var waMsg = caption + " (o PDF foi baixado agora — é só anexar aqui no chat)";
+        var waUrl = phone
+          ? "https://wa.me/"+phone+"?text="+encodeURIComponent(waMsg)
+          : "https://wa.me/?text="+encodeURIComponent(waMsg);
+        window.open(waUrl, "_blank");
+      }
+    });
+  }
+
   // ---------- backup / restauração ----------
   function exportBackup(auto){
     var data = {};
     for (var i=0;i<localStorage.length;i++){
       var k = localStorage.key(i);
-      if (k && (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS)) data[k] = localStorage.getItem(k);
+      if (k && (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS)) data[k] = localStorage.getItem(k);
     }
     var now = new Date();
     var stamp = today+"-"+pad(now.getHours())+"h"+pad(now.getMinutes());
@@ -693,7 +804,7 @@
     var data = {};
     for (var i=0;i<localStorage.length;i++){
       var k = localStorage.key(i);
-      if (k && (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS)) data[k] = localStorage.getItem(k);
+      if (k && (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS)) data[k] = localStorage.getItem(k);
     }
     try{
       localStorage.setItem(K_AUTOBACKUP, JSON.stringify({ts:Date.now(), data:data}));
@@ -706,7 +817,7 @@
         var data = JSON.parse(reader.result);
         var n = 0;
         Object.keys(data).forEach(function(k){
-          if (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS){ localStorage.setItem(k, data[k]); n++; }
+          if (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS){ localStorage.setItem(k, data[k]); n++; }
         });
         state.monthSummaryCache = {};
         state.monthPartsCache = {};
@@ -1180,10 +1291,11 @@
         '<input type="file" id="importInput" accept="application/json" style="display:none;">'+
       '</label>'+
       (sb ? '<button class="btn ghost small" data-act="pushcloud" title="Envia tudo que está salvo neste navegador para a nuvem">↑ Enviar p/ nuvem</button>' : '');
+    var acctLogout = sb ? '<button class="btn ghost small" data-act="accountlogout" title="Sair da sua conta do sistema">Sair da conta</button>' : '';
     if (state.authed){
-      return '<div class="auth-zone"><span class="pill on">✓ edição de dias anteriores liberada</span>'+backupBtns+'<button class="btn ghost small" data-act="logout">Sair</button></div>';
+      return '<div class="auth-zone"><span class="pill on">✓ edição de dias anteriores liberada</span>'+backupBtns+'<button class="btn ghost small" data-act="logout">Sair</button>'+acctLogout+'</div>';
     }
-    return '<div class="auth-zone">'+backupBtns+'<button class="btn small" data-act="login">Entrar com senha</button></div>';
+    return '<div class="auth-zone">'+backupBtns+'<button class="btn small" data-act="login">Entrar com senha</button>'+acctLogout+'</div>';
   }
 
   function bindBackupControls(){
@@ -1223,13 +1335,20 @@
       var n = pushAllLocalToCloud();
       alert(n>0 ? "Enviando "+n+" registro(s) deste navegador para a nuvem…" : "Não há dados salvos neste navegador para enviar.");
     }
+    else if (act==="accountlogout"){
+      if (sb) sb.auth.signOut().then(function(){ location.reload(); });
+    }
     else if (act==="togglehide"){
       state.hideValues = !state.hideValues;
       sessionStorage.setItem("vf_hide", state.hideValues?"1":"0");
       render();
     }
     else if (act==="printnote"){
-      state.modal = {type:"selectCustomer", rowId: node.getAttribute("data-id")};
+      state.modal = {type:"selectCustomer", rowId: node.getAttribute("data-id"), purpose:"print"};
+      render();
+    }
+    else if (act==="sendwhatsapp"){
+      state.modal = {type:"selectCustomer", rowId: node.getAttribute("data-id"), purpose:"whatsapp"};
       render();
     }
   }
@@ -1328,6 +1447,7 @@
     var cells = COLUMNS.map(function(c){ return cellHtml(row, c, editable, valor); }).join("");
     cells += '<div class="cell rowactions">'+
       '<button class="icon-btn print-btn" data-act="printnote" data-id="'+row.id+'" title="Imprimir nota">🖨</button>'+
+      '<button class="icon-btn wa-btn" data-act="sendwhatsapp" data-id="'+row.id+'" title="Enviar por WhatsApp">💬</button>'+
       (editable ? '<button class="icon-btn" data-act="delrow" data-id="'+row.id+'" title="Remover linha">✕</button>' : '')+
       '</div>';
     var open = !!state.openDetails[row.id];
@@ -1549,8 +1669,10 @@
       : '<div class="cust-empty">Nenhum cliente cadastrado ainda.</div>';
     div.innerHTML =
       '<div class="modal wide">'+
-        '<h3>Selecionar cliente</h3>'+
-        '<p>Escolha quem comprou para gerar a nota. Se o cliente ainda não estiver cadastrado, use o botão abaixo.</p>'+
+        '<h3>'+(state.modal.purpose==="whatsapp" ? "Enviar nota por WhatsApp" : "Selecionar cliente")+'</h3>'+
+        '<p>'+(state.modal.purpose==="whatsapp"
+          ? "Escolha o cliente para enviar o PDF da nota por WhatsApp. Se ele ainda não estiver cadastrado, use o botão abaixo."
+          : "Escolha quem comprou para gerar a nota. Se o cliente ainda não estiver cadastrado, use o botão abaixo.")+'</p>'+
         (customers.length ? '<input type="text" id="custSearch" class="search-input" placeholder="Buscar por nome, CPF ou telefone...">' : '')+
         '<div class="cust-list" id="custList">'+listHtml+'</div>'+
         '<div class="modal-actions" style="justify-content:space-between;margin-top:14px;">'+
@@ -1564,9 +1686,13 @@
         var cid = btn.getAttribute("data-cid");
         var customer = customers.filter(function(c){return c.id===cid;})[0];
         var row = state.rows.filter(function(r){return r.id===rowId;})[0];
+        var purpose = state.modal.purpose||"print";
         state.modal = null;
         render();
-        if (row && customer) printNota(row, customer);
+        if (row && customer){
+          if (purpose==="whatsapp") sendNotaPdfWhatsapp(row, customer);
+          else printNota(row, customer);
+        }
       });
     });
     var searchInput = document.getElementById("custSearch");
@@ -1597,7 +1723,7 @@
       searchInput.focus();
     }
     document.getElementById("custNew").addEventListener("click", function(){
-      state.modal = {type:"customerForm", rowId: rowId, returnTo:"selectCustomer", error:""};
+      state.modal = {type:"customerForm", rowId: rowId, returnTo:"selectCustomer", purpose: state.modal.purpose||"print", error:""};
       render();
     });
     document.getElementById("custCancel").addEventListener("click", function(){ state.modal=null; render(); });
@@ -1629,7 +1755,7 @@
     document.getElementById("cfNome").focus();
     function goBack(){
       if (state.modal.returnTo==="selectCustomer"){
-        state.modal = {type:"selectCustomer", rowId: state.modal.rowId};
+        state.modal = {type:"selectCustomer", rowId: state.modal.rowId, purpose: state.modal.purpose};
       } else {
         state.modal = null;
       }
@@ -1653,11 +1779,15 @@
       });
       var rowId = state.modal.rowId;
       var returnTo = state.modal.returnTo;
+      var purpose = state.modal.purpose||"print";
       state.modal = null;
       render();
       if (returnTo==="selectCustomer" && rowId){
         var row = state.rows.filter(function(r){return r.id===rowId;})[0];
-        if (row) printNota(row, customer);
+        if (row){
+          if (purpose==="whatsapp") sendNotaPdfWhatsapp(row, customer);
+          else printNota(row, customer);
+        }
       }
     });
   }
@@ -1683,11 +1813,55 @@
     render();
   }
 
-  cloudPullAll(function(hadRemoteData){
-    render();
-    if (sb && !hadRemoteData) pushAllLocalToCloud(); // primeira ativação: sobe o histórico local pra nuvem
-    initCloudSync(handleRemoteChange);
-  });
+  // ---------- login de acesso ao site (Supabase Auth — senha nunca fica no código) ----------
+  function renderLoginScreen(errorMsg){
+    root.classList.remove("wide");
+    root.innerHTML =
+      '<div class="login-screen"><div class="login-card">'+
+        '<div class="brand"><span class="mark"></span><h1>Painel de Vendas</h1></div>'+
+        '<p class="hint">Entre com seu e-mail e senha para acessar o sistema.</p>'+
+        '<input type="email" id="loginEmail" placeholder="E-mail" autocomplete="username">'+
+        '<input type="password" id="loginPassword" placeholder="Senha" autocomplete="current-password">'+
+        '<div class="err">'+escHtml(errorMsg||"")+'</div>'+
+        '<button class="btn primary" id="loginBtn">Entrar</button>'+
+      '</div></div>';
+    var emailInput = document.getElementById("loginEmail");
+    var passInput = document.getElementById("loginPassword");
+    var btn = document.getElementById("loginBtn");
+    emailInput.focus();
+    function tryLogin(){
+      var email = emailInput.value.trim();
+      var pass = passInput.value;
+      if (!email || !pass){ renderLoginScreen("Preencha e-mail e senha."); return; }
+      btn.disabled = true; btn.textContent = "Entrando...";
+      sb.auth.signInWithPassword({email:email, password:pass}).then(function(res){
+        if (res.error){ renderLoginScreen("E-mail ou senha inválidos."); }
+        else { bootApp(); }
+      });
+    }
+    btn.addEventListener("click", tryLogin);
+    passInput.addEventListener("keydown", function(e){ if (e.key==="Enter") tryLogin(); });
+    emailInput.addEventListener("keydown", function(e){ if (e.key==="Enter") passInput.focus(); });
+  }
+
+  function bootApp(){
+    cloudPullAll(function(hadRemoteData){
+      render();
+      if (!hadRemoteData) pushAllLocalToCloud(); // primeira ativação: sobe o histórico local pra nuvem
+      initCloudSync(handleRemoteChange);
+    });
+  }
+
+  function checkAuthAndBoot(){
+    if (!sb){ bootApp(); return; } // sem Supabase configurado, não há como validar login sem expor a senha — segue liberado
+    sb.auth.getSession().then(function(res){
+      var session = res && res.data && res.data.session;
+      if (session) bootApp();
+      else renderLoginScreen();
+    });
+  }
+
+  checkAuthAndBoot();
 })();
 </script>
 </body>
