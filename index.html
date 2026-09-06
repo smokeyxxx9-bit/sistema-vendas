@@ -379,6 +379,7 @@
 
   var cloudStatus = "off"; // off | connecting | on | error
   var sb = null;
+  var pendingEchoKeys = {}; // conta quantas confirmações de "eco" da própria alteração ainda esperamos por chave
   if (window.supabase && SUPABASE_URL.indexOf("COLE_AQUI")===-1 && SUPABASE_ANON_KEY.indexOf("COLE_AQUI")===-1){
     try{ sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); cloudStatus = "connecting"; }
     catch(e){ sb = null; }
@@ -397,7 +398,12 @@
     sb.from("kv_store").upsert({key:key, value:value, updated_at:new Date().toISOString()})
       .then(function(res){
         if (res && res.error){ cloudStatus = "error"; console.error("Erro ao sincronizar", key, res.error); }
-        else if (cloudStatus!=="on"){ cloudStatus = "on"; refreshSyncBadge(); }
+        else {
+          // esta alteração vai voltar pra nós mesmos pelo canal em tempo real daqui a pouco;
+          // marcamos que esperamos esse "eco" pra não tratá-lo como mudança de outro aparelho
+          pendingEchoKeys[key] = (pendingEchoKeys[key]||0) + 1;
+          if (cloudStatus!=="on"){ cloudStatus = "on"; refreshSyncBadge(); }
+        }
       });
   }
 
@@ -446,6 +452,12 @@
         var row = payload.new;
         if (!row || !row.key) return;
         try{ localStorage.setItem(row.key, JSON.stringify(row.value)); }catch(e){}
+        if (pendingEchoKeys[row.key] > 0){
+          // é só o eco da nossa própria digitação/salvamento — os dados já estão certos localmente,
+          // então não precisamos redesenhar a tela (isso é o que tirava o foco de quem estava digitando)
+          pendingEchoKeys[row.key]--;
+          return;
+        }
         onRemoteChange(row.key);
       })
       .subscribe(function(status){
