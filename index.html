@@ -333,7 +333,7 @@
   var GOAL_1 = 350000;
   var GOAL_2 = 450000;
   var PAYMENT_OPTIONS = ["Nenhum","Dinheiro","Débito","Crédito","Pix","Dinheiro/Pix","Dinheiro/Crédito","Dinheiro/Débito","Débito/Crédito","Débito/Pix","Pix/Crédito"];
-  var VENDEDORES = ["Nenhum","Bruno","Richard","Benedet","Jonas"];
+  var VENDEDORES = ["Nenhum","Loja","Bruno","Richard","Benedet","Jonas"];
 
   function range(a,b){ var out=[]; for(var i=a;i<=b;i++) out.push(String(i)); return out; }
 
@@ -1006,7 +1006,8 @@
   function loadMonthParts(month){
     var dates = listAllDates().filter(function(d){ return d.slice(0,7)===month; });
     return Promise.all(dates.map(function(d){ return getRows(d); })).then(function(allRows){
-      var t = {qtdBicos:0, valorBicos:0, qtdCambagem:0, valorCambagem:0, qtdRodas:0, valorRodas:0};
+      var t = {qtdBicos:0, valorBicos:0, qtdCambagem:0, valorCambagem:0, qtdRodas:0, valorRodas:0, porVendedor:{}};
+      VENDEDORES.forEach(function(v){ if (v!=="Nenhum") t.porVendedor[v] = {count:0, total:0}; });
       allRows.forEach(function(rows){
         rows.forEach(function(r){
           t.qtdBicos += parseNum(r.qtdBicos);
@@ -1015,6 +1016,11 @@
           t.valorCambagem += parseNum(r.valorCambagem);
           t.qtdRodas += parseNum(r.qtdRodas);
           t.valorRodas += parseNum(r.valorRodas);
+          var v = r.vendedor;
+          if (v && t.porVendedor[v]){
+            t.porVendedor[v].count += 1;
+            t.porVendedor[v].total += computeValor(r);
+          }
         });
       });
       return t;
@@ -1048,13 +1054,21 @@
 
       var ySummary = state.monthSummaryCache[yesterday.slice(0,7)] || {};
       var yData = ySummary[yesterday] || {total:0, count:0};
-      var parts = state.monthPartsCache[state.dashMonth] || {qtdBicos:0, valorBicos:0, qtdCambagem:0, valorCambagem:0, qtdRodas:0, valorRodas:0};
+      var parts = state.monthPartsCache[state.dashMonth] || {qtdBicos:0, valorBicos:0, qtdCambagem:0, valorCambagem:0, qtdRodas:0, valorRodas:0, porVendedor:{}};
 
       function partCardHtml(label, color, qty, val){
         var valDisplay = state.hideValues ? '••••' : fmtCurrency(val);
         var qtyDisplay = state.hideValues ? '••' : qty;
         return '<div class="parts-card pc-'+color+'">'+
           '<div class="pc-top"><span class="pc-label">'+escHtml(label)+'</span><span class="pc-qty">'+qtyDisplay+' un.</span></div>'+
+          '<div class="pc-value">'+valDisplay+'</div>'+
+        '</div>';
+      }
+      function sellerCardHtml(nome, count, total, color){
+        var valDisplay = state.hideValues ? '••••' : fmtCurrency(total);
+        var qtyDisplay = state.hideValues ? '••' : count;
+        return '<div class="parts-card pc-'+color+'">'+
+          '<div class="pc-top"><span class="pc-label">'+escHtml(nome)+'</span><span class="pc-qty">'+qtyDisplay+' venda(s)</span></div>'+
           '<div class="pc-value">'+valDisplay+'</div>'+
         '</div>';
       }
@@ -1128,6 +1142,15 @@
           partCardHtml("Bicos", "teal", parts.qtdBicos, parts.valorBicos)+
           partCardHtml("Cambagens", "yellow", parts.qtdCambagem, parts.valorCambagem)+
           partCardHtml("Rodas", "green", parts.qtdRodas, parts.valorRodas)+
+        '</div>'+
+
+        '<div class="parts-visor-head">Vendas por vendedor no mês</div>'+
+        '<div class="parts-visor">'+
+          VENDEDORES.filter(function(v){ return v!=="Nenhum"; }).map(function(v, i){
+            var vd = parts.porVendedor[v] || {count:0, total:0};
+            var colors = ["teal","yellow","green"];
+            return sellerCardHtml(v, vd.count, vd.total, colors[i % colors.length]);
+          }).join("")+
         '</div>'+
 
         '<div class="row2">'+
