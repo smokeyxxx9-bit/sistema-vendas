@@ -10,6 +10,16 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
+  /* ---- estoque ---- */
+  .est-zero{color:#e2554c;}
+  .medida-btn{
+    width:100%;height:100%;background:transparent;border:none;color:inherit;
+    text-align:left;font-size:12.5px;padding:0 8px;color:#647079;
+  }
+  .medida-btn.has{color:#eef1f3;}
+  .medida-btn:hover:not(:disabled){color:#f5b700;}
+  .medida-btn:disabled{cursor:default;}
+  .est-actions{display:flex;gap:4px;align-items:center;}
   :root{
     --bg:#14181c;
     --panel:#1c2227;
@@ -339,6 +349,7 @@
 
   var COLUMNS = [
     {key:"quantidade",  label:"Quantidade",              type:"select", w:"78px", options:range(0,8)},
+    {key:"medida",      label:"Medida",                  type:"medida", w:"170px"},
     {key:"servico",     label:"Serviço",                 type:"number", w:"130px"},
     {key:"alinhamento", label:"Alinhamento",              type:"currency", w:"110px"},
     {key:"qtdBicos",    label:"Qtd. bicos",              type:"select", w:"82px", options:range(0,8)},
@@ -367,6 +378,7 @@
   var K_CUSTOMERS = "vo_customers";
   var K_VENDA_SEQ = "vo_venda_seq";
   var K_NOTAS = "vo_notas";
+  var K_ESTOQUE = "vo_estoque";
 
   // ---------- sincronização em nuvem (Supabase) ----------
   // Preencha as duas linhas abaixo com os dados do SEU projeto Supabase
@@ -557,6 +569,70 @@
     list.push(obj);
     saveNotas(list);
     return obj;
+  }
+
+  // ---------- estoque (medida, marca, quantidade, preço) ----------
+  function loadEstoque(){ return lsGetJSON(K_ESTOQUE, []); }
+  function saveEstoque(list){ return lsSetJSON(K_ESTOQUE, list); }
+  function estoqueItem(id){ return loadEstoque().filter(function(i){ return i.id===id; })[0] || null; }
+  function estoqueLabel(item){ return item ? (item.medida + (item.marca ? " · " + item.marca : "")) : ""; }
+  function addEstoqueItem(obj){
+    var list = loadEstoque();
+    obj.id = uid();
+    obj.quantidade = Math.max(0, parseNum(obj.quantidade));
+    obj.preco = Math.max(0, parseNum(obj.preco));
+    list.push(obj);
+    saveEstoque(list);
+    return obj;
+  }
+  function updateEstoqueItem(id, changes){
+    var list = loadEstoque();
+    for (var i=0;i<list.length;i++){
+      if (list[i].id===id){
+        Object.keys(changes).forEach(function(k){ list[i][k] = changes[k]; });
+        list[i].quantidade = Math.max(0, parseNum(list[i].quantidade));
+        list[i].preco = Math.max(0, parseNum(list[i].preco));
+        break;
+      }
+    }
+    saveEstoque(list);
+  }
+  function deleteEstoqueItem(id){
+    saveEstoque(loadEstoque().filter(function(i){ return i.id!==id; }));
+  }
+  // movimenta o estoque de um item: delta positivo entra, negativo sai.
+  // nunca deixa negativo — se faltar, para no 0. devolve quanto realmente mexeu.
+  function moveEstoque(id, delta){
+    if (!id || !delta) return 0;
+    var list = loadEstoque();
+    var moved = 0;
+    for (var i=0;i<list.length;i++){
+      if (list[i].id===id){
+        var atual = Math.max(0, parseNum(list[i].quantidade));
+        var novo = atual + delta;
+        if (novo < 0) novo = 0;
+        moved = novo - atual;
+        list[i].quantidade = novo;
+        break;
+      }
+    }
+    if (moved !== 0) saveEstoque(list);
+    return moved;
+  }
+  // acerta a baixa de estoque de uma linha de venda conforme a medida e a quantidade escolhidas
+  function syncRowEstoque(row){
+    var desejada = row.medidaId ? Math.max(0, parseNum(row.quantidade)) : 0;
+    var jaBaixado = Math.max(0, parseNum(row.medidaBaixa));
+    var delta = desejada - jaBaixado;
+    if (delta === 0) return;
+    var moved = moveEstoque(row.medidaId, -delta);
+    row.medidaBaixa = jaBaixado - moved; // moved vem negativo quando saiu do estoque
+  }
+  // devolve pro estoque tudo que essa linha já havia baixado
+  function releaseRowEstoque(row){
+    var jaBaixado = Math.max(0, parseNum(row.medidaBaixa));
+    if (row.medidaId && jaBaixado>0) moveEstoque(row.medidaId, jaBaixado);
+    row.medidaBaixa = 0;
   }
 
   // ---------- nota de venda (impressão) ----------
@@ -925,7 +1001,7 @@
 
   function newRow(){
     return {
-      id:uid(), quantidade:"0", servico:"", alinhamento:"",
+      id:uid(), quantidade:"0", medida:"", medidaId:"", medidaBaixa:0, servico:"", alinhamento:"",
       qtdBicos:"0", valorBicos:"", qtdCambagem:"0", valorCambagem:"",
       qtdBalanceamento:"0", valorBalanceamento:"", qtdRodas:"0", valorRodas:"",
       outros:"", valorPecas:"", maoDeObra:"", valorPneus:"",
@@ -948,7 +1024,9 @@
     modal:null, // {type:'auth', error:''}
     monthSummaryCache: {},
     monthPartsCache: {},
-    yesterdaySummary: null
+    yesterdaySummary: null,
+    role: "dono",          // "dono" (vê tudo) ou "estoquista" (só estoque)
+    estoqueQuery: ""
   };
 
   var root = document.getElementById("app");
@@ -957,8 +1035,10 @@
   var AUTO_BACKUP_IDLE_MS = 120000; // 2 minutos sem alterações
 
   function render(){
-    root.classList.toggle("wide", state.view==="table");
-    if (state.view==="dashboard") renderDashboard();
+    var estoquista = state.role === "estoquista";
+    root.classList.toggle("wide", state.view==="table" && !estoquista);
+    if (estoquista || state.view==="estoque") renderEstoque();
+    else if (state.view==="dashboard") renderDashboard();
     else renderTable();
     if (state.modal) renderModal(); else {
       var ex = document.querySelector(".overlay"); if (ex) ex.remove();
@@ -1341,10 +1421,11 @@
       '</label>'+
       (sb ? '<button class="btn ghost small" data-act="pushcloud" title="Envia tudo que está salvo neste navegador para a nuvem">↑ Enviar p/ nuvem</button>' : '');
     var acctLogout = sb ? '<button class="btn ghost small" data-act="accountlogout" title="Sair da sua conta do sistema">Sair da conta</button>' : '';
+    var estoqueBtn = '<button class="btn ghost small" data-act="openestoque" title="Abrir o controle de estoque">📦 Estoque</button>';
     if (state.authed){
-      return '<div class="auth-zone"><span class="pill on">✓ edição de dias anteriores liberada</span>'+backupBtns+'<button class="btn ghost small" data-act="logout">Sair</button>'+acctLogout+'</div>';
+      return '<div class="auth-zone"><span class="pill on">✓ edição de dias anteriores liberada</span>'+estoqueBtn+backupBtns+'<button class="btn ghost small" data-act="logout">Sair</button>'+acctLogout+'</div>';
     }
-    return '<div class="auth-zone">'+backupBtns+'<button class="btn small" data-act="login">Entrar com senha</button>'+acctLogout+'</div>';
+    return '<div class="auth-zone">'+estoqueBtn+backupBtns+'<button class="btn small" data-act="login">Entrar com senha</button>'+acctLogout+'</div>';
   }
 
   function bindBackupControls(){
@@ -1398,6 +1479,15 @@
     }
     else if (act==="sendwhatsapp"){
       state.modal = {type:"selectCustomer", rowId: node.getAttribute("data-id"), purpose:"whatsapp"};
+      render();
+    }
+    else if (act==="openestoque"){ state.view="estoque"; render(); }
+    else if (act==="selectmedida"){
+      state.modal = {type:"selectMedida", rowId: node.getAttribute("data-id")};
+      render();
+    }
+    else if (act==="estoquenew"){
+      state.modal = {type:"estoqueForm", itemId:null, error:""};
       render();
     }
   }
@@ -1519,6 +1609,10 @@
     if (col.type==="computed"){
       return '<div class="cell"><input class="cellval computed" value="'+escAttr(fmtCurrency(computedValor))+'" disabled></div>';
     }
+    if (col.type==="medida"){
+      return '<div class="cell"><button class="medida-btn'+(row.medida?' has':'')+'" data-act="selectmedida" data-id="'+row.id+'" '+(editable?"":"disabled")+' title="Escolher a medida do pneu">'+
+        escHtml(row.medida || "Escolher medida")+'</button></div>';
+    }
     if (col.type==="select"){
       var opts = col.options.map(function(o){
         return '<option value="'+escAttr(o)+'"'+(o===val?" selected":"")+'>'+escHtml(o)+'</option>';
@@ -1574,6 +1668,8 @@
         var row = state.rows.filter(function(r){return r.id===id;})[0];
         if (!row) return;
         row[field] = node.value;
+        // mudou a quantidade de uma linha que já tem medida escolhida: acerta a baixa no estoque
+        if (field==="quantidade" && row.medidaId) syncRowEstoque(row);
         if (field!=="detalhes"){
           // live-update totals & computed valor without full re-render jank: simplest is re-render totals bar + this row's computed cell
           updateLiveDisplays();
@@ -1620,6 +1716,8 @@
   }
   function delRow(id){
     if (!window.confirm("Tem certeza que deseja fechar (remover) esta linha? Essa ação não pode ser desfeita.")) return;
+    var row = state.rows.filter(function(r){ return r.id===id; })[0];
+    if (row) releaseRowEstoque(row); // devolve pro estoque o que essa linha havia baixado
     state.rows = state.rows.filter(function(r){ return r.id!==id; });
     delete state.openDetails[id];
     renderTable();
@@ -1663,6 +1761,8 @@
     if (!state.modal) return;
     if (state.modal.type==="selectCustomer") renderSelectCustomerModal();
     else if (state.modal.type==="customerForm") renderCustomerFormModal();
+    else if (state.modal.type==="selectMedida") renderSelectMedidaModal();
+    else if (state.modal.type==="estoqueForm") renderEstoqueFormModal();
     else renderAuthModal();
   }
 
@@ -1841,6 +1941,270 @@
     });
   }
 
+  // ---------- tela de estoque ----------
+  function estoqueSorted(){
+    return loadEstoque().slice().sort(function(a,b){
+      return String(a.medida||"").localeCompare(String(b.medida||""), "pt-BR", {numeric:true});
+    });
+  }
+
+  function estoqueRowHtml(i){
+    var qtd = Math.max(0, parseNum(i.quantidade));
+    return '<div class="arow">'+
+      '<span class="d">'+escHtml(i.medida||"—")+(i.marca?' <span style="color:var(--text-faint);">· '+escHtml(i.marca)+'</span>':'')+'</span>'+
+      '<span class="stats">'+
+        '<span><b'+(qtd<=0?' class="est-zero"':'')+'>'+qtd+' un.</b></span>'+
+        '<span>'+fmtCurrency(parseNum(i.preco))+'</span>'+
+        '<span class="est-actions">'+
+          '<button class="icon-btn" data-est-out="'+escAttr(i.id)+'" title="Retirar do estoque">−</button>'+
+          '<button class="icon-btn" data-est-in="'+escAttr(i.id)+'" title="Adicionar ao estoque">+</button>'+
+          '<button class="icon-btn" data-est-edit="'+escAttr(i.id)+'" title="Editar medida, marca ou preço">✎</button>'+
+          '<button class="icon-btn" data-est-del="'+escAttr(i.id)+'" title="Apagar item">✕</button>'+
+        '</span>'+
+      '</span>'+
+    '</div>';
+  }
+
+  function renderEstoque(){
+    var estoquista = state.role==="estoquista";
+    var list = estoqueSorted();
+    var q = (state.estoqueQuery||"").trim().toLowerCase();
+    var filtered = q ? list.filter(function(i){
+      return ((i.medida||"")+" "+(i.marca||"")).toLowerCase().indexOf(q)>-1;
+    }) : list;
+    var totalUnidades = 0, totalValor = 0, zerados = 0;
+    list.forEach(function(i){
+      var qt = Math.max(0, parseNum(i.quantidade));
+      totalUnidades += qt;
+      totalValor += qt * parseNum(i.preco);
+      if (qt<=0) zerados++;
+    });
+
+    root.innerHTML =
+      '<div class="topbar">'+
+        '<div class="brand"><span class="mark"></span><h1>Estoque</h1><span class="tag">MEDIDA · MARCA · QUANTIDADE · PREÇO</span>'+syncBadgeHtml()+'</div>'+
+        '<div class="auth-zone">'+
+          (estoquista ? '' : '<button class="btn ghost small" data-act="back">‹ Painel de vendas</button>')+
+          (sb ? '<button class="btn ghost small" data-act="accountlogout" title="Sair da sua conta">Sair da conta</button>' : '')+
+        '</div>'+
+      '</div>'+
+
+      '<div class="totals-bar">'+
+        tstat("Medidas cadastradas", list.length, true)+
+        tstat("Unidades em estoque", totalUnidades)+
+        tstat("Medidas zeradas", zerados)+
+        (estoquista ? '' : tstat("Valor do estoque", fmtCurrency(totalValor)))+
+      '</div>'+
+
+      '<div class="tbl-head">'+
+        '<div class="tbl-head-left"><h2>Itens em estoque</h2><span class="save-flag" id="saveFlag">salvo</span></div>'+
+        '<button class="btn primary" data-act="estoquenew">+ Cadastrar medida</button>'+
+      '</div>'+
+
+      '<div class="card" style="padding:14px 16px;">'+
+        '<input type="text" id="estSearch" class="dash-cust-search" placeholder="Buscar por medida ou marca..." value="'+escAttr(state.estoqueQuery||"")+'">'+
+        '<div class="archive-list">'+
+          (filtered.length
+            ? filtered.map(estoqueRowHtml).join("")
+            : '<div class="arow-empty">'+(list.length ? 'Nenhum item encontrado.' : 'Nenhuma medida cadastrada ainda. Use o botão “+ Cadastrar medida”.')+'</div>')+
+        '</div>'+
+      '</div>';
+
+    root.querySelectorAll("[data-act]").forEach(function(node){
+      node.addEventListener("click", function(){ handleAction(node.getAttribute("data-act"), node); });
+    });
+
+    var search = document.getElementById("estSearch");
+    if (search){
+      search.addEventListener("input", function(){
+        state.estoqueQuery = search.value;
+        var pos = search.selectionStart;
+        renderEstoque();
+        var again = document.getElementById("estSearch");
+        if (again){ again.focus(); try{ again.setSelectionRange(pos,pos); }catch(e){} }
+      });
+    }
+
+    function askQtd(mensagem){
+      var v = window.prompt(mensagem, "1");
+      if (v===null) return 0;
+      var n = Math.floor(parseNum(v));
+      return n>0 ? n : 0;
+    }
+
+    root.querySelectorAll("[data-est-in]").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        var id = btn.getAttribute("data-est-in");
+        var item = estoqueItem(id);
+        if (!item) return;
+        var n = askQtd("Quantas unidades ENTRARAM de "+estoqueLabel(item)+"?");
+        if (n>0){ moveEstoque(id, n); renderEstoque(); }
+      });
+    });
+    root.querySelectorAll("[data-est-out]").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        var id = btn.getAttribute("data-est-out");
+        var item = estoqueItem(id);
+        if (!item) return;
+        var n = askQtd("Quantas unidades SAÍRAM de "+estoqueLabel(item)+"?");
+        if (n>0){ moveEstoque(id, -n); renderEstoque(); }
+      });
+    });
+    root.querySelectorAll("[data-est-edit]").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        state.modal = {type:"estoqueForm", itemId: btn.getAttribute("data-est-edit"), error:""};
+        renderModal();
+      });
+    });
+    root.querySelectorAll("[data-est-del]").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        var id = btn.getAttribute("data-est-del");
+        var item = estoqueItem(id);
+        if (!item) return;
+        if (!window.confirm("Apagar “"+estoqueLabel(item)+"” do estoque? Essa ação não pode ser desfeita.")) return;
+        deleteEstoqueItem(id);
+        renderEstoque();
+      });
+    });
+  }
+
+  // ---------- modal: cadastrar / editar medida do estoque ----------
+  function renderEstoqueFormModal(){
+    var item = state.modal.itemId ? estoqueItem(state.modal.itemId) : null;
+    var div = document.createElement("div");
+    div.className = "overlay";
+    div.innerHTML =
+      '<div class="modal wide">'+
+        '<h3>'+(item ? "Editar medida" : "Cadastrar medida")+'</h3>'+
+        '<div class="field-group">'+
+          '<label>Medida</label><input type="text" id="efMedida" placeholder="Ex: 175/70 R14" value="'+escAttr(item?item.medida:"")+'">'+
+          '<label>Marca</label><input type="text" id="efMarca" placeholder="Ex: Pirelli" value="'+escAttr(item?item.marca:"")+'">'+
+          '<label>Quantidade em estoque</label><input type="text" inputmode="numeric" id="efQtd" placeholder="0" value="'+escAttr(item?Math.max(0,parseNum(item.quantidade)):"")+'">'+
+          '<label>Preço por unidade (R$)</label><input type="text" inputmode="decimal" id="efPreco" placeholder="0,00" value="'+escAttr(item?parseNum(item.preco):"")+'">'+
+        '</div>'+
+        '<div class="err">'+escHtml(state.modal.error||"")+'</div>'+
+        '<div class="modal-actions">'+
+          '<button class="btn ghost small" id="efCancel">Voltar</button>'+
+          '<button class="btn primary small" id="efSave">Salvar</button>'+
+        '</div>'+
+      '</div>';
+    document.body.appendChild(div);
+    document.getElementById("efMedida").focus();
+
+    function goBack(){
+      if (state.modal.returnTo==="selectMedida"){
+        state.modal = {type:"selectMedida", rowId: state.modal.rowId};
+      } else {
+        state.modal = null;
+      }
+      render();
+    }
+    document.getElementById("efCancel").addEventListener("click", goBack);
+    div.addEventListener("click", function(e){ if (e.target===div) goBack(); });
+    document.getElementById("efSave").addEventListener("click", function(){
+      var medida = document.getElementById("efMedida").value.trim();
+      if (!medida){
+        state.modal.error = "Informe a medida.";
+        renderModal();
+        return;
+      }
+      var dados = {
+        medida: medida,
+        marca: document.getElementById("efMarca").value.trim(),
+        quantidade: document.getElementById("efQtd").value,
+        preco: document.getElementById("efPreco").value
+      };
+      if (item) updateEstoqueItem(item.id, dados);
+      else addEstoqueItem(dados);
+      goBack();
+    });
+  }
+
+  // ---------- modal: escolher a medida na linha da venda ----------
+  function renderSelectMedidaModal(){
+    var rowId = state.modal.rowId;
+    var row = state.rows.filter(function(r){ return r.id===rowId; })[0];
+    var list = estoqueSorted();
+    var div = document.createElement("div");
+    div.className = "overlay";
+    var listHtml = list.length
+      ? list.map(function(i){
+          var qtd = Math.max(0, parseNum(i.quantidade));
+          var search = ((i.medida||"")+" "+(i.marca||"")).toLowerCase();
+          return '<button class="cust-item" data-mid="'+escAttr(i.id)+'" data-search="'+escAttr(search)+'">'+
+            '<span class="cust-name">'+escHtml(i.medida||"—")+(i.marca?' · '+escHtml(i.marca):'')+'</span>'+
+            '<span class="cust-sub"'+(qtd<=0?' style="color:#e2554c;"':'')+'>'+(qtd<=0 ? 'sem estoque — dá pra vender mesmo assim' : qtd+' un. em estoque')+' · '+fmtCurrency(parseNum(i.preco))+'</span>'+
+          '</button>';
+        }).join("")
+      : '<div class="cust-empty">Nenhuma medida cadastrada no estoque ainda.</div>';
+
+    div.innerHTML =
+      '<div class="modal wide">'+
+        '<h3>Escolher medida</h3>'+
+        '<p>Escolha a medida vendida nesta linha. A quantidade da coluna “Quantidade” sai do estoque automaticamente — e se não tiver saldo, o estoque fica em 0 em vez de negativar.</p>'+
+        (list.length ? '<input type="text" id="medSearch" class="search-input" placeholder="Buscar medida ou marca...">' : '')+
+        '<div class="cust-list" id="medList">'+listHtml+'</div>'+
+        '<div class="modal-actions" style="justify-content:space-between;margin-top:14px;">'+
+          '<button class="btn ghost small" id="medCancel">Cancelar</button>'+
+          '<span style="display:flex;gap:8px;">'+
+            (row && row.medidaId ? '<button class="btn ghost small" id="medClear">Limpar medida</button>' : '')+
+            '<button class="btn primary small" id="medNew">+ Cadastrar medida</button>'+
+          '</span>'+
+        '</div>'+
+      '</div>';
+    document.body.appendChild(div);
+
+    div.querySelectorAll(".cust-item").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        var item = estoqueItem(btn.getAttribute("data-mid"));
+        if (row && item){
+          if (row.medidaId !== item.id) releaseRowEstoque(row);
+          row.medidaId = item.id;
+          row.medida = estoqueLabel(item);
+          syncRowEstoque(row);
+          if (!row.valorPneus && parseNum(item.preco)>0 && parseNum(row.quantidade)>0){
+            row.valorPneus = (parseNum(item.preco)*parseNum(row.quantidade)).toFixed(2);
+          }
+        }
+        state.modal = null;
+        render();
+        scheduleSave();
+      });
+    });
+
+    var searchInput = document.getElementById("medSearch");
+    if (searchInput){
+      searchInput.addEventListener("input", function(){
+        var q = searchInput.value.trim().toLowerCase();
+        div.querySelectorAll(".cust-item").forEach(function(btn){
+          var hay = btn.getAttribute("data-search")||"";
+          btn.style.display = (!q || hay.indexOf(q)>-1) ? "" : "none";
+        });
+      });
+      searchInput.focus();
+    }
+
+    var clearBtn = document.getElementById("medClear");
+    if (clearBtn){
+      clearBtn.addEventListener("click", function(){
+        if (row){
+          releaseRowEstoque(row);
+          row.medidaId = "";
+          row.medida = "";
+        }
+        state.modal = null;
+        render();
+        scheduleSave();
+      });
+    }
+    document.getElementById("medNew").addEventListener("click", function(){
+      state.modal = {type:"estoqueForm", itemId:null, rowId:rowId, returnTo:"selectMedida", error:""};
+      render();
+    });
+    document.getElementById("medCancel").addEventListener("click", function(){ state.modal=null; render(); });
+    div.addEventListener("click", function(e){ if (e.target===div){ state.modal=null; render(); } });
+  }
+
   // ---------- reage a mudanças feitas em outro aparelho ----------
   function handleRemoteChange(key){
     if (key.indexOf(K_ROWS)===0){
@@ -1893,11 +2257,27 @@
     emailInput.addEventListener("keydown", function(e){ if (e.key==="Enter") passInput.focus(); });
   }
 
+  // ---------- papel do usuário (dono vê tudo, estoquista só o estoque) ----------
+  function loadRole(cb){
+    if (!sb){ state.role = "dono"; return cb(); }
+    sb.auth.getUser().then(function(res){
+      var user = res && res.data && res.data.user;
+      if (!user){ state.role = "dono"; return cb(); }
+      sb.from("perfis").select("papel").eq("user_id", user.id).limit(1).then(function(r){
+        var row = r && r.data && r.data[0];
+        state.role = (row && row.papel === "estoquista") ? "estoquista" : "dono";
+        cb();
+      }).catch(function(){ state.role = "dono"; cb(); });
+    }).catch(function(){ state.role = "dono"; cb(); });
+  }
+
   function bootApp(){
-    cloudPullAll(function(hadRemoteData){
-      render();
-      if (!hadRemoteData) pushAllLocalToCloud(); // primeira ativação: sobe o histórico local pra nuvem
-      initCloudSync(handleRemoteChange);
+    loadRole(function(){
+      cloudPullAll(function(hadRemoteData){
+        render();
+        if (!hadRemoteData) pushAllLocalToCloud(); // primeira ativação: sobe o histórico local pra nuvem
+        initCloudSync(handleRemoteChange);
+      });
     });
   }
 
