@@ -2591,8 +2591,11 @@
         if (res.error){ renderLoginScreen((res.error && res.error.message) ? res.error.message : "E-mail ou senha inválidos."); }
         else {
           var u = res && res.data && res.data.user;
-          addLoginLog(u ? u.email : email);
-          bootApp();
+          var emailLogado = u ? u.email : email;
+          // só registra o login DEPOIS de baixar a lista mais atual da nuvem,
+          // senão a gente sobrescreve o histórico com uma versão desatualizada
+          // (apagando por engano logins feitos em outros aparelhos)
+          bootApp(function(){ addLoginLog(emailLogado); });
         }
       });
     }
@@ -2617,9 +2620,10 @@
     }).catch(function(){ state.role = "vendedor"; cb(); });
   }
 
-  function bootApp(){
+  function bootApp(afterPull){
     loadRole(function(){
       cloudPullAll(function(hadRemoteData){
+        if (typeof afterPull === "function") afterPull(); // ex: registrar o login já com os dados mais recentes em mãos
         render();
         if (!hadRemoteData) pushAllLocalToCloud(); // primeira ativação: sobe o histórico local pra nuvem
         initCloudSync(handleRemoteChange);
