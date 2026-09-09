@@ -528,6 +528,28 @@
            parseNum(row.valorBalanceamento)+parseNum(row.valorRodas)+parseNum(row.outros)+
            parseNum(row.valorPecas)+parseNum(row.maoDeObra)+parseNum(row.valorPneus);
   }
+  // divide o valor da linha entre as formas de pagamento reais (Dinheiro/Pix/Débito/Crédito).
+  // quando a forma escolhida é combinada (ex: "Débito/Crédito"), usa o valor manual definido
+  // em row.splitValor pra primeira forma listada; se não foi definido, divide meio a meio.
+  function paymentBreakdown(row){
+    var buckets = {"Dinheiro":0, "Pix":0, "Débito":0, "Crédito":0};
+    var fp = row.formaPagamento;
+    var total = computeValor(row);
+    if (!fp || fp==="Nenhum" || total===0) return buckets;
+    if (fp.indexOf("/")===-1){
+      if (buckets.hasOwnProperty(fp)) buckets[fp] = total;
+      return buckets;
+    }
+    var parts = fp.split("/");
+    var first = parts[0], second = parts[1];
+    var firstVal = (row.splitValor!==undefined && row.splitValor!==null && row.splitValor!=="")
+      ? Math.max(0, Math.min(parseNum(row.splitValor), total))
+      : total/2;
+    var secondVal = total - firstVal;
+    if (buckets.hasOwnProperty(first)) buckets[first] += firstVal;
+    if (buckets.hasOwnProperty(second)) buckets[second] += secondVal;
+    return buckets;
+  }
   function saveRows(date, rows){
     var ok1 = lsSetJSON(K_ROWS+date, rows);
     var month = date.slice(0,7);
@@ -1796,6 +1818,13 @@
         tstat("Mão de obra", fmtCurrency(t.maoDeObra))+
       '</div>'+
 
+      '<div class="totals-bar" style="margin-top:8px;">'+
+        tstat("💵 Dinheiro", fmtCurrency(t.porPagamento["Dinheiro"]))+
+        tstat("📲 Pix", fmtCurrency(t.porPagamento["Pix"]))+
+        tstat("💳 Débito", fmtCurrency(t.porPagamento["Débito"]))+
+        tstat("💳 Crédito", fmtCurrency(t.porPagamento["Crédito"]))+
+      '</div>'+
+
       (state.rows.length===0
         ? emptyStateHtml(editable)
         : '<div class="grid-scroll"><div id="gridInner">'+
@@ -1867,7 +1896,14 @@
       var opts = col.options.map(function(o){
         return '<option value="'+escAttr(o)+'"'+(o===val?" selected":"")+'>'+escHtml(o)+'</option>';
       }).join("");
-      return '<div class="cell"><select class="cellval" data-field="'+col.key+'" data-id="'+row.id+'" '+(editable?"":"disabled")+'>'+opts+'</select></div>';
+      var selectHtml = '<select class="cellval" data-field="'+col.key+'" data-id="'+row.id+'" '+(editable?"":"disabled")+'>'+opts+'</select>';
+      if (col.key==="formaPagamento" && val && val.indexOf("/")>-1){
+        var selectHtmlNarrow = '<select class="cellval" data-field="'+col.key+'" data-id="'+row.id+'" '+(editable?"":"disabled")+' style="flex:1;min-width:0;">'+opts+'</select>';
+        return '<div class="cell" style="display:flex;gap:4px;align-items:center;">'+selectHtmlNarrow+
+          '<button class="icon-btn" data-act="splitpag" data-id="'+row.id+'" title="Definir quanto foi em cada forma de pagamento" style="flex:0 0 auto;">÷</button>'+
+        '</div>';
+      }
+      return '<div class="cell">'+selectHtml+'</div>';
     }
     if (col.type==="number"){
       return '<div class="cell"><input class="cellval" type="text" inputmode="numeric" data-field="'+col.key+'" data-id="'+row.id+'" value="'+escAttr(val)+'" '+(editable?"":"disabled")+' placeholder="0"></div>';
@@ -1877,7 +1913,8 @@
   }
 
   function computeTotals(){
-    var t = {valor:0, qtdBicos:0, valorBicos:0, qtdCambagem:0, valorCambagem:0, qtdRodas:0, valorRodas:0, valorPecas:0, maoDeObra:0};
+    var t = {valor:0, qtdBicos:0, valorBicos:0, qtdCambagem:0, valorCambagem:0, qtdRodas:0, valorRodas:0, valorPecas:0, maoDeObra:0,
+              porPagamento:{"Dinheiro":0, "Pix":0, "Débito":0, "Crédito":0}};
     state.rows.forEach(function(r){
       t.valor += computeValor(r);
       t.qtdBicos += parseNum(r.qtdBicos);
@@ -1888,6 +1925,11 @@
       t.valorRodas += parseNum(r.valorRodas);
       t.valorPecas += parseNum(r.valorPecas);
       t.maoDeObra += parseNum(r.maoDeObra);
+      var pb = paymentBreakdown(r);
+      t.porPagamento["Dinheiro"] += pb["Dinheiro"];
+      t.porPagamento["Pix"] += pb["Pix"];
+      t.porPagamento["Débito"] += pb["Débito"];
+      t.porPagamento["Crédito"] += pb["Crédito"];
     });
     t.qtdBicos = t.qtdBicos.toFixed(0);
     t.qtdCambagem = t.qtdCambagem.toFixed(0);
@@ -1898,7 +1940,7 @@
   function attachTableEvents(){
     root.querySelectorAll("[data-act]").forEach(function(node){
       var act = node.getAttribute("data-act");
-      if (act==="delrow" || act==="toggledetail") return;
+      if (act==="delrow" || act==="toggledetail" || act==="splitpag") return;
       node.addEventListener("click", function(){ handleAction(act, node); });
     });
     root.querySelectorAll("[data-act=delrow]").forEach(function(node){
@@ -1911,12 +1953,36 @@
         renderTable();
       });
     });
+    root.querySelectorAll("[data-act=splitpag]").forEach(function(node){
+      node.addEventListener("click", function(){
+        var id = node.getAttribute("data-id");
+        var row = state.rows.filter(function(r){return r.id===id;})[0];
+        if (!row) return;
+        var fp = row.formaPagamento || "";
+        var parts = fp.split("/");
+        if (parts.length!==2) return;
+        var total = computeValor(row);
+        var atual = (row.splitValor!==undefined && row.splitValor!==null && row.splitValor!=="") ? parseNum(row.splitValor) : total/2;
+        var resp = window.prompt(
+          "Total da venda: "+fmtCurrency(total)+"\nQuanto foi pago em "+parts[0]+"? (o restante vai automaticamente para "+parts[1]+")",
+          atual.toFixed(2).replace(".", ",")
+        );
+        if (resp===null) return; // cancelou
+        var n = parseNum(resp);
+        if (isNaN(n)) return;
+        n = Math.max(0, Math.min(n, total));
+        row.splitValor = n;
+        updateLiveDisplays();
+        scheduleSave();
+      });
+    });
     root.querySelectorAll("[data-field]").forEach(function(node){
       var handler = function(){
         var id = node.getAttribute("data-id");
         var field = node.getAttribute("data-field");
         var row = state.rows.filter(function(r){return r.id===id;})[0];
         if (!row) return;
+        if (field==="formaPagamento") delete row.splitValor; // forma mudou: descarta a divisão manual antiga
         row[field] = node.value;
         // mudou a quantidade de uma linha que já tem medida escolhida: acerta a baixa no estoque
         if (field==="quantidade" && row.medidaId) syncRowEstoque(row);
@@ -1938,7 +2004,8 @@
 
   function updateLiveDisplays(){
     var t = computeTotals();
-    var bar = document.querySelector(".totals-bar");
+    var bars = document.querySelectorAll(".totals-bar");
+    var bar = bars[0], payBar = bars[1];
     if (bar){
       bar.innerHTML =
         tstat("Valor", fmtCurrency(t.valor), true)+
@@ -1950,6 +2017,13 @@
         tstat("Rodas", fmtCurrency(t.valorRodas))+
         tstat("Valor das peças", fmtCurrency(t.valorPecas))+
         tstat("Mão de obra", fmtCurrency(t.maoDeObra));
+    }
+    if (payBar){
+      payBar.innerHTML =
+        tstat("💵 Dinheiro", fmtCurrency(t.porPagamento["Dinheiro"]))+
+        tstat("📲 Pix", fmtCurrency(t.porPagamento["Pix"]))+
+        tstat("💳 Débito", fmtCurrency(t.porPagamento["Débito"]))+
+        tstat("💳 Crédito", fmtCurrency(t.porPagamento["Crédito"]));
     }
     state.rows.forEach(function(r){
       var rowNode = document.querySelector('.grid-row[data-row="'+r.id+'"]');
