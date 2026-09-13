@@ -334,6 +334,66 @@
   .login-card .err{color:var(--red);font-size:12px;margin:-2px 0 12px;min-height:14px;}
   .login-card button.btn{width:100%;justify-content:center;padding:11px;font-size:14px;margin-top:4px;}
   .backlink:hover{color:var(--yellow);}
+
+  /* ==========================================================================
+     AJUSTES SOMENTE PARA TELA DE CELULAR — não afeta a versão de computador
+     ========================================================================== */
+  @media(max-width:700px){
+    #app, #app.wide{padding:12px 10px 60px;}
+
+    /* topo: deixa quebrar linha em vez de espremer tudo numa fileira só */
+    .topbar{flex-wrap:wrap;gap:10px;padding:10px 0 14px;margin-bottom:16px;}
+    .brand{flex-wrap:wrap;gap:6px;}
+    .brand h1{font-size:17px;}
+    .brand span.tag{display:none;} /* subtítulo técnico não cabe e não faz falta no celular */
+    .sync-badge{margin-left:0;}
+    .auth-zone{width:100%;justify-content:flex-start;gap:6px;}
+    .btn{padding:8px 11px;font-size:12.5px;}
+    .btn.small{padding:6px 9px;font-size:11.5px;}
+
+    /* cabeçalho do dia (data + adicionar linha) */
+    .tbl-head{gap:8px;}
+    .tbl-head h2{font-size:16px;}
+    .tbl-head-left{gap:8px;flex-wrap:wrap;}
+    .day-nav button{width:30px;height:30px;}
+
+    /* resumo do mês (número grande de faturamento) */
+    .hero-left{padding:18px 16px;}
+    .hero-right{padding:16px 14px 12px;}
+    .big-total{font-size:30px;}
+    .big-total .cents{font-size:18px;}
+    .hero-left .sub{margin-bottom:16px;}
+    .month-nav .label{font-size:11.5px;}
+
+    /* cartões de meta diária e peças/vendedores */
+    .dt-card{padding:13px 14px;}
+    .dt-value{font-size:20px;}
+    .parts-visor{gap:8px;}
+    .parts-card{padding:12px 13px;}
+    .parts-card .pc-value{font-size:19px;}
+
+    /* barras de totais do dia: cartões menores, cabem mais por linha */
+    .tstat{min-width:96px;padding:9px 10px;flex:1 1 30%;}
+    .tstat .k{font-size:9.5px;}
+    .tstat .v{font-size:13px;}
+
+    /* tabela de vendas: em vez de encolher o texto até ficar ilegível,
+       deixa a tabela no tamanho normal e permite arrastar o dedo pros lados */
+    .grid-scroll, .grid-scroll-head{overflow-x:auto;-webkit-overflow-scrolling:touch;height:auto !important;}
+    #gridInner, .grid-scroll-head .grid-row.head{transform:none !important;}
+    .grid-row .cell{font-size:12.5px;padding:7px 7px;}
+    .grid-row.head .cell{font-size:10px;padding:9px 7px;}
+    .icon-btn{width:26px;height:26px;}
+
+    /* modais e telas de login/estoque/histórico/usuários */
+    .login-card{padding:24px 18px;max-width:100%;}
+    .modal{padding:18px 16px;max-width:92vw;}
+    .cust-list{max-height:220px;}
+
+    /* listas de histórico (logins / movimentações de estoque) e usuários */
+    .arow{flex-wrap:wrap;gap:6px 14px;padding:10px 12px;font-size:12.5px;}
+    .arow .stats{flex-wrap:wrap;gap:8px 14px;}
+  }
 </style>
 </head>
 <body>
@@ -1885,6 +1945,17 @@
     attachTableEvents();
     bindBackupControls();
     scheduleFitGrid();
+    syncHeadScroll();
+  }
+
+  // no celular a tabela permite arrastar de lado; isso mantém o cabeçalho
+  // (Quantidade, Medida, Serviço...) alinhado com as colunas enquanto arrasta
+  function syncHeadScroll(){
+    var headWrap = document.querySelector(".grid-scroll-head");
+    var rowsWrap = document.querySelector(".grid-scroll");
+    if (!headWrap || !rowsWrap) return;
+    rowsWrap.addEventListener("scroll", function(){ headWrap.scrollLeft = rowsWrap.scrollLeft; });
+    headWrap.addEventListener("scroll", function(){ rowsWrap.scrollLeft = headWrap.scrollLeft; });
   }
 
   function tstat(label, val, accent){
