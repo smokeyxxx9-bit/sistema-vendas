@@ -217,11 +217,15 @@
   .tstat .v{font-size:15px;color:var(--text);font-family:'IBM Plex Mono',monospace;}
   .tstat .v.accent{color:var(--yellow);}
 
-  .grid-scroll{border:1px solid var(--border-soft);border-radius:4px;overflow:hidden;background:var(--panel);}
+  .sticky-head-block{position:sticky;top:0;z-index:5;background:var(--bg);}
+  .grid-scroll-head{border:1px solid var(--border-soft);border-radius:4px 4px 0 0;border-bottom:none;overflow:hidden;background:var(--panel-alt);}
+  .grid-scroll-head .grid-row.head{border-bottom:none;}
+
+  .grid-scroll{border:1px solid var(--border-soft);border-radius:0 0 4px 4px;overflow:hidden;background:var(--panel);}
   #gridInner{transform-origin:top left;}
   .grid-row{display:grid;align-items:stretch;}
   .grid-row.head{
-    position:sticky;top:0;z-index:2;background:var(--panel-alt);
+    background:var(--panel-alt);
     border-bottom:1px solid var(--border);
   }
   .grid-row.head .cell{
@@ -1142,16 +1146,27 @@
   function fitGridToWidth(){
     var wrap = document.querySelector(".grid-scroll");
     var inner = document.getElementById("gridInner");
+    var headWrap = document.querySelector(".grid-scroll-head");
+    var headRow = headWrap ? headWrap.querySelector(".grid-row.head") : null;
     if (!wrap || !inner) return;
     inner.style.transform = "none";
     wrap.style.height = "";
-    var naturalWidth = inner.scrollWidth;
+    if (headRow) headRow.style.transform = "none";
+    if (headWrap) headWrap.style.height = "";
+
+    var naturalWidth = Math.max(inner.scrollWidth, headRow ? headRow.scrollWidth : 0);
     var naturalHeight = inner.scrollHeight;
+    var headNaturalHeight = headRow ? headRow.scrollHeight : 0;
     var available = wrap.clientWidth;
     var scale = available > 0 && naturalWidth > available ? (available / naturalWidth) : 1;
     if (scale < 1){
       inner.style.transform = "scale(" + scale + ")";
       wrap.style.height = Math.ceil(naturalHeight * scale) + "px";
+      if (headRow){
+        headRow.style.transform = "scale(" + scale + ")";
+        headRow.style.transformOrigin = "top left";
+        if (headWrap) headWrap.style.height = Math.ceil(headNaturalHeight * scale) + "px";
+      }
     }
   }
   function scheduleFitGrid(){
@@ -1832,29 +1847,32 @@
       '</div>'+
       (!isToday && !editable ? '<p style="color:var(--text-faint);font-size:12.5px;margin:-8px 2px 14px;">Esta é uma data anterior — apenas hoje pode ser editado sem senha.</p>' : '')+
 
-      '<div class="totals-bar">'+
-        tstat("Valor", fmtCurrency(t.valor), true)+
-        tstat("Qtd. bicos", t.qtdBicos)+
-        tstat("Bicos", fmtCurrency(t.valorBicos))+
-        tstat("Qtd. cambagem", t.qtdCambagem)+
-        tstat("Cambagem", fmtCurrency(t.valorCambagem))+
-        tstat("Qtd. rodas", t.qtdRodas)+
-        tstat("Rodas", fmtCurrency(t.valorRodas))+
-        tstat("Valor das peças", fmtCurrency(t.valorPecas))+
-        tstat("Mão de obra", fmtCurrency(t.maoDeObra))+
-      '</div>'+
+      '<div class="sticky-head-block">'+
+        '<div class="totals-bar">'+
+          tstat("Valor", fmtCurrency(t.valor), true)+
+          tstat("Qtd. bicos", t.qtdBicos)+
+          tstat("Bicos", fmtCurrency(t.valorBicos))+
+          tstat("Qtd. cambagem", t.qtdCambagem)+
+          tstat("Cambagem", fmtCurrency(t.valorCambagem))+
+          tstat("Qtd. rodas", t.qtdRodas)+
+          tstat("Rodas", fmtCurrency(t.valorRodas))+
+          tstat("Valor das peças", fmtCurrency(t.valorPecas))+
+          tstat("Mão de obra", fmtCurrency(t.maoDeObra))+
+        '</div>'+
 
-      '<div class="totals-bar" style="margin-top:8px;">'+
-        tstat("💵 Dinheiro", fmtCurrency(t.porPagamento["Dinheiro"]))+
-        tstat("📲 Pix", fmtCurrency(t.porPagamento["Pix"]))+
-        tstat("💳 Débito", fmtCurrency(t.porPagamento["Débito"]))+
-        tstat("💳 Crédito", fmtCurrency(t.porPagamento["Crédito"]))+
+        '<div class="totals-bar" style="margin-top:8px;">'+
+          tstat("💵 Dinheiro", fmtCurrency(t.porPagamento["Dinheiro"]))+
+          tstat("📲 Pix", fmtCurrency(t.porPagamento["Pix"]))+
+          tstat("💳 Débito", fmtCurrency(t.porPagamento["Débito"]))+
+          tstat("💳 Crédito", fmtCurrency(t.porPagamento["Crédito"]))+
+        '</div>'+
+
+        (state.rows.length===0 ? '' : '<div class="grid-scroll-head">'+gridHeadHtml(colTemplate, editable)+'</div>')+
       '</div>'+
 
       (state.rows.length===0
         ? emptyStateHtml(editable)
         : '<div class="grid-scroll"><div id="gridInner">'+
-            gridHeadHtml(colTemplate, editable)+
             state.rows.map(function(r){ return rowHtml(r, colTemplate, editable); }).join("")+
           '</div></div>'
       )+
