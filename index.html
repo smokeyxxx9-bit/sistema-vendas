@@ -255,6 +255,28 @@
   .icon-btn:hover{border-color:var(--red);color:var(--red);}
   .icon-btn.print-btn:hover{border-color:var(--teal);color:var(--teal);}
   .icon-btn.wa-btn:hover{border-color:var(--green);color:var(--green);}
+  .icon-btn.cli-btn.has{border-color:var(--teal);color:var(--teal);}
+  .icon-btn.cli-btn:hover{border-color:var(--teal);color:var(--teal);}
+  .icon-btn.dup-btn:hover{border-color:var(--yellow);color:var(--yellow);}
+
+  /* linha com quantidade x valor que não bate (ex: 3 bicos mas R$ 0,00) */
+  .cell.cell-warn{box-shadow:inset 0 0 0 1.5px var(--yellow);background:rgba(245,183,0,.08);border-radius:3px;}
+
+  /* barra com os filtros/atalhos acima da tabela do dia */
+  .tbl-toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:-6px 0 14px;}
+  .count-badge{display:inline-block;background:rgba(0,0,0,.25);border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;}
+
+  /* toast de "linha apagada — desfazer" */
+  .undo-toast{
+    position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:9999;
+    background:#20262c;border:1px solid var(--border);color:var(--text);
+    padding:10px 10px 10px 16px;border-radius:8px;display:flex;align-items:center;gap:14px;
+    font-size:13px;box-shadow:0 6px 24px rgba(0,0,0,.35);
+  }
+  .undo-toast .undo-btn{
+    background:var(--yellow);color:#1a1500;border:none;border-radius:5px;
+    padding:6px 12px;font-size:12.5px;font-weight:600;
+  }
 
   .detail-toggle-row{grid-column:1/-1;padding:0;background:var(--panel-alt);}
   .detail-toggle{
@@ -406,7 +428,8 @@
   var PASSWORD = "10203016829284";
   var GOAL_1 = 350000;
   var GOAL_2 = 450000;
-  var PAYMENT_OPTIONS = ["Nenhum","Dinheiro","Débito","Crédito","Pix","Dinheiro/Pix","Dinheiro/Crédito","Dinheiro/Débito","Débito/Crédito","Débito/Pix","Pix/Crédito"];
+  var PAYMENT_OPTIONS = ["Nenhum","Dinheiro","Débito","Crédito","Pix","Dinheiro/Pix","Dinheiro/Crédito","Dinheiro/Débito","Débito/Crédito","Débito/Pix","Pix/Crédito","Múltiplo (até 4 formas)"];
+  var METODOS_PAGAMENTO = ["Dinheiro","Pix","Débito","Crédito"];
   var VENDEDORES = ["Nenhum","Loja","Bruno","Richard","Benedet","Jonas"];
 
   function range(a,b){ var out=[]; for(var i=a;i<=b;i++) out.push(String(i)); return out; }
@@ -414,26 +437,34 @@
   var COLUMNS = [
     {key:"quantidade",  label:"Quantidade",              type:"select", w:"78px", options:range(0,8)},
     {key:"medida",      label:"Medida",                  type:"medida", w:"170px"},
-    {key:"servico",     label:"Serviço",                 type:"number", w:"130px"},
-    {key:"alinhamento", label:"Alinhamento",              type:"currency", w:"110px"},
+    {key:"servico",     label:"Serviço",                 type:"number", w:"130px", advanced:true},
+    {key:"alinhamento", label:"Alinhamento",              type:"currency", w:"110px", advanced:true},
     {key:"qtdBicos",    label:"Qtd. bicos",              type:"select", w:"82px", options:range(0,8)},
     {key:"valorBicos",  label:"Valor dos bicos",         type:"currency", w:"120px"},
     {key:"qtdCambagem", label:"Qtd. cambagens",          type:"select", w:"90px", options:range(0,4)},
     {key:"valorCambagem", label:"Valor da cambagem",     type:"currency", w:"125px"},
-    {key:"qtdBalanceamento", label:"Qtd. balanceamento", type:"select", w:"100px", options:range(0,4)},
-    {key:"valorBalanceamento", label:"Valor do balanceamento", type:"currency", w:"135px"},
+    {key:"qtdBalanceamento", label:"Qtd. balanceamento", type:"select", w:"100px", options:range(0,4), advanced:true},
+    {key:"valorBalanceamento", label:"Valor do balanceamento", type:"currency", w:"135px", advanced:true},
     {key:"qtdRodas",    label:"Qtd. rodas",              type:"select", w:"82px", options:range(0,5)},
     {key:"valorRodas",  label:"Valor das rodas",         type:"currency", w:"120px"},
-    {key:"outros",      label:"Outros",                  type:"currency", w:"100px"},
+    {key:"outros",      label:"Outros",                  type:"currency", w:"100px", advanced:true},
     {key:"valorPecas",  label:"Valor das peças",         type:"currency", w:"115px"},
     {key:"maoDeObra",   label:"Mão de obra",             type:"currency", w:"110px"},
     {key:"valorPneus",  label:"Valor dos pneus",         type:"currency", w:"115px"},
     {key:"valor",       label:"Valor",                   type:"computed", w:"115px"},
     {key:"formaPagamento", label:"Forma de pagamento",   type:"select", w:"150px", options:PAYMENT_OPTIONS},
     {key:"pago",        label:"Pago",                    type:"select", w:"64px", options:["❌","✅"]},
-    {key:"carro",       label:"Carro",                   type:"select", w:"95px", options:range(1,15).map(function(n){return "Carro "+n;})},
+    {key:"carro",       label:"Carro",                   type:"select", w:"95px", options:range(1,20).map(function(n){return "Carro "+n;})},
     {key:"vendedor",    label:"Vendedor",                type:"select", w:"105px", options:VENDEDORES}
   ];
+  // pares quantidade/valor que devem bater: se um tem valor >0 e o outro é 0, é provável erro de digitação
+  var QTY_VALUE_PAIRS = [
+    ["qtdBicos","valorBicos"],
+    ["qtdCambagem","valorCambagem"],
+    ["qtdBalanceamento","valorBalanceamento"],
+    ["qtdRodas","valorRodas"]
+  ];
+  var ROWACTIONS_W = "172px"; // largura da coluna de ações da linha (cliente, imprimir, whatsapp, duplicar, apagar)
 
   // ---------- storage helpers (localStorage — funciona 100% offline, direto no navegador) ----------
   var K_ROWS = "vo_rows:";
@@ -600,6 +631,15 @@
     var fp = row.formaPagamento;
     var total = computeValor(row);
     if (!fp || fp==="Nenhum" || total===0) return buckets;
+    if (fp.indexOf("Múltiplo")===0){
+      var lista = Array.isArray(row.pagamentosMultiplos) ? row.pagamentosMultiplos : [];
+      lista.forEach(function(p){
+        if (p && p.metodo && buckets.hasOwnProperty(p.metodo)){
+          buckets[p.metodo] += Math.max(0, parseNum(p.valor));
+        }
+      });
+      return buckets;
+    }
     if (fp.indexOf("/")===-1){
       if (buckets.hasOwnProperty(fp)) buckets[fp] = total;
       return buckets;
@@ -650,6 +690,47 @@
     saveCustomers(list);
     return obj;
   }
+  function updateCustomer(id, changes){
+    var list = loadCustomers();
+    for (var i=0;i<list.length;i++){
+      if (list[i].id===id){
+        Object.keys(changes).forEach(function(k){ list[i][k] = changes[k]; });
+        break;
+      }
+    }
+    saveCustomers(list);
+  }
+  function deleteCustomer(id){
+    saveCustomers(loadCustomers().filter(function(c){ return c.id!==id; }));
+  }
+  // apaga um cliente mas permite desfazer por alguns segundos (mesmo padrão usado ao apagar linha de venda)
+  function deleteCustomerWithUndo(id, onDone){
+    var list = loadCustomers();
+    var idx=-1, item=null;
+    for (var i=0;i<list.length;i++){ if (list[i].id===id){ idx=i; item=list[i]; break; } }
+    if (idx===-1) return;
+    list.splice(idx,1);
+    saveCustomers(list);
+    onDone();
+    showUndoToast("Cliente apagado", function(){
+      var list2 = loadCustomers();
+      list2.splice(Math.min(idx,list2.length), 0, item);
+      saveCustomers(list2);
+      onDone();
+    });
+  }
+  // compatível com clientes antigos que só tinham "cpf" salvo direto
+  function customerDocInfo(c){
+    if (!c) return {tipo:"cpf", documento:""};
+    var tipo = c.tipoDocumento || "cpf";
+    var documento = (c.documento!==undefined && c.documento!==null && c.documento!=="") ? c.documento : (c.cpf || "");
+    return {tipo: tipo, documento: documento};
+  }
+  function customerDocLabel(c){
+    var info = customerDocInfo(c);
+    if (!info.documento) return "";
+    return (info.tipo==="cnpj" ? "CNPJ" : "CPF") + ": " + info.documento;
+  }
 
   // ---------- notas emitidas ----------
   function loadNotas(){
@@ -661,6 +742,22 @@
   function deleteNota(notaId){
     var list = loadNotas().filter(function(n){ return n.id !== notaId; });
     saveNotas(list);
+  }
+  // apaga uma nota mas permite desfazer por alguns segundos
+  function deleteNotaWithUndo(id, onDone){
+    var list = loadNotas();
+    var idx=-1, item=null;
+    for (var i=0;i<list.length;i++){ if (list[i].id===id){ idx=i; item=list[i]; break; } }
+    if (idx===-1) return;
+    list.splice(idx,1);
+    saveNotas(list);
+    onDone();
+    showUndoToast("Nota apagada", function(){
+      var list2 = loadNotas();
+      list2.splice(Math.min(idx,list2.length), 0, item);
+      saveNotas(list2);
+      onDone();
+    });
   }
   function addNota(obj){
     var list = loadNotas();
@@ -697,6 +794,22 @@
   }
   function deleteEstoqueItem(id){
     saveEstoque(loadEstoque().filter(function(i){ return i.id!==id; }));
+  }
+  // apaga um item do estoque mas permite desfazer por alguns segundos
+  function deleteEstoqueItemWithUndo(id, onDone){
+    var list = loadEstoque();
+    var idx=-1, item=null;
+    for (var i=0;i<list.length;i++){ if (list[i].id===id){ idx=i; item=list[i]; break; } }
+    if (idx===-1) return;
+    list.splice(idx,1);
+    saveEstoque(list);
+    onDone();
+    showUndoToast("Item apagado do estoque", function(){
+      var list2 = loadEstoque();
+      list2.splice(Math.min(idx,list2.length), 0, item);
+      saveEstoque(list2);
+      onDone();
+    });
   }
   // movimenta o estoque de um item: delta positivo entra, negativo sai.
   // nunca deixa negativo — se faltar, para no 0. devolve quanto realmente mexeu.
@@ -845,7 +958,7 @@
         '<div class="cliente">'+
           '<h2>Cliente</h2>'+
           '<p><b>'+escHtml(customer.nome||"")+'</b>'+
-          (customer.cpf ? '<br>CPF: '+escHtml(customer.cpf) : '')+
+          (customerDocLabel(customer) ? '<br>'+escHtml(customerDocLabel(customer)) : '')+
           (customer.telefone ? '<br>'+escHtml(customer.telefone) : '')+
           (customer.email ? (customer.telefone?' &middot; ':'<br>')+escHtml(customer.email) : '')+
           (customer.endereco ? '<br>'+escHtml(customer.endereco) : '')+
@@ -859,7 +972,11 @@
           '<div><span>Frete</span><span>'+fmtCurrency(0)+'</span></div>'+
           '<div class="grand"><span>TOTAL VENDA</span><span>'+fmtCurrency(nota.totalProdutos)+'</span></div>'+
         '</div>'+
-        (nota.formaPagamento ? '<div class="pagamento">Forma de pagamento: <b>'+escHtml(nota.formaPagamento)+'</b>'+(nota.pago?' &middot; '+escHtml(nota.pago==="✅"?"Pago":"Pendente"):'')+'</div>' : '')+
+        (nota.formaPagamento ? '<div class="pagamento">Forma de pagamento: <b>'+escHtml(nota.formaPagamento)+'</b>'+(nota.pago?' &middot; '+escHtml(nota.pago==="✅"?"Pago":"Pendente"):'')+
+          (Array.isArray(nota.pagamentosMultiplos) && nota.pagamentosMultiplos.length
+            ? '<br><span style="font-size:11px;">'+nota.pagamentosMultiplos.map(function(p){ return escHtml(p.metodo)+": "+fmtCurrency(parseNum(p.valor)); }).join(" &middot; ")+'</span>'
+            : '')+
+        '</div>' : '')+
 
         '<div class="garantia-box">'+
           '<h3>TERMO DE GARANTIA - PNEUS SEMINOVOS</h3>'+
@@ -902,12 +1019,14 @@
       rowId: row.id,
       customerId: customer.id,
       customer: {
-        nome: customer.nome||"", cpf: customer.cpf||"", email: customer.email||"",
+        nome: customer.nome||"", tipoDocumento: (customer.tipoDocumento||"cpf"), documento: (customer.documento||customer.cpf||""), email: customer.email||"",
         telefone: customer.telefone||"", endereco: customer.endereco||""
       },
       items: buildNotaItems(row),
       totalProdutos: computeValor(row),
       formaPagamento: row.formaPagamento||"",
+      pagamentosMultiplos: Array.isArray(row.pagamentosMultiplos) ? row.pagamentosMultiplos : null,
+      splitValor: (row.splitValor!==undefined ? row.splitValor : null),
       pago: row.pago||"",
       createdAt: Date.now()
     };
@@ -971,12 +1090,14 @@
     var nota = {
       id: uid(), vendaNum: vendaNum, date: state.date, rowId: row.id, customerId: customer.id,
       customer: {
-        nome: customer.nome||"", cpf: customer.cpf||"", email: customer.email||"",
+        nome: customer.nome||"", tipoDocumento: (customer.tipoDocumento||"cpf"), documento: (customer.documento||customer.cpf||""), email: customer.email||"",
         telefone: customer.telefone||"", endereco: customer.endereco||""
       },
       items: buildNotaItems(row),
       totalProdutos: computeValor(row),
       formaPagamento: row.formaPagamento||"",
+      pagamentosMultiplos: Array.isArray(row.pagamentosMultiplos) ? row.pagamentosMultiplos : null,
+      splitValor: (row.splitValor!==undefined ? row.splitValor : null),
       pago: row.pago||"",
       createdAt: Date.now()
     };
@@ -1155,7 +1276,8 @@
       qtdBicos:"0", valorBicos:"", qtdCambagem:"0", valorCambagem:"",
       qtdBalanceamento:"0", valorBalanceamento:"", qtdRodas:"0", valorRodas:"",
       outros:"", valorPecas:"", maoDeObra:"", valorPneus:"",
-      formaPagamento:"Nenhum", pago:"❌", carro:"Carro 1", vendedor:VENDEDORES[0], detalhes:""
+      formaPagamento:"Nenhum", pago:"❌", carro:"Carro 1", vendedor:VENDEDORES[0], detalhes:"",
+      clienteId:""
     };
   }
 
@@ -1177,8 +1299,12 @@
     yesterdaySummary: null,
     role: "vendedor",          // "vendedor" (vê o painel de vendas), "estoquista" (só estoque) ou "master" (tudo + histórico + usuários)
     estoqueQuery: "",
+    clientesQuery: "",
+    clientesDetailId: null,
     usuariosList: null,
-    usuariosLoading: false
+    usuariosLoading: false,
+    onlyPending: false,
+    showAdvancedCols: (function(){ try{ return localStorage.getItem("vo_show_advanced")==="1"; }catch(e){ return false; } })()
   };
 
   var root = document.getElementById("app");
@@ -1192,6 +1318,7 @@
     root.classList.toggle("wide", state.view==="table" && !estoquista);
     if (estoquista) renderEstoque();
     else if (state.view==="estoque") renderEstoque();
+    else if (state.view==="clientes") renderClientes();
     else if (state.view==="historico" && isMaster) renderHistorico();
     else if (state.view==="usuarios" && isMaster) renderUsuarios();
     else if (state.view==="dashboard") renderDashboard();
@@ -1451,7 +1578,7 @@
       var q = local.query.trim().toLowerCase();
       var filtered = q ? customers.filter(function(c){
         return (c.nome||"").toLowerCase().indexOf(q)>-1 ||
-               (c.cpf||"").toLowerCase().indexOf(q)>-1 ||
+               (customerDocInfo(c).documento||"").toLowerCase().indexOf(q)>-1 ||
                (c.telefone||"").toLowerCase().indexOf(q)>-1;
       }) : customers;
       if (filtered.length===0){
@@ -1462,7 +1589,7 @@
       area.innerHTML = '<div class="cust-list" style="max-height:320px;">'+
         filtered.map(function(c){
           var count = notas.filter(function(n){return n.customerId===c.id;}).length;
-          var sub = [c.cpf, c.telefone].filter(Boolean).join(" · ");
+          var sub = [customerDocLabel(c), c.telefone].filter(Boolean).join(" · ");
           return '<button class="cust-item" data-cid="'+escAttr(c.id)+'">'+
             '<span class="cust-name">'+escHtml(c.nome)+'</span>'+
             '<span class="cust-sub">'+(sub?escHtml(sub)+' · ':'')+count+' nota(s)</span>'+
@@ -1483,7 +1610,7 @@
       if (!customer){ local.selectedId=null; drawList(); return; }
       var notas = loadNotas().filter(function(n){return n.customerId===customer.id;})
         .sort(function(a,b){ return b.createdAt - a.createdAt; });
-      var sub = [customer.cpf, customer.telefone, customer.email].filter(Boolean).join(" · ");
+      var sub = [customerDocLabel(customer), customer.telefone, customer.email].filter(Boolean).join(" · ");
       var notasHtml = notas.length
         ? notas.map(function(n){
             return '<div class="arow">'+
@@ -1516,10 +1643,7 @@
         btn.onclick = function(e){
           e.stopPropagation();
           var id = btn.getAttribute("data-delnota");
-          if (confirm("Quer mesmo apagar esta nota fiscal do histórico?")){
-            deleteNota(id);
-            drawDetail();
-          }
+          deleteNotaWithUndo(id, function(){ drawDetail(); });
         };
       });
     }
@@ -1621,6 +1745,7 @@
         '<div class="auth-zone">'+
           '<button class="btn ghost small" data-act="back">‹ Painel de vendas</button>'+
           '<button class="btn ghost small" data-act="openestoque">📦 Estoque</button>'+
+          '<button class="btn ghost small" data-act="openclientes">👥 Clientes</button>'+
           '<button class="btn ghost small" data-act="openusuarios">👤 Usuários</button>'+
         '</div>'+
       '</div>'+
@@ -1694,6 +1819,7 @@
         '<div class="auth-zone">'+
           '<button class="btn ghost small" data-act="back">‹ Painel de vendas</button>'+
           '<button class="btn ghost small" data-act="openestoque">📦 Estoque</button>'+
+          '<button class="btn ghost small" data-act="openclientes">👥 Clientes</button>'+
           '<button class="btn ghost small" data-act="openhistorico">🕘 Histórico</button>'+
         '</div>'+
       '</div>'+
@@ -1790,12 +1916,13 @@
       (sb ? '<button class="btn ghost small" data-act="pushcloud" title="Envia tudo que está salvo neste navegador para a nuvem">↑ Enviar p/ nuvem</button>' : '');
     var acctLogout = sb ? '<button class="btn ghost small" data-act="accountlogout" title="Sair da sua conta do sistema">Sair da conta</button>' : '';
     var estoqueBtn = '<button class="btn ghost small" data-act="openestoque" title="Abrir o controle de estoque">📦 Estoque</button>';
+    var clientesBtn = '<button class="btn ghost small" data-act="openclientes" title="Cadastrar e editar clientes">👥 Clientes</button>';
     var historicoBtn = isMaster ? '<button class="btn ghost small" data-act="openhistorico" title="Ver logins e movimentações de estoque">🕘 Histórico</button>' : '';
     var usuariosBtn = isMaster ? '<button class="btn ghost small" data-act="openusuarios" title="Criar logins e alterar cargos">👤 Usuários</button>' : '';
     if (state.authed){
-      return '<div class="auth-zone"><span class="pill on">✓ edição de dias anteriores liberada</span>'+estoqueBtn+historicoBtn+usuariosBtn+backupBtns+'<button class="btn ghost small" data-act="logout">Sair</button>'+acctLogout+'</div>';
+      return '<div class="auth-zone"><span class="pill on">✓ edição de dias anteriores liberada</span>'+estoqueBtn+clientesBtn+historicoBtn+usuariosBtn+backupBtns+'<button class="btn ghost small" data-act="logout">Sair</button>'+acctLogout+'</div>';
     }
-    return '<div class="auth-zone">'+estoqueBtn+historicoBtn+usuariosBtn+backupBtns+'<button class="btn small" data-act="login">Entrar com senha</button>'+acctLogout+'</div>';
+    return '<div class="auth-zone">'+estoqueBtn+clientesBtn+historicoBtn+usuariosBtn+backupBtns+'<button class="btn small" data-act="login">Entrar com senha</button>'+acctLogout+'</div>';
   }
 
   function bindBackupControls(){
@@ -1852,6 +1979,9 @@
       render();
     }
     else if (act==="openestoque"){ state.view="estoque"; render(); }
+    else if (act==="openclientes"){ state.clientesDetailId = null; state.view="clientes"; render(); }
+    else if (act==="clientenew"){ state.modal = {type:"customerForm", error:""}; renderModal(); }
+    else if (act==="clientedit"){ state.modal = {type:"customerForm", customerId: node.getAttribute("data-id"), error:""}; renderModal(); }
     else if (act==="openhistorico"){ if (state.role==="master"){ state.view="historico"; state.historicoTab = state.historicoTab || "logins"; render(); } }
     else if (act==="historicotab"){ state.historicoTab = node.getAttribute("data-tab"); render(); }
     else if (act==="openusuarios"){ if (state.role==="master"){ state.view="usuarios"; render(); } }
@@ -1862,6 +1992,22 @@
     else if (act==="estoquenew"){
       state.modal = {type:"estoqueForm", itemId:null, error:""};
       render();
+    }
+    else if (act==="togglepending"){
+      state.onlyPending = !state.onlyPending;
+      renderTable();
+    }
+    else if (act==="togglemorefields"){
+      state.showAdvancedCols = !state.showAdvancedCols;
+      try{ localStorage.setItem("vo_show_advanced", state.showAdvancedCols?"1":"0"); }catch(e){}
+      renderTable();
+    }
+    else if (act==="linkcustomer"){
+      state.modal = {type:"selectCustomer", rowId: node.getAttribute("data-id"), purpose:"link"};
+      render();
+    }
+    else if (act==="duplicaterow"){
+      duplicateRow(node.getAttribute("data-id"));
     }
   }
 
@@ -1885,7 +2031,12 @@
     var isToday = state.date === today;
     var t = computeTotals();
 
-    var colTemplate = COLUMNS.map(function(c){return c.w;}).join(" ") + " 64px";
+    var cols = visibleColumns();
+    var colTemplate = cols.map(function(c){return c.w;}).join(" ") + " " + ROWACTIONS_W;
+
+    var pendentesCount = state.rows.filter(function(r){ return r.pago!=="✅"; }).length;
+    var displayRows = state.onlyPending ? state.rows.filter(function(r){ return r.pago!=="✅"; }) : state.rows;
+    var hiddenColsCount = COLUMNS.filter(function(c){return c.advanced;}).length;
 
     root.innerHTML =
       '<div class="topbar">'+
@@ -1907,6 +2058,18 @@
       '</div>'+
       (!isToday && !editable ? '<p style="color:var(--text-faint);font-size:12.5px;margin:-8px 2px 14px;">Esta é uma data anterior — apenas hoje pode ser editado sem senha.</p>' : '')+
 
+      (state.rows.length===0 ? '' :
+        '<div class="tbl-toolbar">'+
+          '<button class="btn small'+(state.onlyPending?' primary':' ghost')+'" data-act="togglepending" title="Mostrar só as vendas ainda não pagas">'+
+            (state.onlyPending ? "✕ Mostrando só pendentes" : "🔍 Só pendentes")+
+            (pendentesCount>0 ? ' <span class="count-badge">'+pendentesCount+'</span>' : '')+
+          '</button>'+
+          '<button class="btn small ghost" data-act="togglemorefields" title="'+(state.showAdvancedCols?'Esconder os campos usados com menos frequência':'Mostrar todos os campos, incluindo os usados com menos frequência')+'">'+
+            (state.showAdvancedCols ? "▲ Mostrar menos campos" : "▼ Mostrar mais campos ("+hiddenColsCount+")")+
+          '</button>'+
+        '</div>'
+      )+
+
       '<div class="sticky-head-block">'+
         '<div class="totals-bar">'+
           tstat("Valor", fmtCurrency(t.valor), true)+
@@ -1927,14 +2090,18 @@
           tstat("💳 Crédito", fmtCurrency(t.porPagamento["Crédito"]))+
         '</div>'+
 
-        (state.rows.length===0 ? '' : '<div class="grid-scroll-head">'+gridHeadHtml(colTemplate, editable)+'</div>')+
+        (state.rows.length===0 ? '' : '<div class="grid-scroll-head">'+gridHeadHtml(colTemplate, editable, cols)+'</div>')+
       '</div>'+
 
       (state.rows.length===0
         ? emptyStateHtml(editable)
-        : '<div class="grid-scroll"><div id="gridInner">'+
-            state.rows.map(function(r){ return rowHtml(r, colTemplate, editable); }).join("")+
-          '</div></div>'
+        : (displayRows.length===0
+            ? '<div class="empty-state"><p>Nenhuma venda pendente — tudo pago por aqui. 🎉</p>'+
+                '<button class="btn ghost small" data-act="togglepending">Mostrar todas as vendas</button></div>'
+            : '<div class="grid-scroll"><div id="gridInner">'+
+                displayRows.map(function(r){ return rowHtml(r, colTemplate, editable, cols); }).join("")+
+              '</div></div>'
+          )
       )+
 
       '<div class="tbl-footer">'+
@@ -1969,18 +2136,28 @@
       '</div>';
   }
 
-  function gridHeadHtml(colTemplate, editable){
-    var cells = COLUMNS.map(function(c){ return '<div class="cell">'+escHtml(c.label)+'</div>'; }).join("");
+  function gridHeadHtml(colTemplate, editable, cols){
+    var cells = (cols||visibleColumns()).map(function(c){ return '<div class="cell">'+escHtml(c.label)+'</div>'; }).join("");
     cells += '<div class="cell"></div>';
     return '<div class="grid-row head" style="grid-template-columns:'+colTemplate+'">'+cells+'</div>';
   }
 
-  function rowHtml(row, colTemplate, editable){
+  // nome do cliente vinculado direto à linha (ligado sem precisar imprimir a nota)
+  function customerNameById(id){
+    if (!id) return "";
+    var c = loadCustomers().filter(function(x){ return x.id===id; })[0];
+    return c ? c.nome : "";
+  }
+
+  function rowHtml(row, colTemplate, editable, cols){
     var valor = computeValor(row);
-    var cells = COLUMNS.map(function(c){ return cellHtml(row, c, editable, valor); }).join("");
+    var cells = (cols||visibleColumns()).map(function(c){ return cellHtml(row, c, editable, valor); }).join("");
+    var custName = customerNameById(row.clienteId);
     cells += '<div class="cell rowactions">'+
+      '<button class="icon-btn cli-btn'+(custName?' has':'')+'" data-act="linkcustomer" data-id="'+row.id+'" title="'+(custName?('Cliente: '+escAttr(custName)+' — clique para alterar'):'Vincular cliente a esta linha')+'">👤</button>'+
       '<button class="icon-btn print-btn" data-act="printnote" data-id="'+row.id+'" title="Imprimir nota">🖨</button>'+
       '<button class="icon-btn wa-btn" data-act="sendwhatsapp" data-id="'+row.id+'" title="Enviar por WhatsApp">💬</button>'+
+      (editable ? '<button class="icon-btn dup-btn" data-act="duplicaterow" data-id="'+row.id+'" title="Duplicar linha (repete os dados, menos a medida do pneu)">⧉</button>' : '')+
       (editable ? '<button class="icon-btn" data-act="delrow" data-id="'+row.id+'" title="Remover linha">✕</button>' : '')+
       '</div>';
     var open = !!state.openDetails[row.id];
@@ -2000,11 +2177,14 @@
 
   function cellHtml(row, col, editable, computedValor){
     var val = row[col.key];
+    var mismatch = pairMismatch(row, col.key);
+    var cellClass = "cell"+(mismatch?" cell-warn":"");
+    var warnTitle = mismatch ? ' title="Confira: a quantidade e o valor deste grupo não batem"' : '';
     if (col.type==="computed"){
-      return '<div class="cell"><input class="cellval computed" value="'+escAttr(fmtCurrency(computedValor))+'" disabled></div>';
+      return '<div class="'+cellClass+'"><input class="cellval computed" value="'+escAttr(fmtCurrency(computedValor))+'" disabled></div>';
     }
     if (col.type==="medida"){
-      return '<div class="cell"><button class="medida-btn'+(row.medida?' has':'')+'" data-act="selectmedida" data-id="'+row.id+'" '+(editable?"":"disabled")+' title="Escolher a medida do pneu">'+
+      return '<div class="'+cellClass+'"><button class="medida-btn'+(row.medida?' has':'')+'" data-act="selectmedida" data-id="'+row.id+'" '+(editable?"":"disabled")+' title="Escolher a medida do pneu">'+
         escHtml(row.medida || "Escolher medida")+'</button></div>';
     }
     if (col.type==="select"){
@@ -2014,17 +2194,23 @@
       var selectHtml = '<select class="cellval" data-field="'+col.key+'" data-id="'+row.id+'" '+(editable?"":"disabled")+'>'+opts+'</select>';
       if (col.key==="formaPagamento" && val && val.indexOf("/")>-1){
         var selectHtmlNarrow = '<select class="cellval" data-field="'+col.key+'" data-id="'+row.id+'" '+(editable?"":"disabled")+' style="flex:1;min-width:0;">'+opts+'</select>';
-        return '<div class="cell" style="display:flex;gap:4px;align-items:center;">'+selectHtmlNarrow+
+        return '<div class="'+cellClass+'" style="display:flex;gap:4px;align-items:center;">'+selectHtmlNarrow+
           '<button class="icon-btn" data-act="splitpag" data-id="'+row.id+'" title="Definir quanto foi em cada forma de pagamento" style="flex:0 0 auto;">÷</button>'+
         '</div>';
       }
-      return '<div class="cell">'+selectHtml+'</div>';
+      if (col.key==="formaPagamento" && val && val.indexOf("Múltiplo")===0){
+        var selectHtmlNarrow2 = '<select class="cellval" data-field="'+col.key+'" data-id="'+row.id+'" '+(editable?"":"disabled")+' style="flex:1;min-width:0;">'+opts+'</select>';
+        return '<div class="'+cellClass+'" style="display:flex;gap:4px;align-items:center;">'+selectHtmlNarrow2+
+          '<button class="icon-btn" data-act="multipag" data-id="'+row.id+'" title="Dividir entre até 4 formas de pagamento" style="flex:0 0 auto;">⚙</button>'+
+        '</div>';
+      }
+      return '<div class="'+cellClass+'"'+warnTitle+'>'+selectHtml+'</div>';
     }
     if (col.type==="number"){
-      return '<div class="cell"><input class="cellval" type="text" inputmode="numeric" data-field="'+col.key+'" data-id="'+row.id+'" value="'+escAttr(val)+'" '+(editable?"":"disabled")+' placeholder="0"></div>';
+      return '<div class="'+cellClass+'"><input class="cellval" type="text" inputmode="numeric" data-field="'+col.key+'" data-id="'+row.id+'" value="'+escAttr(val)+'" '+(editable?"":"disabled")+' placeholder="0"></div>';
     }
     // currency free text
-    return '<div class="cell"><input class="cellval" type="text" inputmode="decimal" data-field="'+col.key+'" data-id="'+row.id+'" value="'+escAttr(val)+'" '+(editable?"":"disabled")+' placeholder="R$ 0,00"></div>';
+    return '<div class="'+cellClass+'"'+warnTitle+'><input class="cellval" type="text" inputmode="decimal" data-field="'+col.key+'" data-id="'+row.id+'" value="'+escAttr(val)+'" '+(editable?"":"disabled")+' placeholder="R$ 0,00"></div>';
   }
 
   function computeTotals(){
@@ -2052,10 +2238,61 @@
     return t;
   }
 
+  // colunas realmente exibidas na tabela agora (algumas ficam escondidas por padrão)
+  function visibleColumns(){
+    return COLUMNS.filter(function(c){ return !c.advanced || state.showAdvancedCols; });
+  }
+  // detecta quantidade e valor de um mesmo grupo (bicos, cambagem, balanceamento, rodas) que não batem
+  function pairMismatch(row, key){
+    for (var i=0;i<QTY_VALUE_PAIRS.length;i++){
+      var qtyKey = QTY_VALUE_PAIRS[i][0], valKey = QTY_VALUE_PAIRS[i][1];
+      if (key!==qtyKey && key!==valKey) continue;
+      var qty = parseNum(row[qtyKey]);
+      var val = parseNum(row[valKey]);
+      return (qty>0 && val===0) || (qty===0 && val>0);
+    }
+    return false;
+  }
+  // duplica uma linha (mesmo serviço, carro, forma de pagamento etc.) — a medida do pneu
+  // não é copiada, pra não confundir o controle de estoque com uma baixa que nunca aconteceu
+  function duplicateRow(id){
+    var row = state.rows.filter(function(r){ return r.id===id; })[0];
+    if (!row) return;
+    var copy = {};
+    Object.keys(row).forEach(function(k){ copy[k] = row[k]; });
+    copy.id = uid();
+    copy.medida = ""; copy.medidaId = ""; copy.medidaBaixa = 0;
+    var idx = state.rows.indexOf(row);
+    state.rows.splice(idx+1, 0, copy);
+    renderTable();
+    scheduleSave();
+  }
+  // ---------- toast de "desfazer" (usado ao apagar uma linha) ----------
+  var undoState = null; // {timer, node}
+  function dismissUndoToast(){
+    if (!undoState) return;
+    clearTimeout(undoState.timer);
+    if (undoState.node && undoState.node.parentNode) undoState.node.parentNode.removeChild(undoState.node);
+    undoState = null;
+  }
+  function showUndoToast(message, onUndo){
+    dismissUndoToast(); // só um toast de cada vez — o anterior vira definitivo
+    var node = document.createElement("div");
+    node.className = "undo-toast";
+    node.innerHTML = '<span>'+escHtml(message)+'</span><button type="button" class="undo-btn">Desfazer</button>';
+    document.body.appendChild(node);
+    var timer = setTimeout(function(){ dismissUndoToast(); }, 5000);
+    undoState = {timer:timer, node:node};
+    node.querySelector(".undo-btn").addEventListener("click", function(){
+      dismissUndoToast();
+      onUndo();
+    });
+  }
+
   function attachTableEvents(){
     root.querySelectorAll("[data-act]").forEach(function(node){
       var act = node.getAttribute("data-act");
-      if (act==="delrow" || act==="toggledetail" || act==="splitpag") return;
+      if (act==="delrow" || act==="toggledetail" || act==="splitpag" || act==="multipag") return;
       node.addEventListener("click", function(){ handleAction(act, node); });
     });
     root.querySelectorAll("[data-act=delrow]").forEach(function(node){
@@ -2091,20 +2328,32 @@
         scheduleSave();
       });
     });
+    root.querySelectorAll("[data-act=multipag]").forEach(function(node){
+      node.addEventListener("click", function(){
+        var id = node.getAttribute("data-id");
+        state.modal = {type:"multiPag", rowId: id};
+        renderModal();
+      });
+    });
     root.querySelectorAll("[data-field]").forEach(function(node){
       var handler = function(){
         var id = node.getAttribute("data-id");
         var field = node.getAttribute("data-field");
         var row = state.rows.filter(function(r){return r.id===id;})[0];
         if (!row) return;
-        if (field==="formaPagamento") delete row.splitValor; // forma mudou: descarta a divisão manual antiga
+        if (field==="formaPagamento") { delete row.splitValor; delete row.pagamentosMultiplos; } // forma mudou: descarta divisões manuais antigas
         row[field] = node.value;
         // mudou a quantidade de uma linha que já tem medida escolhida: acerta a baixa no estoque
         if (field==="quantidade" && row.medidaId) syncRowEstoque(row);
         if (field==="formaPagamento"){
-          // precisa redesenhar a linha pra mostrar (ou esconder) na hora o botão "÷" de dividir o pagamento
+          // precisa redesenhar a linha pra mostrar (ou esconder) na hora o botão "÷"/"⚙" de dividir o pagamento
           scheduleSave();
           renderTable();
+          if (row.formaPagamento && row.formaPagamento.indexOf("Múltiplo")===0){
+            // já abre a divisão, já que aqui não existe um "meio a meio" padrão como nas combinações de 2 formas
+            state.modal = {type:"multiPag", rowId: row.id};
+            renderModal();
+          }
           return;
         }
         if (field!=="detalhes"){
@@ -2160,13 +2409,21 @@
     scheduleSave();
   }
   function delRow(id){
-    if (!window.confirm("Tem certeza que deseja fechar (remover) esta linha? Essa ação não pode ser desfeita.")) return;
-    var row = state.rows.filter(function(r){ return r.id===id; })[0];
-    if (row) releaseRowEstoque(row); // devolve pro estoque o que essa linha havia baixado
-    state.rows = state.rows.filter(function(r){ return r.id!==id; });
+    var idx = -1;
+    for (var i=0;i<state.rows.length;i++){ if (state.rows[i].id===id){ idx=i; break; } }
+    if (idx===-1) return;
+    var row = state.rows[idx];
+    releaseRowEstoque(row); // devolve pro estoque o que essa linha havia baixado
+    state.rows.splice(idx, 1);
     delete state.openDetails[id];
     renderTable();
     scheduleSave();
+    showUndoToast("Linha apagada", function(){
+      state.rows.splice(idx, 0, row);
+      syncRowEstoque(row); // baixa de novo o estoque que tinha sido devolvido
+      renderTable();
+      scheduleSave();
+    });
   }
 
   function scheduleSave(){
@@ -2208,6 +2465,7 @@
     else if (state.modal.type==="customerForm") renderCustomerFormModal();
     else if (state.modal.type==="selectMedida") renderSelectMedidaModal();
     else if (state.modal.type==="estoqueForm") renderEstoqueFormModal();
+    else if (state.modal.type==="multiPag") renderMultiPagModal();
     else renderAuthModal();
   }
 
@@ -2251,10 +2509,12 @@
     div.className = "overlay";
     var customers = loadCustomers();
     var rowId = state.modal.rowId;
+    var purpose = state.modal.purpose||"print";
+    var currentRow = state.rows.filter(function(r){return r.id===rowId;})[0];
     var listHtml = customers.length
       ? customers.map(function(c){
-          var sub = [c.cpf, c.telefone].filter(Boolean).join(" · ");
-          var search = ((c.nome||"")+" "+(c.cpf||"")+" "+(c.telefone||"")).toLowerCase();
+          var sub = [customerDocLabel(c), c.telefone].filter(Boolean).join(" \u00b7 ");
+          var search = ((c.nome||"")+" "+(customerDocInfo(c).documento||"")+" "+(c.telefone||"")).toLowerCase();
           return '<button class="cust-item" data-cid="'+escAttr(c.id)+'" data-search="'+escAttr(search)+'">'+
             '<span class="cust-name">'+escHtml(c.nome)+'</span>'+
             (sub ? '<span class="cust-sub">'+escHtml(sub)+'</span>' : '')+
@@ -2263,14 +2523,17 @@
       : '<div class="cust-empty">Nenhum cliente cadastrado ainda.</div>';
     div.innerHTML =
       '<div class="modal wide">'+
-        '<h3>'+(state.modal.purpose==="whatsapp" ? "Enviar nota por WhatsApp" : "Selecionar cliente")+'</h3>'+
-        '<p>'+(state.modal.purpose==="whatsapp"
-          ? "Escolha o cliente para enviar o PDF da nota por WhatsApp. Se ele ainda não estiver cadastrado, use o botão abaixo."
-          : "Escolha quem comprou para gerar a nota. Se o cliente ainda não estiver cadastrado, use o botão abaixo.")+'</p>'+
+        '<h3>'+(purpose==="whatsapp" ? "Enviar nota por WhatsApp" : (purpose==="link" ? "Vincular cliente \u00e0 linha" : "Selecionar cliente"))+'</h3>'+
+        '<p>'+(purpose==="whatsapp"
+          ? "Escolha o cliente para enviar o PDF da nota por WhatsApp. Se ele ainda n\u00e3o estiver cadastrado, use o bot\u00e3o abaixo."
+          : (purpose==="link"
+            ? "Escolha quem comprou nesta linha. Isso fica salvo mesmo sem imprimir \u2014 d\u00e1 pra ver depois quem levou e religar uma nota a qualquer momento."
+            : "Escolha quem comprou para gerar a nota. Se o cliente ainda n\u00e3o estiver cadastrado, use o bot\u00e3o abaixo."))+'</p>'+
         (customers.length ? '<input type="text" id="custSearch" class="search-input" placeholder="Buscar por nome, CPF ou telefone...">' : '')+
         '<div class="cust-list" id="custList">'+listHtml+'</div>'+
         '<div class="modal-actions" style="justify-content:space-between;margin-top:14px;">'+
           '<button class="btn ghost small" id="custCancel">Cancelar</button>'+
+          (purpose==="link" && currentRow && currentRow.clienteId ? '<button class="btn ghost small" id="custUnlink" style="color:var(--red);">Remover v\u00ednculo</button>' : '')+
           '<button class="btn primary small" id="custNew">+ Cadastrar cliente</button>'+
         '</div>'+
       '</div>';
@@ -2280,10 +2543,13 @@
         var cid = btn.getAttribute("data-cid");
         var customer = customers.filter(function(c){return c.id===cid;})[0];
         var row = state.rows.filter(function(r){return r.id===rowId;})[0];
-        var purpose = state.modal.purpose||"print";
         state.modal = null;
-        render();
         if (row && customer){
+          row.clienteId = customer.id; // fica ligado na linha independente de imprimir ou n\u00e3o
+          scheduleSave();
+        }
+        render();
+        if (row && customer && purpose!=="link"){
           if (purpose==="whatsapp") sendNotaPdfWhatsapp(row, customer);
           else printNota(row, customer);
         }
@@ -2317,27 +2583,45 @@
       searchInput.focus();
     }
     document.getElementById("custNew").addEventListener("click", function(){
-      state.modal = {type:"customerForm", rowId: rowId, returnTo:"selectCustomer", purpose: state.modal.purpose||"print", error:""};
+      state.modal = {type:"customerForm", rowId: rowId, returnTo:"selectCustomer", purpose: purpose, error:""};
       render();
     });
+    var unlinkBtn = document.getElementById("custUnlink");
+    if (unlinkBtn){
+      unlinkBtn.addEventListener("click", function(){
+        var row = state.rows.filter(function(r){return r.id===rowId;})[0];
+        if (row) { row.clienteId = ""; scheduleSave(); }
+        state.modal = null;
+        render();
+      });
+    }
     document.getElementById("custCancel").addEventListener("click", function(){ state.modal=null; render(); });
     div.addEventListener("click", function(e){ if (e.target===div){ state.modal=null; render(); } });
   }
 
-  // ---------- modal: cadastrar cliente ----------
+  // ---------- modal: cadastrar / editar cliente ----------
   function renderCustomerFormModal(){
+    var customer = state.modal.customerId ? loadCustomers().filter(function(c){return c.id===state.modal.customerId;})[0] : null;
+    var docInfo = customerDocInfo(customer || {});
+    var tipoAtual = state.modal.tipoDocumento || docInfo.tipo || "cpf";
     var div = document.createElement("div");
     div.className = "overlay";
     var err = state.modal.error || "";
     div.innerHTML =
       '<div class="modal wide">'+
-        '<h3>Cadastrar cliente</h3>'+
+        '<h3>'+(customer ? "Editar cliente" : "Cadastrar cliente")+'</h3>'+
         '<div class="field-group">'+
-          '<label>Nome</label><input type="text" id="cfNome" placeholder="Nome completo">'+
-          '<label>CPF</label><input type="text" id="cfCpf" placeholder="000.000.000-00">'+
-          '<label>E-mail (gmail)</label><input type="email" id="cfEmail" placeholder="cliente@gmail.com">'+
-          '<label>Telefone</label><input type="text" id="cfTelefone" placeholder="(47) 90000-0000">'+
-          '<label>Endereço</label><input type="text" id="cfEndereco" placeholder="Rua, número, bairro, cidade">'+
+          '<label>Nome</label><input type="text" id="cfNome" placeholder="Nome completo" value="'+escAttr(customer?customer.nome:"")+'">'+
+          '<label>Tipo de documento</label>'+
+          '<div style="display:flex;gap:8px;margin-bottom:10px;">'+
+            '<button type="button" class="btn small'+(tipoAtual==="cpf"?" primary":" ghost")+'" id="cfTipoCpf" style="flex:1;">Pessoa física (CPF)</button>'+
+            '<button type="button" class="btn small'+(tipoAtual==="cnpj"?" primary":" ghost")+'" id="cfTipoCnpj" style="flex:1;">Pessoa jurídica (CNPJ)</button>'+
+          '</div>'+
+          '<label id="cfDocLabel">'+(tipoAtual==="cnpj"?"CNPJ":"CPF")+'</label>'+
+          '<input type="text" id="cfDocumento" placeholder="'+(tipoAtual==="cnpj"?"00.000.000/0000-00":"000.000.000-00")+'" value="'+escAttr(docInfo.documento||"")+'">'+
+          '<label>E-mail</label><input type="email" id="cfEmail" placeholder="cliente@exemplo.com" value="'+escAttr(customer?customer.email:"")+'">'+
+          '<label>Telefone</label><input type="text" id="cfTelefone" placeholder="(47) 90000-0000" value="'+escAttr(customer?customer.telefone:"")+'">'+
+          '<label>Endereço</label><input type="text" id="cfEndereco" placeholder="Rua, número, bairro, cidade" value="'+escAttr(customer?customer.endereco:"")+'">'+
         '</div>'+
         '<div class="err">'+escHtml(err)+'</div>'+
         '<div class="modal-actions">'+
@@ -2347,6 +2631,14 @@
       '</div>';
     document.body.appendChild(div);
     document.getElementById("cfNome").focus();
+
+    function setTipo(novoTipo){
+      state.modal.tipoDocumento = novoTipo;
+      renderModal();
+    }
+    document.getElementById("cfTipoCpf").addEventListener("click", function(){ setTipo("cpf"); });
+    document.getElementById("cfTipoCnpj").addEventListener("click", function(){ setTipo("cnpj"); });
+
     function goBack(){
       if (state.modal.returnTo==="selectCustomer"){
         state.modal = {type:"selectCustomer", rowId: state.modal.rowId, purpose: state.modal.purpose};
@@ -2361,27 +2653,41 @@
       var nome = document.getElementById("cfNome").value.trim();
       if (!nome){
         state.modal.error = "Informe ao menos o nome do cliente.";
-        render();
+        renderModal();
         return;
       }
-      var customer = addCustomer({
+      var dados = {
         nome: nome,
-        cpf: document.getElementById("cfCpf").value.trim(),
+        tipoDocumento: tipoAtual,
+        documento: document.getElementById("cfDocumento").value.trim(),
         email: document.getElementById("cfEmail").value.trim(),
         telefone: document.getElementById("cfTelefone").value.trim(),
         endereco: document.getElementById("cfEndereco").value.trim()
-      });
+      };
+      var saved;
+      if (customer){
+        updateCustomer(customer.id, dados);
+        saved = loadCustomers().filter(function(c){return c.id===customer.id;})[0];
+      } else {
+        saved = addCustomer(dados);
+      }
       var rowId = state.modal.rowId;
       var returnTo = state.modal.returnTo;
       var purpose = state.modal.purpose||"print";
       state.modal = null;
-      render();
       if (returnTo==="selectCustomer" && rowId){
         var row = state.rows.filter(function(r){return r.id===rowId;})[0];
         if (row){
-          if (purpose==="whatsapp") sendNotaPdfWhatsapp(row, customer);
-          else printNota(row, customer);
+          row.clienteId = saved.id; // já liga o cliente recém-cadastrado a esta linha
+          scheduleSave();
         }
+        render();
+        if (row && purpose!=="link"){
+          if (purpose==="whatsapp") sendNotaPdfWhatsapp(row, saved);
+          else printNota(row, saved);
+        }
+      } else {
+        render();
       }
     });
   }
@@ -2430,6 +2736,7 @@
         '<div class="brand"><span class="mark"></span><h1>Estoque</h1><span class="tag">MEDIDA · MARCA · QUANTIDADE · PREÇO</span>'+syncBadgeHtml()+'</div>'+
         '<div class="auth-zone">'+
           (estoquista ? '' : '<button class="btn ghost small" data-act="back">‹ Painel de vendas</button>')+
+          '<button class="btn ghost small" data-act="openclientes" title="Cadastrar e editar clientes">👥 Clientes</button>'+
           (state.role==="master" ? '<button class="btn ghost small" data-act="openhistorico" title="Ver logins e movimentações de estoque">🕘 Histórico</button>' : '')+
           (state.role==="master" ? '<button class="btn ghost small" data-act="openusuarios" title="Criar logins e alterar cargos">👤 Usuários</button>' : '')+
           (sb ? '<button class="btn ghost small" data-act="accountlogout" title="Sair da sua conta">Sair da conta</button>' : '')+
@@ -2516,9 +2823,171 @@
         var id = btn.getAttribute("data-est-del");
         var item = estoqueItem(id);
         if (!item) return;
-        if (!window.confirm("Apagar “"+estoqueLabel(item)+"” do estoque? Essa ação não pode ser desfeita.")) return;
-        deleteEstoqueItem(id);
-        renderEstoque();
+        deleteEstoqueItemWithUndo(id, function(){ renderEstoque(); });
+      });
+    });
+  }
+
+  // ---------- clientes: área dedicada (cadastrar, editar, apagar, ver notas) ----------
+  function clienteRowHtml(c, notasCount){
+    var docLabel = customerDocLabel(c);
+    return '<div class="arow">'+
+      '<span class="d" data-cli-open="'+escAttr(c.id)+'" role="button" tabindex="0" style="cursor:pointer;min-width:160px;">'+escHtml(c.nome||"—")+'</span>'+
+      '<span class="stats">'+
+        (docLabel ? '<span>'+escHtml(docLabel)+'</span>' : '')+
+        (c.telefone ? '<span>'+escHtml(c.telefone)+'</span>' : '')+
+        '<span>'+notasCount+' nota(s)</span>'+
+        '<span class="est-actions">'+
+          '<button class="icon-btn" data-cli-edit="'+escAttr(c.id)+'" title="Editar cliente">✎</button>'+
+          '<button class="icon-btn" data-cli-del="'+escAttr(c.id)+'" title="Apagar cliente">✕</button>'+
+        '</span>'+
+      '</span>'+
+    '</div>';
+  }
+
+  function clientesTopbarHtml(titulo, tag){
+    var estoquista = state.role==="estoquista";
+    return '<div class="topbar">'+
+      '<div class="brand"><span class="mark"></span><h1>'+titulo+'</h1><span class="tag">'+tag+'</span>'+syncBadgeHtml()+'</div>'+
+      '<div class="auth-zone">'+
+        (estoquista ? '' : '<button class="btn ghost small" data-act="back">‹ Painel de vendas</button>')+
+        '<button class="btn ghost small" data-act="openestoque">📦 Estoque</button>'+
+        (state.role==="master" ? '<button class="btn ghost small" data-act="openhistorico">🕘 Histórico</button>' : '')+
+        (state.role==="master" ? '<button class="btn ghost small" data-act="openusuarios">👤 Usuários</button>' : '')+
+        (sb ? '<button class="btn ghost small" data-act="accountlogout">Sair da conta</button>' : '')+
+      '</div>'+
+    '</div>';
+  }
+
+  function renderClientes(){
+    if (state.clientesDetailId) return renderClienteDetalhe();
+
+    var customers = loadCustomers().slice().sort(function(a,b){
+      return String(a.nome||"").localeCompare(String(b.nome||""), "pt-BR");
+    });
+    var notas = loadNotas();
+    var q = (state.clientesQuery||"").trim().toLowerCase();
+    var filtered = q ? customers.filter(function(c){
+      return (c.nome||"").toLowerCase().indexOf(q)>-1 ||
+             (customerDocInfo(c).documento||"").toLowerCase().indexOf(q)>-1 ||
+             (c.telefone||"").toLowerCase().indexOf(q)>-1;
+    }) : customers;
+
+    var pf = customers.filter(function(c){ return customerDocInfo(c).tipo!=="cnpj"; }).length;
+    var pj = customers.filter(function(c){ return customerDocInfo(c).tipo==="cnpj"; }).length;
+
+    root.innerHTML =
+      clientesTopbarHtml("Clientes", "NOME · CPF/CNPJ · TELEFONE · E-MAIL · ENDEREÇO") +
+
+      '<div class="totals-bar">'+
+        tstat("Clientes cadastrados", customers.length, true)+
+        tstat("Pessoa física (CPF)", pf)+
+        tstat("Pessoa jurídica (CNPJ)", pj)+
+      '</div>'+
+
+      '<div class="tbl-head">'+
+        '<div class="tbl-head-left"><h2>Clientes</h2><span class="save-flag" id="saveFlag">salvo</span></div>'+
+        '<button class="btn primary" data-act="clientenew">+ Cadastrar cliente</button>'+
+      '</div>'+
+
+      '<div class="card" style="padding:14px 16px;">'+
+        '<input type="text" id="cliSearch" class="dash-cust-search" placeholder="Buscar por nome, CPF/CNPJ ou telefone..." value="'+escAttr(state.clientesQuery||"")+'">'+
+        '<div class="archive-list">'+
+          (filtered.length
+            ? filtered.map(function(c){
+                var count = notas.filter(function(n){return n.customerId===c.id;}).length;
+                return clienteRowHtml(c, count);
+              }).join("")
+            : '<div class="arow-empty">'+(customers.length ? 'Nenhum cliente encontrado.' : 'Nenhum cliente cadastrado ainda. Use o botão “+ Cadastrar cliente”.')+'</div>')+
+        '</div>'+
+      '</div>';
+
+    root.querySelectorAll("[data-act]").forEach(function(node){
+      node.addEventListener("click", function(){ handleAction(node.getAttribute("data-act"), node); });
+    });
+
+    var search = document.getElementById("cliSearch");
+    if (search){
+      search.addEventListener("input", function(){
+        state.clientesQuery = search.value;
+        var pos = search.selectionStart;
+        renderClientes();
+        var again = document.getElementById("cliSearch");
+        if (again){ again.focus(); try{ again.setSelectionRange(pos,pos); }catch(e){} }
+      });
+    }
+
+    root.querySelectorAll("[data-cli-open]").forEach(function(el){
+      el.addEventListener("click", function(){
+        state.clientesDetailId = el.getAttribute("data-cli-open");
+        renderClientes();
+      });
+    });
+    root.querySelectorAll("[data-cli-edit]").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        state.modal = {type:"customerForm", customerId: btn.getAttribute("data-cli-edit"), error:""};
+        renderModal();
+      });
+    });
+    root.querySelectorAll("[data-cli-del]").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        var id = btn.getAttribute("data-cli-del");
+        var c = customers.filter(function(x){return x.id===id;})[0];
+        if (!c) return;
+        deleteCustomerWithUndo(id, function(){ renderClientes(); });
+      });
+    });
+  }
+
+  function renderClienteDetalhe(){
+    var customer = loadCustomers().filter(function(c){return c.id===state.clientesDetailId;})[0];
+    if (!customer){ state.clientesDetailId = null; return renderClientes(); }
+    var notas = loadNotas().filter(function(n){return n.customerId===customer.id;})
+      .sort(function(a,b){ return b.createdAt - a.createdAt; });
+    var sub = [customerDocLabel(customer), customer.telefone, customer.email].filter(Boolean).join(" · ");
+    var notasHtml = notas.length
+      ? notas.map(function(n){
+          return '<div class="arow">'+
+            '<span class="d" data-nota="'+escAttr(n.id)+'" role="button" tabindex="0" style="cursor:pointer;">Venda #'+n.vendaNum+' · '+fmtDateBR(n.date)+'</span>'+
+            '<span class="stats"><span><b>'+fmtCurrency(n.totalProdutos)+'</b></span><span>'+escHtml(n.formaPagamento||"")+'</span>'+
+            '<button class="icon-btn" data-delnota="'+escAttr(n.id)+'" title="Apagar nota">✕</button></span>'+
+          '</div>';
+        }).join("")
+      : '<div class="arow-empty">Nenhuma nota registrada para este cliente ainda.</div>';
+
+    root.innerHTML =
+      clientesTopbarHtml("Clientes", "FICHA DO CLIENTE") +
+      '<div class="card" style="padding:14px 16px;">'+
+        '<button class="backlink" id="cliBack" style="padding:4px 0 10px;">‹ Voltar aos clientes</button>'+
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px;">'+
+          '<div>'+
+            '<div class="cust-detail-name">'+escHtml(customer.nome)+'</div>'+
+            (sub?'<div class="cust-detail-sub">'+escHtml(sub)+'</div>':'')+
+            (customer.endereco?'<div class="cust-detail-sub">'+escHtml(customer.endereco)+'</div>':'')+
+          '</div>'+
+          '<button class="btn ghost small" data-act="clientedit" data-id="'+escAttr(customer.id)+'">✎ Editar</button>'+
+        '</div>'+
+        '<div class="archive-list">'+notasHtml+'</div>'+
+      '</div>';
+
+    root.querySelectorAll("[data-act]").forEach(function(node){
+      node.addEventListener("click", function(){ handleAction(node.getAttribute("data-act"), node); });
+    });
+    var backBtn = document.getElementById("cliBack");
+    if (backBtn) backBtn.addEventListener("click", function(){ state.clientesDetailId = null; renderClientes(); });
+
+    root.querySelectorAll("[data-nota]").forEach(function(el){
+      el.addEventListener("click", function(){
+        var id = el.getAttribute("data-nota");
+        var nota = loadNotas().filter(function(n){return n.id===id;})[0];
+        if (nota) reprintNota(nota);
+      });
+    });
+    root.querySelectorAll("[data-delnota]").forEach(function(btn){
+      btn.addEventListener("click", function(e){
+        e.stopPropagation();
+        var id = btn.getAttribute("data-delnota");
+        deleteNotaWithUndo(id, function(){ renderClienteDetalhe(); });
       });
     });
   }
@@ -2579,6 +3048,99 @@
         addEstoqueItem(dados);
       }
       goBack();
+    });
+  }
+
+  // ---------- modal: dividir o pagamento entre até 4 formas ----------
+  function renderMultiPagModal(){
+    var rowId = state.modal.rowId;
+    var row = state.rows.filter(function(r){ return r.id===rowId; })[0];
+    if (!row){ state.modal = null; render(); return; }
+    var total = computeValor(row);
+    var existentes = Array.isArray(row.pagamentosMultiplos) ? row.pagamentosMultiplos.slice() : [];
+    if (existentes.length===0){
+      existentes = [{metodo:"Dinheiro", valor: total}];
+    }
+    while (existentes.length < 4) existentes.push({metodo:"Nenhum", valor:""});
+    existentes = existentes.slice(0,4);
+
+    var div = document.createElement("div");
+    div.className = "overlay";
+    var opcoesMetodo = ["Nenhum"].concat(METODOS_PAGAMENTO);
+    var linhasHtml = existentes.map(function(p, i){
+      var selOpts = opcoesMetodo.map(function(m){
+        return '<option value="'+m+'"'+(p.metodo===m?" selected":"")+'>'+m+'</option>';
+      }).join("");
+      return '<div style="display:flex;gap:8px;margin-bottom:8px;">'+
+        '<select class="mpMetodo" data-idx="'+i+'" style="flex:1.2;background:var(--panel-alt);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:8px;">'+selOpts+'</select>'+
+        '<input type="text" inputmode="decimal" class="mpValor" data-idx="'+i+'" placeholder="0,00" value="'+escAttr(p.valor!==""&&p.valor!==undefined&&p.valor!==null?parseNum(p.valor):"")+'" style="flex:1;">'+
+      '</div>';
+    }).join("");
+
+    div.innerHTML =
+      '<div class="modal wide">'+
+        '<h3>Dividir pagamento (até 4 formas)</h3>'+
+        '<p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;">Total da venda: <b style="color:var(--text);">'+fmtCurrency(total)+'</b></p>'+
+        '<div id="mpLinhas">'+linhasHtml+'</div>'+
+        '<div id="mpResumo" style="font-size:12.5px;color:var(--text-dim);margin:6px 2px 12px;"></div>'+
+        '<div class="err">'+escHtml(state.modal.error||"")+'</div>'+
+        '<div class="modal-actions">'+
+          '<button class="btn ghost small" id="mpCancel">Voltar</button>'+
+          '<button class="btn primary small" id="mpSave">Salvar</button>'+
+        '</div>'+
+      '</div>';
+    document.body.appendChild(div);
+
+    function lerValores(){
+      var metodos = div.querySelectorAll(".mpMetodo");
+      var valores = div.querySelectorAll(".mpValor");
+      var lista = [];
+      for (var i=0;i<metodos.length;i++){
+        var m = metodos[i].value;
+        var v = parseNum(valores[i].value);
+        if (m!=="Nenhum" && v>0) lista.push({metodo:m, valor:v});
+      }
+      return lista;
+    }
+    function atualizarResumo(){
+      var lista = lerValores();
+      var soma = lista.reduce(function(s,p){ return s+p.valor; }, 0);
+      var resumo = document.getElementById("mpResumo");
+      var diff = total - soma;
+      if (!resumo) return;
+      if (Math.abs(diff) < 0.005){
+        resumo.innerHTML = '<span style="color:var(--green);">Soma bate certinho com o total (' + fmtCurrency(soma) + ').</span>';
+      } else if (diff > 0){
+        resumo.innerHTML = 'Soma atual: '+fmtCurrency(soma)+' — <span style="color:var(--yellow);">ainda falta '+fmtCurrency(diff)+'</span>';
+      } else {
+        resumo.innerHTML = 'Soma atual: '+fmtCurrency(soma)+' — <span style="color:var(--red);">passou '+fmtCurrency(-diff)+' do total</span>';
+      }
+    }
+    atualizarResumo();
+    div.querySelectorAll(".mpMetodo, .mpValor").forEach(function(el){
+      el.addEventListener("input", atualizarResumo);
+      el.addEventListener("change", atualizarResumo);
+    });
+
+    function goBack(){ state.modal = null; render(); }
+    document.getElementById("mpCancel").addEventListener("click", goBack);
+    div.addEventListener("click", function(e){ if (e.target===div) goBack(); });
+    document.getElementById("mpSave").addEventListener("click", function(){
+      var lista = lerValores();
+      if (lista.length===0){
+        state.modal.error = "Escolha ao menos uma forma de pagamento com um valor maior que zero.";
+        renderModal();
+        return;
+      }
+      var soma = lista.reduce(function(s,p){ return s+p.valor; }, 0);
+      if (Math.abs(soma-total) > 0.01){
+        if (!window.confirm("A soma das formas de pagamento (" + fmtCurrency(soma) + ") é diferente do total da venda (" + fmtCurrency(total) + "). Quer salvar assim mesmo?")) return;
+      }
+      row.formaPagamento = "Múltiplo (até 4 formas)";
+      row.pagamentosMultiplos = lista;
+      state.modal = null;
+      render();
+      scheduleSave();
     });
   }
 
