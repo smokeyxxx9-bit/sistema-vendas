@@ -238,6 +238,8 @@
     padding:6px 8px;border-right:1px solid var(--border-soft);display:flex;align-items:center;
   }
   .grid-row .cell:last-child, .grid-row.head .cell:last-child{border-right:none;}
+  .grid-row.head .head-actions-cell{padding:6px 8px;justify-content:center;}
+  .head-actions-cell .btn{width:100%;justify-content:center;white-space:nowrap;}
   .cellval{
     width:100%;background:transparent;border:1px solid transparent;color:var(--text);
     font-size:13px;padding:6px 6px;border-radius:3px;
@@ -329,6 +331,7 @@
   }
   .cust-item:last-child{border-bottom:none;}
   .cust-item:hover{background:var(--panel-alt);}
+  .cust-item.sel{background:var(--panel-alt);border-left:3px solid var(--yellow);padding-left:9px;}
   .cust-name{color:var(--text);font-weight:500;}
   .cust-sub{color:var(--text-faint);font-size:11.5px;font-family:'IBM Plex Mono',monospace;}
   .cust-empty{padding:20px 12px;text-align:center;color:var(--text-faint);font-size:12.5px;}
@@ -993,6 +996,73 @@
           '<div class="assinatura">Assinatura do cliente:</div>'+
         '</div>'+
 
+        '<div class="footer">Painel de Vendas — Oficina</div>'+
+      '</body></html>';
+  }
+
+  function buildEstoqueReportHtml(list, estoquista){
+    var totalUnidades = 0, totalValor = 0;
+    var rows = list.map(function(i){
+      var qt = Math.max(0, parseNum(i.quantidade));
+      var preco = parseNum(i.preco);
+      totalUnidades += qt;
+      totalValor += qt * preco;
+      return '<tr>'+
+        '<td>'+escHtml(i.medida||"—")+'</td>'+
+        '<td>'+escHtml(i.marca||"")+'</td>'+
+        '<td class="c'+(qt<=0?' zero':'')+'">'+qt+'</td>'+
+        (estoquista ? '' : '<td class="r">'+fmtCurrency(preco)+'</td><td class="r">'+fmtCurrency(qt*preco)+'</td>')+
+      '</tr>';
+    }).join("") || '<tr><td colspan="'+(estoquista?3:5)+'" class="c" style="color:#888;">Nenhuma medida cadastrada.</td></tr>';
+
+    var d = new Date();
+    var emitido = pad(d.getDate())+"/"+pad(d.getMonth()+1)+"/"+d.getFullYear()+" "+pad(d.getHours())+":"+pad(d.getMinutes());
+
+    return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">'+
+      '<title>Relatório de estoque</title>'+
+      '<style>'+
+        '*{box-sizing:border-box;}'+
+        'body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;margin:0;padding:28px;font-size:13px;}'+
+        '.head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #1a1a1a;padding-bottom:12px;margin-bottom:16px;}'+
+        '.head .empresa{max-width:60%;}'+
+        '.head .empresa h1{font-size:16px;margin:0 0 4px;}'+
+        '.head .empresa p{margin:0;font-size:11.5px;color:#444;line-height:1.5;}'+
+        '.head .rel{text-align:right;}'+
+        '.head .rel .num{font-size:18px;font-weight:bold;}'+
+        '.head .rel .emit{font-size:11px;color:#555;margin-top:2px;}'+
+        'table{width:100%;border-collapse:collapse;margin-bottom:16px;}'+
+        'th{background:#1a1a1a;color:#fff;font-size:11px;text-transform:uppercase;padding:8px 10px;text-align:left;}'+
+        'td{padding:7px 10px;border-bottom:1px solid #ddd;font-size:12.5px;}'+
+        'th.c,td.c{text-align:center;}'+
+        'th.r,td.r{text-align:right;}'+
+        'td.zero{color:#c0392b;font-weight:bold;}'+
+        '.totals{width:280px;margin-left:auto;}'+
+        '.totals div{display:flex;justify-content:space-between;padding:4px 0;font-size:12.5px;}'+
+        '.totals .grand{border-top:2px solid #1a1a1a;margin-top:4px;padding-top:8px;font-size:15px;font-weight:bold;}'+
+        '.footer{margin-top:24px;text-align:center;color:#999;font-size:10.5px;border-top:1px solid #ddd;padding-top:10px;}'+
+        '@media print{ body{padding:0 12px;} }'+
+      '</style></head><body>'+
+        '<div class="head">'+
+          '<div class="empresa">'+
+            '<h1>'+escHtml(EMPRESA.nome)+'</h1>'+
+            '<p>'+escHtml(EMPRESA.telefone)+' &middot; '+escHtml(EMPRESA.email)+'<br>'+
+            'CNPJ: '+escHtml(EMPRESA.cnpj)+'<br>'+
+            escHtml(EMPRESA.endereco)+'<br>'+escHtml(EMPRESA.cidade)+'</p>'+
+          '</div>'+
+          '<div class="rel">'+
+            '<div class="num">RELATÓRIO DE ESTOQUE</div>'+
+            '<div class="emit">EMITIDO EM: '+emitido+'</div>'+
+          '</div>'+
+        '</div>'+
+        '<table><thead><tr><th>Medida</th><th>Marca</th><th class="c">Qtd.</th>'+
+          (estoquista ? '' : '<th class="r">Preço unit.</th><th class="r">Valor total</th>')+
+        '</tr></thead>'+
+        '<tbody>'+rows+'</tbody></table>'+
+        '<div class="totals">'+
+          '<div><span>Medidas cadastradas</span><span>'+list.length+'</span></div>'+
+          '<div><span>Unidades em estoque</span><span>'+totalUnidades+'</span></div>'+
+          (estoquista ? '' : '<div class="grand"><span>Valor do estoque</span><span>'+fmtCurrency(totalValor)+'</span></div>')+
+        '</div>'+
         '<div class="footer">Painel de Vendas — Oficina</div>'+
       '</body></html>';
   }
@@ -1989,6 +2059,9 @@
       state.modal = {type:"selectMedida", rowId: node.getAttribute("data-id")};
       render();
     }
+    else if (act==="printestoque"){
+      openPrintWindow(buildEstoqueReportHtml(estoqueSorted(), state.role==="estoquista"));
+    }
     else if (act==="estoquenew"){
       state.modal = {type:"estoqueForm", itemId:null, error:""};
       render();
@@ -2008,6 +2081,10 @@
     }
     else if (act==="duplicaterow"){
       duplicateRow(node.getAttribute("data-id"));
+    }
+    else if (act==="garantia"){
+      state.modal = {type:"garantiaForm", medidaId:"", qtd:"", error:""};
+      render();
     }
   }
 
@@ -2051,10 +2128,12 @@
           '<h2>'+escHtml(weekdayLabel(state.date))+'</h2>'+
           '<span class="save-flag" id="saveFlag">salvo</span>'+
         '</div>'+
-        (editable
-          ? '<button class="btn primary" data-act="addrow">+ Adicionar linha</button>'
-          : '<span style="display:flex;align-items:center;gap:8px;"><span class="pill">somente leitura</span><button class="btn small" data-act="login">Entrar com senha para editar</button></span>'
-        )+
+        '<div style="display:flex;align-items:center;gap:8px;">'+
+          (editable
+            ? '<button class="btn primary" data-act="addrow">+ Adicionar linha</button>'
+            : '<span style="display:flex;align-items:center;gap:8px;"><span class="pill">somente leitura</span><button class="btn small" data-act="login">Entrar com senha para editar</button></span>'
+          )+
+        '</div>'+
       '</div>'+
       (!isToday && !editable ? '<p style="color:var(--text-faint);font-size:12.5px;margin:-8px 2px 14px;">Esta é uma data anterior — apenas hoje pode ser editado sem senha.</p>' : '')+
 
@@ -2138,7 +2217,9 @@
 
   function gridHeadHtml(colTemplate, editable, cols){
     var cells = (cols||visibleColumns()).map(function(c){ return '<div class="cell">'+escHtml(c.label)+'</div>'; }).join("");
-    cells += '<div class="cell"></div>';
+    cells += '<div class="cell head-actions-cell">'+
+      '<button class="btn small ghost" data-act="garantia" title="Dar baixa no estoque por troca em garantia (sem gerar venda)">🛡️ Garantia</button>'+
+    '</div>';
     return '<div class="grid-row head" style="grid-template-columns:'+colTemplate+'">'+cells+'</div>';
   }
 
@@ -2465,6 +2546,7 @@
     else if (state.modal.type==="customerForm") renderCustomerFormModal();
     else if (state.modal.type==="selectMedida") renderSelectMedidaModal();
     else if (state.modal.type==="estoqueForm") renderEstoqueFormModal();
+    else if (state.modal.type==="garantiaForm") renderGarantiaFormModal();
     else if (state.modal.type==="multiPag") renderMultiPagModal();
     else renderAuthModal();
   }
@@ -2752,7 +2834,10 @@
 
       '<div class="tbl-head">'+
         '<div class="tbl-head-left"><h2>Itens em estoque</h2><span class="save-flag" id="saveFlag">salvo</span></div>'+
-        '<button class="btn primary" data-act="estoquenew">+ Cadastrar medida</button>'+
+        '<span style="display:flex;gap:8px;">'+
+          '<button class="btn ghost" data-act="printestoque" title="Imprimir relatório do estoque">🖨 Imprimir relatório</button>'+
+          '<button class="btn primary" data-act="estoquenew">+ Cadastrar medida</button>'+
+        '</span>'+
       '</div>'+
 
       '<div class="card" style="padding:14px 16px;">'+
@@ -3049,6 +3134,110 @@
       }
       goBack();
     });
+  }
+
+  // ---------- modal: dar baixa no estoque por garantia (troca de pneu sem gerar venda) ----------
+  function renderGarantiaFormModal(){
+    var list = estoqueSorted();
+    var selecionado = state.modal.medidaId || "";
+    var div = document.createElement("div");
+    div.className = "overlay";
+    var listHtml = list.length
+      ? list.map(function(i){
+          var qtd = Math.max(0, parseNum(i.quantidade));
+          var search = ((i.medida||"")+" "+(i.marca||"")).toLowerCase();
+          return '<button type="button" class="cust-item'+(selecionado===i.id?' sel':'')+'" data-mid="'+escAttr(i.id)+'" data-search="'+escAttr(search)+'">'+
+            '<span class="cust-name">'+escHtml(i.medida||"—")+(i.marca?' · '+escHtml(i.marca):'')+'</span>'+
+            '<span class="cust-sub"'+(qtd<=0?' style="color:#e2554c;"':'')+'>'+(qtd<=0 ? 'sem estoque' : qtd+' un. em estoque')+'</span>'+
+          '</button>';
+        }).join("")
+      : '<div class="cust-empty">Nenhuma medida cadastrada no estoque ainda.</div>';
+
+    div.innerHTML =
+      '<div class="modal wide">'+
+        '<h3>🛡️ Garantia — baixa de estoque</h3>'+
+        '<p>Use quando um pneu sai do estoque por troca em garantia, sem gerar uma venda.</p>'+
+        '<div class="field-group">'+
+          '<label>Medida</label>'+
+          (list.length
+            ? '<input type="text" id="grMedSearch" class="search-input" placeholder="Buscar medida ou marca...">'+
+              '<div class="cust-list" id="grMedList" style="max-height:200px;">'+listHtml+'</div>'+
+              '<div id="grMedSel" style="font-size:12px;color:var(--text-dim);margin:6px 0 12px;">'+
+                (selecionado && estoqueItem(selecionado) ? 'Selecionada: <b style="color:var(--text);">'+escHtml(estoqueLabel(estoqueItem(selecionado)))+'</b>' : 'Nenhuma medida selecionada')+
+              '</div>'
+            : '<div class="cust-empty" style="margin-bottom:12px;">Nenhuma medida cadastrada no estoque ainda.</div>')+
+          '<label>Quantidade</label><input type="text" inputmode="numeric" id="grQtd" placeholder="1" value="'+escAttr(state.modal.qtd||"")+'">'+
+        '</div>'+
+        '<div class="err">'+escHtml(state.modal.error||"")+'</div>'+
+        '<div class="modal-actions">'+
+          '<button class="btn ghost small" id="grCancel">Cancelar</button>'+
+          '<button class="btn primary small" id="grSave">Dar baixa</button>'+
+        '</div>'+
+      '</div>';
+    document.body.appendChild(div);
+
+    var selectedId = selecionado;
+
+    div.querySelectorAll(".cust-item").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        selectedId = btn.getAttribute("data-mid");
+        state.modal.medidaId = selectedId;
+        div.querySelectorAll(".cust-item").forEach(function(b){ b.classList.remove("sel"); });
+        btn.classList.add("sel");
+        var selDiv = document.getElementById("grMedSel");
+        if (selDiv){
+          var item = estoqueItem(selectedId);
+          selDiv.innerHTML = item ? 'Selecionada: <b style="color:var(--text);">'+escHtml(estoqueLabel(item))+'</b>' : 'Nenhuma medida selecionada';
+        }
+      });
+    });
+
+    var searchInput = document.getElementById("grMedSearch");
+    if (searchInput){
+      searchInput.addEventListener("input", function(){
+        var q = searchInput.value.trim().toLowerCase();
+        div.querySelectorAll(".cust-item").forEach(function(btn){
+          var hay = btn.getAttribute("data-search")||"";
+          btn.style.display = (!q || hay.indexOf(q)>-1) ? "" : "none";
+        });
+      });
+      searchInput.focus();
+    } else {
+      var qtdInput = document.getElementById("grQtd");
+      if (qtdInput) qtdInput.focus();
+    }
+
+    function goBack(){ state.modal = null; render(); }
+    document.getElementById("grCancel").addEventListener("click", goBack);
+    div.addEventListener("click", function(e){ if (e.target===div) goBack(); });
+
+    var saveBtn = document.getElementById("grSave");
+    if (saveBtn){
+      saveBtn.addEventListener("click", function(){
+        var id = selectedId;
+        var item = id ? estoqueItem(id) : null;
+        var qtd = Math.floor(parseNum(document.getElementById("grQtd").value));
+        state.modal.qtd = document.getElementById("grQtd").value;
+        if (!item){
+          state.modal.error = "Escolha a medida do pneu.";
+          renderModal();
+          return;
+        }
+        if (!qtd || qtd<=0){
+          state.modal.error = "Informe uma quantidade válida.";
+          renderModal();
+          return;
+        }
+        var atual = Math.max(0, parseNum(item.quantidade));
+        if (qtd > atual && !window.confirm("O estoque de "+estoqueLabel(item)+" tem só "+atual+" un. disponível(is). Baixar mesmo assim (o estoque vai zerar)?")){
+          return;
+        }
+        var moved = moveEstoque(id, -qtd);
+        if (moved<0) addEstoqueLog("saida", estoqueLabel(item)+" (Garantia)", Math.abs(moved));
+        state.modal = null;
+        render();
+      });
+    }
   }
 
   // ---------- modal: dividir o pagamento entre até 4 formas ----------
