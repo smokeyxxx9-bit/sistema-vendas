@@ -2775,8 +2775,24 @@
   }
 
   // ---------- tela de estoque ----------
+  // extrai largura/perfil/aro de uma medida tipo "195/55/16" ou "175/70 R14"
+  function parseMedidaNums(medida){
+    var m = String(medida||"").match(/(\d{2,3})\D+(\d{2,3})\D+(\d{2,3})/);
+    if (!m) return null;
+    return { largura: parseInt(m[1],10), perfil: parseInt(m[2],10), aro: parseInt(m[3],10) };
+  }
   function estoqueSorted(){
     return loadEstoque().slice().sort(function(a,b){
+      var pa = parseMedidaNums(a.medida), pb = parseMedidaNums(b.medida);
+      if (pa && pb){
+        // 1º pelo aro (3º número), 2º pela largura (1º número), 3º pelo perfil (2º número)
+        if (pa.aro !== pb.aro) return pa.aro - pb.aro;
+        if (pa.largura !== pb.largura) return pa.largura - pb.largura;
+        if (pa.perfil !== pb.perfil) return pa.perfil - pb.perfil;
+        return String(a.medida||"").localeCompare(String(b.medida||""), "pt-BR", {numeric:true});
+      }
+      if (pa && !pb) return -1; // medidas sem números reconhecíveis vão para o final
+      if (!pa && pb) return 1;
       return String(a.medida||"").localeCompare(String(b.medida||""), "pt-BR", {numeric:true});
     });
   }
