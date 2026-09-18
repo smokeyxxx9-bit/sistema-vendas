@@ -217,7 +217,36 @@
   .tstat .v{font-size:15px;color:var(--text);font-family:'IBM Plex Mono',monospace;}
   .tstat .v.accent{color:var(--yellow);}
 
-  .sticky-head-block{position:sticky;top:0;z-index:5;background:var(--bg);}
+  .sticky-head-block{position:sticky;top:0;z-index:5;background:var(--bg);padding-top:6px;}
+
+  /* ---- orçamento ---- */
+  .orc-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;}
+  .orc-field label{display:block;font-size:11.5px;color:var(--text-faint);margin:0 0 5px;text-transform:uppercase;letter-spacing:.04em;}
+  .orc-field input,.orc-field select,.orc-field textarea{
+    width:100%;background:var(--panel-alt);border:1px solid var(--border-soft);color:var(--text);
+    border-radius:4px;padding:9px 10px;font-size:13.5px;font-family:inherit;
+  }
+  .orc-field textarea{min-height:64px;resize:vertical;}
+  .orc-field input:focus,.orc-field select:focus,.orc-field textarea:focus{outline:none;border-color:var(--yellow);}
+  .orc-items{border:1px solid var(--border-soft);border-radius:4px;overflow:hidden;margin-bottom:12px;}
+  .orc-item{display:grid;grid-template-columns:1fr 80px 120px 120px 36px;gap:8px;align-items:center;
+    padding:8px 10px;border-bottom:1px solid var(--border-soft);}
+  .orc-item:last-child{border-bottom:none;}
+  .orc-item.head{background:var(--panel-alt);font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-faint);}
+  .orc-item input{width:100%;background:transparent;border:1px solid transparent;color:var(--text);
+    border-radius:3px;padding:6px 6px;font-size:13.5px;font-family:inherit;}
+  .orc-item input:focus{outline:none;border-color:var(--yellow);background:var(--panel-alt);}
+  .orc-item .tot{font-size:13.5px;text-align:right;color:var(--text-dim);}
+  .orc-total{display:flex;justify-content:flex-end;align-items:baseline;gap:14px;margin:6px 2px 18px;}
+  .orc-total .lbl{font-size:12px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.04em;}
+  .orc-total .val{font-size:22px;font-weight:bold;color:var(--yellow);}
+  @media (max-width:760px){
+    .orc-grid{grid-template-columns:1fr;}
+    .orc-item{grid-template-columns:1fr 60px 92px 36px;}
+    .orc-item .tot{display:none;}
+  }
+  .sticky-head-block .tbl-head{margin-bottom:12px;}
+  .sticky-head-block .tbl-toolbar{margin:0 0 10px;}
   .grid-scroll-head{border:1px solid var(--border-soft);border-radius:4px 4px 0 0;border-bottom:none;overflow:hidden;background:var(--panel-alt);}
   .grid-scroll-head .grid-row.head{border-bottom:none;}
 
@@ -479,6 +508,8 @@
   var K_ESTOQUE = "vo_estoque";
   var K_LOGIN_LOG = "vo_login_log";
   var K_ESTOQUE_LOG = "vo_estoque_log";
+  var K_ORCAMENTO = "vo_orcamento_draft";
+  var K_ORC_SEQ = "vo_orcamento_seq";
 
   // ---------- sincronização em nuvem (Supabase) ----------
   // Preencha as duas linhas abaixo com os dados do SEU projeto Supabase
@@ -1374,6 +1405,7 @@
     usuariosList: null,
     usuariosLoading: false,
     onlyPending: false,
+    orcamento: null,
     showAdvancedCols: (function(){ try{ return localStorage.getItem("vo_show_advanced")==="1"; }catch(e){ return false; } })()
   };
 
@@ -1389,6 +1421,7 @@
     if (estoquista) renderEstoque();
     else if (state.view==="estoque") renderEstoque();
     else if (state.view==="clientes") renderClientes();
+    else if (state.view==="orcamento") renderOrcamento();
     else if (state.view==="historico" && isMaster) renderHistorico();
     else if (state.view==="usuarios" && isMaster) renderUsuarios();
     else if (state.view==="dashboard") renderDashboard();
@@ -2076,9 +2109,18 @@
       renderTable();
     }
     else if (act==="linkcustomer"){
-      state.modal = {type:"selectCustomer", rowId: node.getAttribute("data-id"), purpose:"link"};
+      var lcId = node.getAttribute("data-id");
+      var lcRow = state.rows.filter(function(r){return r.id===lcId;})[0];
+      // já tem cliente vinculado? mostra a ficha dele em vez da lista de escolha
+      if (lcRow && lcRow.clienteId && customerNameById(lcRow.clienteId)){
+        state.modal = {type:"customerLinked", rowId: lcId};
+      } else {
+        state.modal = {type:"selectCustomer", rowId: lcId, purpose:"link"};
+      }
       render();
     }
+    else if (act==="openorcamento"){ state.view="orcamento"; render(); }
+    else if (act==="orcback"){ state.view="table"; render(); }
     else if (act==="duplicaterow"){
       duplicateRow(node.getAttribute("data-id"));
     }
@@ -2122,34 +2164,36 @@
         authZoneHtml()+
       '</div>'+
 
-      '<div class="tbl-head">'+
-        '<div class="tbl-head-left">'+
-          '<div class="day-nav"><button data-act="prevday">‹</button><button data-act="nextday">›</button></div>'+
-          '<h2>'+escHtml(weekdayLabel(state.date))+'</h2>'+
-          '<span class="save-flag" id="saveFlag">salvo</span>'+
-        '</div>'+
-        '<div style="display:flex;align-items:center;gap:8px;">'+
-          (editable
-            ? '<button class="btn primary" data-act="addrow">+ Adicionar linha</button>'
-            : '<span style="display:flex;align-items:center;gap:8px;"><span class="pill">somente leitura</span><button class="btn small" data-act="login">Entrar com senha para editar</button></span>'
-          )+
-        '</div>'+
-      '</div>'+
       (!isToday && !editable ? '<p style="color:var(--text-faint);font-size:12.5px;margin:-8px 2px 14px;">Esta é uma data anterior — apenas hoje pode ser editado sem senha.</p>' : '')+
 
-      (state.rows.length===0 ? '' :
-        '<div class="tbl-toolbar">'+
-          '<button class="btn small'+(state.onlyPending?' primary':' ghost')+'" data-act="togglepending" title="Mostrar só as vendas ainda não pagas">'+
-            (state.onlyPending ? "✕ Mostrando só pendentes" : "🔍 Só pendentes")+
-            (pendentesCount>0 ? ' <span class="count-badge">'+pendentesCount+'</span>' : '')+
-          '</button>'+
-          '<button class="btn small ghost" data-act="togglemorefields" title="'+(state.showAdvancedCols?'Esconder os campos usados com menos frequência':'Mostrar todos os campos, incluindo os usados com menos frequência')+'">'+
-            (state.showAdvancedCols ? "▲ Mostrar menos campos" : "▼ Mostrar mais campos ("+hiddenColsCount+")")+
-          '</button>'+
-        '</div>'
-      )+
-
       '<div class="sticky-head-block">'+
+        '<div class="tbl-head">'+
+          '<div class="tbl-head-left">'+
+            '<div class="day-nav"><button data-act="prevday">‹</button><button data-act="nextday">›</button></div>'+
+            '<h2>'+escHtml(weekdayLabel(state.date))+'</h2>'+
+            '<span class="save-flag" id="saveFlag">salvo</span>'+
+          '</div>'+
+          '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">'+
+            (editable
+              ? '<button class="btn primary" data-act="addrow">+ Adicionar linha</button>'
+              : '<span style="display:flex;align-items:center;gap:8px;"><span class="pill">somente leitura</span><button class="btn small" data-act="login">Entrar com senha para editar</button></span>'
+            )+
+            '<button class="btn ghost small" data-act="openorcamento" title="Montar e imprimir um orçamento para o cliente">🧾 Orçamento</button>'+
+          '</div>'+
+        '</div>'+
+
+        (state.rows.length===0 ? '' :
+          '<div class="tbl-toolbar">'+
+            '<button class="btn small'+(state.onlyPending?' primary':' ghost')+'" data-act="togglepending" title="Mostrar só as vendas ainda não pagas">'+
+              (state.onlyPending ? "✕ Mostrando só pendentes" : "🔍 Só pendentes")+
+              (pendentesCount>0 ? ' <span class="count-badge">'+pendentesCount+'</span>' : '')+
+            '</button>'+
+            '<button class="btn small ghost" data-act="togglemorefields" title="'+(state.showAdvancedCols?'Esconder os campos usados com menos frequência':'Mostrar todos os campos, incluindo os usados com menos frequência')+'">'+
+              (state.showAdvancedCols ? "▲ Mostrar menos campos" : "▼ Mostrar mais campos ("+hiddenColsCount+")")+
+            '</button>'+
+          '</div>'
+        )+
+
         '<div class="totals-bar">'+
           tstat("Valor", fmtCurrency(t.valor), true)+
           tstat("Qtd. bicos", t.qtdBicos)+
@@ -2235,7 +2279,7 @@
     var cells = (cols||visibleColumns()).map(function(c){ return cellHtml(row, c, editable, valor); }).join("");
     var custName = customerNameById(row.clienteId);
     cells += '<div class="cell rowactions">'+
-      '<button class="icon-btn cli-btn'+(custName?' has':'')+'" data-act="linkcustomer" data-id="'+row.id+'" title="'+(custName?('Cliente: '+escAttr(custName)+' — clique para alterar'):'Vincular cliente a esta linha')+'">👤</button>'+
+      '<button class="icon-btn cli-btn'+(custName?' has':'')+'" data-act="linkcustomer" data-id="'+row.id+'" title="'+(custName?('Cliente: '+escAttr(custName)+' — clique para ver os dados'):'Vincular cliente a esta linha')+'">👤</button>'+
       '<button class="icon-btn print-btn" data-act="printnote" data-id="'+row.id+'" title="Imprimir nota">🖨</button>'+
       '<button class="icon-btn wa-btn" data-act="sendwhatsapp" data-id="'+row.id+'" title="Enviar por WhatsApp">💬</button>'+
       (editable ? '<button class="icon-btn dup-btn" data-act="duplicaterow" data-id="'+row.id+'" title="Duplicar linha (repete os dados, menos a medida do pneu)">⧉</button>' : '')+
@@ -2543,6 +2587,7 @@
     if (ex) ex.remove();
     if (!state.modal) return;
     if (state.modal.type==="selectCustomer") renderSelectCustomerModal();
+    else if (state.modal.type==="customerLinked") renderCustomerLinkedModal();
     else if (state.modal.type==="customerForm") renderCustomerFormModal();
     else if (state.modal.type==="selectMedida") renderSelectMedidaModal();
     else if (state.modal.type==="estoqueForm") renderEstoqueFormModal();
@@ -2582,6 +2627,69 @@
     document.getElementById("pwOk").addEventListener("click", tryAuth);
     document.getElementById("pwCancel").addEventListener("click", function(){ state.modal=null; render(); });
     input.addEventListener("keydown", function(e){ if (e.key==="Enter") tryAuth(); });
+    div.addEventListener("click", function(e){ if (e.target===div){ state.modal=null; render(); } });
+  }
+
+  // ---------- modal: cliente já vinculado (mostra os dados, não a lista) ----------
+  function renderCustomerLinkedModal(){
+    var rowId = state.modal.rowId;
+    var row = state.rows.filter(function(r){return r.id===rowId;})[0];
+    var customer = row ? loadCustomers().filter(function(c){return c.id===row.clienteId;})[0] : null;
+    if (!customer){ // vínculo quebrado: cai de volta na escolha
+      state.modal = {type:"selectCustomer", rowId: rowId, purpose:"link"};
+      return renderSelectCustomerModal();
+    }
+    var docLabel = customerDocLabel(customer);
+    function linha(rot, val){
+      if (!val) return "";
+      return '<div style="display:flex;gap:10px;padding:7px 0;border-bottom:1px solid var(--border-soft);font-size:13px;">'+
+        '<span style="min-width:104px;color:var(--text-faint);font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;padding-top:1px;">'+rot+'</span>'+
+        '<span style="flex:1;">'+escHtml(val)+'</span>'+
+      '</div>';
+    }
+    var notasCount = loadNotas().filter(function(n){ return n.customerId===customer.id || (n.customer && n.customer.id===customer.id); }).length;
+
+    var div = document.createElement("div");
+    div.className = "overlay";
+    div.innerHTML =
+      '<div class="modal wide">'+
+        '<h3>Cliente vinculado a esta linha</h3>'+
+        '<p>Esta venda já está ligada ao cliente abaixo.</p>'+
+        '<div style="border:1px solid var(--border-soft);border-radius:4px;padding:12px 14px;background:var(--panel-alt);">'+
+          '<div style="font-size:16px;font-weight:bold;margin-bottom:8px;">'+escHtml(customer.nome||"—")+'</div>'+
+          linha("Documento", docLabel)+
+          linha("Telefone", customer.telefone)+
+          linha("E-mail", customer.email)+
+          linha("Endereço", customer.endereco)+
+          '<div style="padding-top:8px;font-size:12px;color:var(--text-faint);">'+
+            (notasCount ? notasCount+' nota(s) emitida(s) para este cliente.' : 'Nenhuma nota emitida para este cliente ainda.')+
+          '</div>'+
+        '</div>'+
+        '<div class="modal-actions" style="justify-content:space-between;margin-top:16px;flex-wrap:wrap;gap:8px;">'+
+          '<button class="btn ghost small" id="clFechar">Fechar</button>'+
+          '<span style="display:flex;gap:8px;flex-wrap:wrap;">'+
+            '<button class="btn ghost small" id="clUnlink" style="color:var(--red);">Remover vínculo</button>'+
+            '<button class="btn ghost small" id="clTrocar">Trocar cliente</button>'+
+            '<button class="btn primary small" id="clEditar">✎ Editar dados</button>'+
+          '</span>'+
+        '</div>'+
+      '</div>';
+    document.body.appendChild(div);
+
+    document.getElementById("clFechar").addEventListener("click", function(){ state.modal=null; render(); });
+    document.getElementById("clTrocar").addEventListener("click", function(){
+      state.modal = {type:"selectCustomer", rowId: rowId, purpose:"link"};
+      render();
+    });
+    document.getElementById("clEditar").addEventListener("click", function(){
+      state.modal = {type:"customerForm", customerId: customer.id, error:""};
+      render();
+    });
+    document.getElementById("clUnlink").addEventListener("click", function(){
+      if (row){ row.clienteId = ""; scheduleSave(); }
+      state.modal = null;
+      render();
+    });
     div.addEventListener("click", function(e){ if (e.target===div){ state.modal=null; render(); } });
   }
 
@@ -2911,6 +3019,309 @@
         deleteEstoqueItemWithUndo(id, function(){ renderEstoque(); });
       });
     });
+  }
+
+  // ---------- orçamento ----------
+  function novoOrcItem(){ return {id:uid(), desc:"", qty:"1", unit:""}; }
+  function novoOrcamento(){
+    return {clienteId:"", clienteNome:"", clienteTelefone:"", veiculo:"", placa:"",
+            validade:"7", obs:"", desconto:"", items:[novoOrcItem(), novoOrcItem(), novoOrcItem()]};
+  }
+  function loadOrcamentoDraft(){
+    var o = lsGetJSON(K_ORCAMENTO, null);
+    if (!o || !Array.isArray(o.items) || !o.items.length) return novoOrcamento();
+    return o;
+  }
+  function saveOrcamentoDraft(){
+    if (state.orcamento) lsSetJSON(K_ORCAMENTO, state.orcamento);
+  }
+  function nextOrcNumber(){
+    var n = parseInt(localStorage.getItem(K_ORC_SEQ)||"0",10);
+    if (isNaN(n)) n = 0;
+    var next = n+1;
+    try{ localStorage.setItem(K_ORC_SEQ, String(next)); }catch(e){}
+    cloudPush(K_ORC_SEQ, next);
+    return next;
+  }
+  function orcItemTotal(it){ return Math.max(0, parseNum(it.qty)) * parseNum(it.unit); }
+  function orcTotals(o){
+    var sub = 0;
+    (o.items||[]).forEach(function(it){ sub += orcItemTotal(it); });
+    var desc = parseNum(o.desconto);
+    return {subtotal: sub, desconto: desc, total: Math.max(0, sub - desc)};
+  }
+
+  function renderOrcamento(){
+    if (!state.orcamento) state.orcamento = loadOrcamentoDraft();
+    var o = state.orcamento;
+    var customers = loadCustomers();
+    var t = orcTotals(o);
+
+    var itemsHtml = o.items.map(function(it){
+      return '<div class="orc-item" data-oid="'+escAttr(it.id)+'">'+
+        '<input type="text" data-ofield="desc" data-oid="'+escAttr(it.id)+'" list="orcSugestoes" placeholder="Ex: Pneu 175/70 R13 seminovo" value="'+escAttr(it.desc)+'">'+
+        '<input type="text" inputmode="decimal" data-ofield="qty" data-oid="'+escAttr(it.id)+'" placeholder="1" value="'+escAttr(it.qty)+'">'+
+        '<input type="text" inputmode="decimal" data-ofield="unit" data-oid="'+escAttr(it.id)+'" placeholder="0,00" value="'+escAttr(it.unit)+'">'+
+        '<span class="tot" data-otot="'+escAttr(it.id)+'">'+fmtCurrency(orcItemTotal(it))+'</span>'+
+        '<button class="icon-btn" data-odel="'+escAttr(it.id)+'" title="Remover item">✕</button>'+
+      '</div>';
+    }).join("");
+
+    root.classList.remove("wide");
+    root.innerHTML =
+      '<div class="topbar">'+
+        '<div class="brand"><span class="mark"></span><h1>Orçamento</h1><span class="tag">MONTAR · IMPRIMIR</span>'+syncBadgeHtml()+'</div>'+
+        '<div class="auth-zone">'+
+          '<button class="btn ghost small" data-act="orcback">‹ Voltar à tabela</button>'+
+          '<button class="btn ghost small" data-act="openclientes">👥 Clientes</button>'+
+        '</div>'+
+      '</div>'+
+
+      '<datalist id="orcSugestoes">'+
+        ['Pneu seminovo','Pneu novo','Alinhamento','Balanceamento','Cambagem','Bico/Válvula',
+         'Desempeno de roda','Conserto de pneu (remendo)','Mão de obra','Rodízio de pneus']
+          .map(function(s){ return '<option value="'+escAttr(s)+'">'; }).join("")+
+      '</datalist>'+
+
+      '<div class="card" style="padding:18px 20px;">'+
+        '<div class="orc-grid">'+
+          '<div class="orc-field">'+
+            '<label>Cliente cadastrado</label>'+
+            '<select id="orcCliente">'+
+              '<option value="">— Sem cadastro (digitar nome) —</option>'+
+              customers.map(function(c){
+                return '<option value="'+escAttr(c.id)+'"'+(c.id===o.clienteId?' selected':'')+'>'+escHtml(c.nome||"(sem nome)")+'</option>';
+              }).join("")+
+            '</select>'+
+          '</div>'+
+          '<div class="orc-field">'+
+            '<label>Validade do orçamento (dias)</label>'+
+            '<input type="text" inputmode="numeric" data-orc="validade" placeholder="7" value="'+escAttr(o.validade)+'">'+
+          '</div>'+
+          (o.clienteId ? '' :
+            '<div class="orc-field">'+
+              '<label>Nome do cliente</label>'+
+              '<input type="text" data-orc="clienteNome" placeholder="Nome de quem vai receber" value="'+escAttr(o.clienteNome)+'">'+
+            '</div>'+
+            '<div class="orc-field">'+
+              '<label>Telefone</label>'+
+              '<input type="text" inputmode="tel" data-orc="clienteTelefone" placeholder="(47) 90000-0000" value="'+escAttr(o.clienteTelefone)+'">'+
+            '</div>')+
+          '<div class="orc-field">'+
+            '<label>Veículo</label>'+
+            '<input type="text" data-orc="veiculo" placeholder="Ex: Gol 1.0 2014" value="'+escAttr(o.veiculo)+'">'+
+          '</div>'+
+          '<div class="orc-field">'+
+            '<label>Placa</label>'+
+            '<input type="text" data-orc="placa" placeholder="ABC-1D23" value="'+escAttr(o.placa)+'">'+
+          '</div>'+
+        '</div>'+
+
+        '<div class="orc-items">'+
+          '<div class="orc-item head">'+
+            '<span>Descrição</span><span>Qtd.</span><span>Valor unit.</span>'+
+            '<span class="tot" style="text-align:right;">Total</span><span></span>'+
+          '</div>'+
+          itemsHtml+
+        '</div>'+
+        '<button class="btn ghost small" id="orcAddItem">+ Adicionar item</button>'+
+
+        '<div class="orc-grid" style="margin-top:18px;">'+
+          '<div class="orc-field">'+
+            '<label>Desconto (R$)</label>'+
+            '<input type="text" inputmode="decimal" data-orc="desconto" placeholder="0,00" value="'+escAttr(o.desconto)+'">'+
+          '</div>'+
+          '<div class="orc-field">'+
+            '<label>Observações (sai impresso)</label>'+
+            '<textarea data-orc="obs" placeholder="Ex: valores sujeitos a confirmação da medida em estoque">'+escHtml(o.obs)+'</textarea>'+
+          '</div>'+
+        '</div>'+
+
+        '<div class="orc-total">'+
+          '<span class="lbl">Subtotal <b id="orcSub" style="color:var(--text);">'+fmtCurrency(t.subtotal)+'</b></span>'+
+          '<span class="lbl">Total</span><span class="val" id="orcTotal">'+fmtCurrency(t.total)+'</span>'+
+        '</div>'+
+
+        '<div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;">'+
+          '<button class="btn ghost small" id="orcLimpar">Limpar orçamento</button>'+
+          '<button class="btn primary" id="orcImprimir">🖨 Imprimir orçamento</button>'+
+        '</div>'+
+      '</div>';
+
+    root.querySelectorAll("[data-act]").forEach(function(node){
+      node.addEventListener("click", function(){ handleAction(node.getAttribute("data-act"), node); });
+    });
+
+    function refreshTotals(){
+      var tt = orcTotals(state.orcamento);
+      state.orcamento.items.forEach(function(it){
+        var el = root.querySelector('[data-otot="'+it.id+'"]');
+        if (el) el.textContent = fmtCurrency(orcItemTotal(it));
+      });
+      var sub = document.getElementById("orcSub");
+      var tot = document.getElementById("orcTotal");
+      if (sub) sub.textContent = fmtCurrency(tt.subtotal);
+      if (tot) tot.textContent = fmtCurrency(tt.total);
+    }
+
+    root.querySelectorAll("[data-orc]").forEach(function(inp){
+      inp.addEventListener("input", function(){
+        state.orcamento[inp.getAttribute("data-orc")] = inp.value;
+        saveOrcamentoDraft();
+        refreshTotals();
+      });
+    });
+
+    root.querySelectorAll("[data-ofield]").forEach(function(inp){
+      inp.addEventListener("input", function(){
+        var id = inp.getAttribute("data-oid");
+        var f = inp.getAttribute("data-ofield");
+        var item = state.orcamento.items.filter(function(x){return x.id===id;})[0];
+        if (!item) return;
+        item[f] = inp.value;
+        saveOrcamentoDraft();
+        refreshTotals();
+      });
+    });
+
+    root.querySelectorAll("[data-odel]").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        var id = btn.getAttribute("data-odel");
+        state.orcamento.items = state.orcamento.items.filter(function(x){return x.id!==id;});
+        if (!state.orcamento.items.length) state.orcamento.items.push(novoOrcItem());
+        saveOrcamentoDraft();
+        renderOrcamento();
+      });
+    });
+
+    document.getElementById("orcAddItem").addEventListener("click", function(){
+      state.orcamento.items.push(novoOrcItem());
+      saveOrcamentoDraft();
+      renderOrcamento();
+    });
+
+    var selCli = document.getElementById("orcCliente");
+    if (selCli){
+      selCli.addEventListener("change", function(){
+        state.orcamento.clienteId = selCli.value;
+        saveOrcamentoDraft();
+        renderOrcamento();
+      });
+    }
+
+    document.getElementById("orcLimpar").addEventListener("click", function(){
+      if (!confirm("Limpar este orçamento e começar um novo?")) return;
+      state.orcamento = novoOrcamento();
+      saveOrcamentoDraft();
+      renderOrcamento();
+    });
+
+    document.getElementById("orcImprimir").addEventListener("click", function(){
+      var itensValidos = state.orcamento.items.filter(function(it){
+        return (it.desc||"").trim() !== "" || orcItemTotal(it) > 0;
+      });
+      if (!itensValidos.length){
+        alert("Adicione ao menos um item com descrição ou valor antes de imprimir.");
+        return;
+      }
+      var cliente = state.orcamento.clienteId
+        ? loadCustomers().filter(function(c){return c.id===state.orcamento.clienteId;})[0]
+        : {nome: state.orcamento.clienteNome, telefone: state.orcamento.clienteTelefone};
+      openPrintWindow(buildOrcamentoHtml(state.orcamento, itensValidos, cliente || {}, nextOrcNumber()));
+    });
+  }
+
+  function buildOrcamentoHtml(o, itens, cliente, num){
+    var t = orcTotals({items: itens, desconto: o.desconto});
+    var d = new Date();
+    var emitido = pad(d.getDate())+"/"+pad(d.getMonth()+1)+"/"+d.getFullYear()+" "+pad(d.getHours())+":"+pad(d.getMinutes());
+    var dias = parseInt(o.validade,10);
+    if (isNaN(dias) || dias<0) dias = 0;
+    var venc = new Date(d.getTime() + dias*86400000);
+    var validade = pad(venc.getDate())+"/"+pad(venc.getMonth()+1)+"/"+venc.getFullYear();
+
+    var rows = itens.map(function(it){
+      var qt = Math.max(0, parseNum(it.qty)) || 1;
+      return '<tr>'+
+        '<td>'+escHtml(it.desc||"—")+'</td>'+
+        '<td class="c">'+qt+'</td>'+
+        '<td class="r">'+fmtCurrency(parseNum(it.unit))+'</td>'+
+        '<td class="r">'+fmtCurrency(orcItemTotal(it))+'</td>'+
+      '</tr>';
+    }).join("");
+
+    var veiculoLinha = [o.veiculo, o.placa].filter(function(v){return (v||"").trim();}).join(" · ");
+
+    return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">'+
+      '<title>Orçamento #'+num+'</title>'+
+      '<style>'+
+        '*{box-sizing:border-box;}'+
+        'body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;margin:0;padding:28px;font-size:13px;}'+
+        '.head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #1a1a1a;padding-bottom:12px;margin-bottom:16px;}'+
+        '.head .empresa{max-width:60%;}'+
+        '.head .empresa h1{font-size:16px;margin:0 0 4px;}'+
+        '.head .empresa p{margin:0;font-size:11.5px;color:#444;line-height:1.5;}'+
+        '.head .doc{text-align:right;}'+
+        '.head .doc .num{font-size:18px;font-weight:bold;}'+
+        '.head .doc .emit{font-size:11px;color:#555;margin-top:2px;}'+
+        '.cliente{border:1px solid #ccc;border-radius:4px;padding:10px 14px;margin-bottom:16px;}'+
+        '.cliente h2{font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:#555;margin:0 0 6px;}'+
+        '.cliente p{margin:0;font-size:12.5px;line-height:1.6;}'+
+        'table{width:100%;border-collapse:collapse;margin-bottom:16px;}'+
+        'th{background:#1a1a1a;color:#fff;font-size:11px;text-transform:uppercase;padding:8px 10px;text-align:left;}'+
+        'td{padding:8px 10px;border-bottom:1px solid #ddd;font-size:12.5px;}'+
+        'th.c,td.c{text-align:center;}'+
+        'th.r,td.r{text-align:right;}'+
+        '.totals{width:280px;margin-left:auto;}'+
+        '.totals div{display:flex;justify-content:space-between;padding:4px 0;font-size:12.5px;}'+
+        '.totals .grand{border-top:2px solid #1a1a1a;margin-top:4px;padding-top:8px;font-size:15px;font-weight:bold;}'+
+        '.obs{margin-top:16px;border:1px solid #ccc;border-radius:4px;padding:10px 14px;font-size:12px;line-height:1.5;}'+
+        '.obs h3{margin:0 0 6px;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:#555;}'+
+        '.aviso{margin-top:16px;font-size:11.5px;color:#333;line-height:1.5;}'+
+        '.assinaturas{display:flex;gap:40px;margin-top:44px;}'+
+        '.assinaturas div{flex:1;border-top:1px solid #1a1a1a;text-align:center;padding-top:4px;font-size:11px;}'+
+        '.footer{margin-top:24px;text-align:center;color:#999;font-size:10.5px;border-top:1px solid #ddd;padding-top:10px;}'+
+        '@media print{ body{padding:0 12px;} }'+
+      '</style></head><body>'+
+        '<div class="head">'+
+          '<div class="empresa">'+
+            '<h1>'+escHtml(EMPRESA.nome)+'</h1>'+
+            '<p>'+escHtml(EMPRESA.telefone)+' &middot; '+escHtml(EMPRESA.email)+'<br>'+
+            'CNPJ: '+escHtml(EMPRESA.cnpj)+'<br>'+
+            escHtml(EMPRESA.endereco)+'<br>'+escHtml(EMPRESA.cidade)+'</p>'+
+          '</div>'+
+          '<div class="doc">'+
+            '<div class="num">ORÇAMENTO #'+num+'</div>'+
+            '<div class="emit">EMITIDO EM: '+emitido+'</div>'+
+            '<div class="emit">VÁLIDO ATÉ: '+validade+'</div>'+
+          '</div>'+
+        '</div>'+
+        '<div class="cliente">'+
+          '<h2>Cliente</h2>'+
+          '<p><b>'+escHtml(cliente.nome||"—")+'</b>'+
+          (customerDocLabel(cliente) ? '<br>'+escHtml(customerDocLabel(cliente)) : '')+
+          (cliente.telefone ? '<br>'+escHtml(cliente.telefone) : '')+
+          (cliente.email ? '<br>'+escHtml(cliente.email) : '')+
+          (cliente.endereco ? '<br>'+escHtml(cliente.endereco) : '')+
+          (veiculoLinha ? '<br>Veículo: '+escHtml(veiculoLinha) : '')+
+          '</p>'+
+        '</div>'+
+        '<table><thead><tr><th>Descrição</th><th class="c">Quantidade</th><th class="r">Valor Unitário</th><th class="r">Total</th></tr></thead>'+
+        '<tbody>'+rows+'</tbody></table>'+
+        '<div class="totals">'+
+          '<div><span>Subtotal</span><span>'+fmtCurrency(t.subtotal)+'</span></div>'+
+          '<div><span>Desconto</span><span>'+fmtCurrency(t.desconto)+'</span></div>'+
+          '<div class="grand"><span>TOTAL DO ORÇAMENTO</span><span>'+fmtCurrency(t.total)+'</span></div>'+
+        '</div>'+
+        ((o.obs||"").trim() ? '<div class="obs"><h3>Observações</h3>'+escHtml(o.obs).replace(/\n/g,"<br>")+'</div>' : '')+
+        '<div class="aviso">Este documento é um <b>orçamento</b> e não tem valor fiscal. Os valores são válidos até '+validade+
+        ' e podem mudar conforme disponibilidade das medidas em estoque. A execução do serviço só começa após a aprovação do cliente.</div>'+
+        '<div class="assinaturas">'+
+          '<div>Assinatura do cliente</div>'+
+          '<div>'+escHtml(EMPRESA.nome)+'</div>'+
+        '</div>'+
+        '<div class="footer">Painel de Vendas — Oficina</div>'+
+      '</body></html>';
   }
 
   // ---------- clientes: área dedicada (cadastrar, editar, apagar, ver notas) ----------
