@@ -62,6 +62,19 @@
   .topbar{
     display:flex;align-items:center;justify-content:space-between;
     padding:14px 2px 22px;border-bottom:1px solid var(--border-soft);margin-bottom:24px;
+    position:relative;
+  }
+  .yellow-sub-bar {
+    width: 100%;
+    height: 3px;
+    background: var(--yellow);
+    margin-top: 10px;
+    margin-bottom: 12px;
+  }
+  .orcamento-top-container {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 16px;
   }
   .brand{display:flex;align-items:baseline;gap:10px;}
   .brand .mark{
@@ -195,7 +208,7 @@
   .arow-empty{padding:26px;text-align:center;color:var(--text-faint);font-size:13px;}
 
   /* ---- table screen ---- */
-  .tbl-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px;}
+  .tbl-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;}
   .tbl-head-left{display:flex;align-items:center;gap:12px;}
   .day-nav{display:flex;align-items:center;gap:6px;}
   .day-nav button{
@@ -209,7 +222,7 @@
 
   .totals-bar{
     display:flex;flex-wrap:wrap;gap:0;border:1px solid var(--border-soft);border-radius:4px;
-    background:var(--panel);margin-bottom:14px;overflow:hidden;
+    background:var(--panel);margin-bottom:12px;overflow:hidden;
   }
   .tstat{padding:12px 18px;border-right:1px solid var(--border-soft);min-width:120px;}
   .tstat:last-child{border-right:none;}
@@ -217,7 +230,16 @@
   .tstat .v{font-size:15px;color:var(--text);font-family:'IBM Plex Mono',monospace;}
   .tstat .v.accent{color:var(--yellow);}
 
-  .sticky-head-block{position:sticky;top:0;z-index:5;background:var(--bg);}
+  /* ---- FIXAÇÃO DA ROLAGEM (STICKY HEADER TUDO JUNTO) ---- */
+  .sticky-head-block{
+    position:sticky;
+    top:0;
+    z-index:10;
+    background:var(--bg);
+    padding-top:10px;
+    padding-bottom:2px;
+  }
+  
   .grid-scroll-head{border:1px solid var(--border-soft);border-radius:4px 4px 0 0;border-bottom:none;overflow:hidden;background:var(--panel-alt);}
   .grid-scroll-head .grid-row.head{border-bottom:none;}
 
@@ -257,15 +279,15 @@
   .icon-btn:hover{border-color:var(--red);color:var(--red);}
   .icon-btn.print-btn:hover{border-color:var(--teal);color:var(--teal);}
   .icon-btn.wa-btn:hover{border-color:var(--green);color:var(--green);}
-  .icon-btn.cli-btn.has{border-color:var(--teal);color:var(--teal);}
+  .icon-btn.cli-btn.has{border-color:var(--teal);color:var(--teal);background:rgba(58,199,193,0.1);}
   .icon-btn.cli-btn:hover{border-color:var(--teal);color:var(--teal);}
   .icon-btn.dup-btn:hover{border-color:var(--yellow);color:var(--yellow);}
 
-  /* linha com quantidade x valor que não bate (ex: 3 bicos mas R$ 0,00) */
+  /* linha com quantidade x valor que não bate */
   .cell.cell-warn{box-shadow:inset 0 0 0 1.5px var(--yellow);background:rgba(245,183,0,.08);border-radius:3px;}
 
   /* barra com os filtros/atalhos acima da tabela do dia */
-  .tbl-toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:-6px 0 14px;}
+  .tbl-toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 10px;}
   .count-badge{display:inline-block;background:rgba(0,0,0,.25);border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;}
 
   /* toast de "linha apagada — desfazer" */
@@ -309,7 +331,7 @@
   .modal{
     background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:24px 26px;width:100%;max-width:340px;
   }
-  .modal.wide{max-width:440px;}
+  .modal.wide{max-width:520px;}
   .modal h3{font-size:15px;margin-bottom:6px;}
   .modal p{font-size:12.5px;color:var(--text-dim);margin:0 0 16px;line-height:1.5;}
   .modal input{
@@ -321,7 +343,7 @@
   .modal .field-group label{display:block;font-size:11.5px;color:var(--text-faint);margin:0 0 5px;}
   .modal input:focus{outline:none;border-color:var(--yellow);}
   .modal .err{color:var(--red);font-size:12px;margin:-4px 0 10px;min-height:14px;}
-  .modal-actions{display:flex;gap:8px;justify-content:flex-end;}
+  .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;}
 
   .cust-list{max-height:280px;overflow-y:auto;border:1px solid var(--border-soft);border-radius:4px;margin-bottom:4px;}
   .cust-item{
@@ -346,6 +368,23 @@
 
   .backlink{color:var(--text-dim);font-size:13px;display:flex;align-items:center;gap:6px;border:none;background:transparent;padding:6px 0;}
 
+  /* Orçamento Modal Styles */
+  .orcamento-items-list {
+    margin-top: 10px;
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid var(--border-soft);
+    border-radius: 4px;
+    padding: 8px;
+  }
+  .orcamento-item-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1.2fr 30px;
+    gap: 6px;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+
   /* ---- login de acesso ao site ---- */
   .login-screen{min-height:82vh;display:flex;align-items:center;justify-content:center;}
   .login-card{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:34px 32px;width:100%;max-width:360px;}
@@ -361,28 +400,25 @@
   .backlink:hover{color:var(--yellow);}
 
   /* ==========================================================================
-     AJUSTES SOMENTE PARA TELA DE CELULAR — não afeta a versão de computador
+     AJUSTES SOMENTE PARA TELA DE CELULAR
      ========================================================================== */
   @media(max-width:700px){
     #app, #app.wide{padding:12px 10px 60px;}
 
-    /* topo: deixa quebrar linha em vez de espremer tudo numa fileira só */
     .topbar{flex-wrap:wrap;gap:10px;padding:10px 0 14px;margin-bottom:16px;}
     .brand{flex-wrap:wrap;gap:6px;}
     .brand h1{font-size:17px;}
-    .brand span.tag{display:none;} /* subtítulo técnico não cabe e não faz falta no celular */
+    .brand span.tag{display:none;}
     .sync-badge{margin-left:0;}
     .auth-zone{width:100%;justify-content:flex-start;gap:6px;}
     .btn{padding:8px 11px;font-size:12.5px;}
     .btn.small{padding:6px 9px;font-size:11.5px;}
 
-    /* cabeçalho do dia (data + adicionar linha) */
     .tbl-head{gap:8px;}
     .tbl-head h2{font-size:16px;}
     .tbl-head-left{gap:8px;flex-wrap:wrap;}
     .day-nav button{width:30px;height:30px;}
 
-    /* resumo do mês (número grande de faturamento) */
     .hero-left{padding:18px 16px;}
     .hero-right{padding:16px 14px 12px;}
     .big-total{font-size:30px;}
@@ -390,32 +426,26 @@
     .hero-left .sub{margin-bottom:16px;}
     .month-nav .label{font-size:11.5px;}
 
-    /* cartões de meta diária e peças/vendedores */
     .dt-card{padding:13px 14px;}
     .dt-value{font-size:20px;}
     .parts-visor{gap:8px;}
     .parts-card{padding:12px 13px;}
     .parts-card .pc-value{font-size:19px;}
 
-    /* barras de totais do dia: cartões menores, cabem mais por linha */
     .tstat{min-width:96px;padding:9px 10px;flex:1 1 30%;}
     .tstat .k{font-size:9.5px;}
     .tstat .v{font-size:13px;}
 
-    /* tabela de vendas: em vez de encolher o texto até ficar ilegível,
-       deixa a tabela no tamanho normal e permite arrastar o dedo pros lados */
     .grid-scroll, .grid-scroll-head{overflow-x:auto;-webkit-overflow-scrolling:touch;height:auto !important;}
     #gridInner, .grid-scroll-head .grid-row.head{transform:none !important;}
     .grid-row .cell{font-size:12.5px;padding:7px 7px;}
     .grid-row.head .cell{font-size:10px;padding:9px 7px;}
     .icon-btn{width:26px;height:26px;}
 
-    /* modais e telas de login/estoque/histórico/usuários */
     .login-card{padding:24px 18px;max-width:100%;}
     .modal{padding:18px 16px;max-width:92vw;}
     .cust-list{max-height:220px;}
 
-    /* listas de histórico (logins / movimentações de estoque) e usuários */
     .arow{flex-wrap:wrap;gap:6px 14px;padding:10px 12px;font-size:12.5px;}
     .arow .stats{flex-wrap:wrap;gap:8px 14px;}
   }
@@ -460,16 +490,16 @@
     {key:"carro",       label:"Carro",                   type:"select", w:"95px", options:range(1,20).map(function(n){return "Carro "+n;})},
     {key:"vendedor",    label:"Vendedor",                type:"select", w:"105px", options:VENDEDORES}
   ];
-  // pares quantidade/valor que devem bater: se um tem valor >0 e o outro é 0, é provável erro de digitação
+
   var QTY_VALUE_PAIRS = [
     ["qtdBicos","valorBicos"],
     ["qtdCambagem","valorCambagem"],
     ["qtdBalanceamento","valorBalanceamento"],
     ["qtdRodas","valorRodas"]
   ];
-  var ROWACTIONS_W = "172px"; // largura da coluna de ações da linha (cliente, imprimir, whatsapp, duplicar, apagar)
+  var ROWACTIONS_W = "172px";
 
-  // ---------- storage helpers (localStorage — funciona 100% offline, direto no navegador) ----------
+  // Storage Keys
   var K_ROWS = "vo_rows:";
   var K_SUMMARY = "vo_summary:";
   var K_AUTOBACKUP = "vo_autobackup_last";
@@ -480,110 +510,33 @@
   var K_LOGIN_LOG = "vo_login_log";
   var K_ESTOQUE_LOG = "vo_estoque_log";
 
-  // ---------- sincronização em nuvem (Supabase) ----------
-  // Preencha as duas linhas abaixo com os dados do SEU projeto Supabase
-  // (Project Settings → API, na dashboard do supabase.com) para ativar
-  // a sincronização automática entre computadores/celulares. Deixando
-  // como está, o sistema continua funcionando 100% normalmente, só que
-  // sem sincronizar — cada aparelho fica com seus próprios dados.
   var SUPABASE_URL = "https://vvkpkqmhboaridolxylb.supabase.co";
   var SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ2a3BrcW1oYm9hcmlkb2x4eWxiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0NzgwNTYsImV4cCI6MjEwNDA1NDA1Nn0.4T9KMXkoQlt2UkvBHg8BjNFP21pEKHyyurwkDd2XDXc";
 
-  var cloudStatus = "off"; // off | connecting | on | error
+  var cloudStatus = "off";
   var sb = null;
-  var pendingEchoKeys = {}; // conta quantas confirmações de "eco" da própria alteração ainda esperamos por chave
+  var pendingEchoKeys = {};
   if (window.supabase && SUPABASE_URL.indexOf("COLE_AQUI")===-1 && SUPABASE_ANON_KEY.indexOf("COLE_AQUI")===-1){
     try{ sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); cloudStatus = "connecting"; }
     catch(e){ sb = null; }
   }
-  // cliente auxiliar, sem sessão persistida — usado só para CRIAR novos logins (auth.signUp)
-  // sem derrubar a sessão de quem (master) está criando o novo usuário
-  var sbTemp = null;
-  function getTempClient(){
-    if (!sbTemp && window.supabase && sb){
-      try{ sbTemp = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {auth:{persistSession:false, autoRefreshToken:false}}); }
-      catch(e){ sbTemp = null; }
-    }
-    return sbTemp;
-  }
 
   function syncBadgeHtml(){
-    if (!sb) return '<span id="syncBadge" class="sync-badge off" title="Configure o Supabase no início do arquivo para sincronizar entre aparelhos">○ somente local</span>';
-    if (cloudStatus==="on") return '<span id="syncBadge" class="sync-badge on" title="Sincronizado com a nuvem">● nuvem conectada</span>';
-    if (cloudStatus==="error") return '<span id="syncBadge" class="sync-badge error" title="Falha ao conectar com a nuvem — dados continuam salvos localmente">⚠ erro de conexão</span>';
-    return '<span id="syncBadge" class="sync-badge connecting" title="Conectando à nuvem...">○ conectando…</span>';
+    if (!sb) return '<span id="syncBadge" class="sync-badge off">○ somente local</span>';
+    if (cloudStatus==="on") return '<span id="syncBadge" class="sync-badge on">● nuvem conectada</span>';
+    if (cloudStatus==="error") return '<span id="syncBadge" class="sync-badge error">⚠ erro de conexão</span>';
+    return '<span id="syncBadge" class="sync-badge connecting">○ conectando…</span>';
   }
 
-  // envia uma chave (já salva localmente) para a tabela kv_store no Supabase
   function cloudPush(key, value){
     if (!sb) return;
     sb.from("kv_store").upsert({key:key, value:value, updated_at:new Date().toISOString()})
       .then(function(res){
-        if (res && res.error){ cloudStatus = "error"; console.error("Erro ao sincronizar", key, res.error); }
+        if (res && res.error){ cloudStatus = "error"; }
         else {
-          // esta alteração vai voltar pra nós mesmos pelo canal em tempo real daqui a pouco;
-          // marcamos que esperamos esse "eco" pra não tratá-lo como mudança de outro aparelho
           pendingEchoKeys[key] = (pendingEchoKeys[key]||0) + 1;
           if (cloudStatus!=="on"){ cloudStatus = "on"; refreshSyncBadge(); }
         }
-      });
-  }
-
-  // baixa tudo da nuvem e grava no localStorage (usado ao abrir o app)
-  // cb recebe true se a nuvem já tinha dados, false se estava vazia
-  function cloudPullAll(cb){
-    if (!sb) return cb(false);
-    sb.from("kv_store").select("key,value").then(function(res){
-      var hadData = false;
-      if (res && !res.error && res.data){
-        hadData = res.data.length>0;
-        res.data.forEach(function(row){
-          try{ localStorage.setItem(row.key, JSON.stringify(row.value)); }catch(e){}
-        });
-        cloudStatus = "on";
-      } else {
-        cloudStatus = "error";
-        if (res && res.error) console.error("Erro ao baixar dados da nuvem", res.error);
-      }
-      cb(hadData);
-    }).catch(function(err){ cloudStatus = "error"; console.error(err); cb(false); });
-  }
-
-  // envia TUDO que já está salvo neste navegador pra nuvem de uma vez
-  // (usado na primeira ativação, e também pelo botão manual "Enviar pra nuvem")
-  function pushAllLocalToCloud(){
-    if (!sb) return 0;
-    var n = 0;
-    for (var i=0;i<localStorage.length;i++){
-      var k = localStorage.key(i);
-      if (!k || k.indexOf("vo_")!==0 || k===K_AUTOBACKUP) continue;
-      try{
-        var val = JSON.parse(localStorage.getItem(k));
-        cloudPush(k, val);
-        n++;
-      }catch(e){ /* ignora chave que não seja JSON válido */ }
-    }
-    return n;
-  }
-
-  // escuta mudanças feitas em OUTROS aparelhos e atualiza a tela na hora
-  function initCloudSync(onRemoteChange){
-    if (!sb) return;
-    sb.channel("kv_store_changes")
-      .on("postgres_changes", {event:"*", schema:"public", table:"kv_store"}, function(payload){
-        var row = payload.new;
-        if (!row || !row.key) return;
-        try{ localStorage.setItem(row.key, JSON.stringify(row.value)); }catch(e){}
-        if (pendingEchoKeys[row.key] > 0){
-          // é só o eco da nossa própria digitação/salvamento — os dados já estão certos localmente,
-          // então não precisamos redesenhar a tela (isso é o que tirava o foco de quem estava digitando)
-          pendingEchoKeys[row.key]--;
-          return;
-        }
-        onRemoteChange(row.key);
-      })
-      .subscribe(function(status){
-        if (status==="SUBSCRIBED"){ cloudStatus = "on"; refreshSyncBadge(); }
       });
   }
 
@@ -602,60 +555,17 @@
   };
 
   function lsGetJSON(key, fallback){
-    try{
-      var raw = localStorage.getItem(key);
-      return raw ? JSON.parse(raw) : fallback;
-    }catch(e){ return fallback; }
+    try{ var raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; }catch(e){ return fallback; }
   }
   function lsSetJSON(key, obj){
-    try{
-      localStorage.setItem(key, JSON.stringify(obj));
-      cloudPush(key, obj);
-      return true;
-    }
-    catch(e){ return false; }
+    try{ localStorage.setItem(key, JSON.stringify(obj)); cloudPush(key, obj); return true; }catch(e){ return false; }
   }
-  function getRows(date){
-    return Promise.resolve(lsGetJSON(K_ROWS+date, []));
-  }
-  function getSummary(month){
-    return Promise.resolve(lsGetJSON(K_SUMMARY+month, {}));
-  }
+  function getRows(date){ return Promise.resolve(lsGetJSON(K_ROWS+date, [])); }
+  function getSummary(month){ return Promise.resolve(lsGetJSON(K_SUMMARY+month, {})); }
   function computeValor(row){
     return parseNum(row.alinhamento)+parseNum(row.valorBicos)+parseNum(row.valorCambagem)+
            parseNum(row.valorBalanceamento)+parseNum(row.valorRodas)+parseNum(row.outros)+
            parseNum(row.valorPecas)+parseNum(row.maoDeObra)+parseNum(row.valorPneus);
-  }
-  // divide o valor da linha entre as formas de pagamento reais (Dinheiro/Pix/Débito/Crédito).
-  // quando a forma escolhida é combinada (ex: "Débito/Crédito"), usa o valor manual definido
-  // em row.splitValor pra primeira forma listada; se não foi definido, divide meio a meio.
-  function paymentBreakdown(row){
-    var buckets = {"Dinheiro":0, "Pix":0, "Débito":0, "Crédito":0};
-    var fp = row.formaPagamento;
-    var total = computeValor(row);
-    if (!fp || fp==="Nenhum" || total===0) return buckets;
-    if (fp.indexOf("Múltiplo")===0){
-      var lista = Array.isArray(row.pagamentosMultiplos) ? row.pagamentosMultiplos : [];
-      lista.forEach(function(p){
-        if (p && p.metodo && buckets.hasOwnProperty(p.metodo)){
-          buckets[p.metodo] += Math.max(0, parseNum(p.valor));
-        }
-      });
-      return buckets;
-    }
-    if (fp.indexOf("/")===-1){
-      if (buckets.hasOwnProperty(fp)) buckets[fp] = total;
-      return buckets;
-    }
-    var parts = fp.split("/");
-    var first = parts[0], second = parts[1];
-    var firstVal = (row.splitValor!==undefined && row.splitValor!==null && row.splitValor!=="")
-      ? Math.max(0, Math.min(parseNum(row.splitValor), total))
-      : total/2;
-    var secondVal = total - firstVal;
-    if (buckets.hasOwnProperty(first)) buckets[first] += firstVal;
-    if (buckets.hasOwnProperty(second)) buckets[second] += secondVal;
-    return buckets;
   }
   function saveRows(date, rows){
     var ok1 = lsSetJSON(K_ROWS+date, rows);
@@ -665,9 +575,7 @@
     for (var i=0;i<rows.length;i++) total += computeValor(rows[i]);
     summary[date] = {total: total, count: rows.length};
     var ok2 = lsSetJSON(K_SUMMARY+month, summary);
-    if (!ok1 || !ok2){
-      return Promise.reject(new Error("Não foi possível salvar — armazenamento do navegador cheio ou bloqueado."));
-    }
+    if (!ok1 || !ok2) return Promise.reject(new Error("Erro ao salvar dados localmente"));
     return Promise.resolve();
   }
   function listAllDates(){
@@ -679,663 +587,36 @@
     return dates;
   }
 
-  // ---------- clientes ----------
-  function loadCustomers(){
-    return lsGetJSON(K_CUSTOMERS, []);
-  }
-  function saveCustomers(list){
-    return lsSetJSON(K_CUSTOMERS, list);
-  }
+  function loadCustomers(){ return lsGetJSON(K_CUSTOMERS, []); }
+  function saveCustomers(list){ return lsSetJSON(K_CUSTOMERS, list); }
   function addCustomer(obj){
-    var list = loadCustomers();
-    obj.id = uid();
-    list.push(obj);
-    saveCustomers(list);
-    return obj;
+    var list = loadCustomers(); obj.id = uid(); list.push(obj); saveCustomers(list); return obj;
   }
-  function updateCustomer(id, changes){
-    var list = loadCustomers();
-    for (var i=0;i<list.length;i++){
-      if (list[i].id===id){
-        Object.keys(changes).forEach(function(k){ list[i][k] = changes[k]; });
-        break;
-      }
-    }
-    saveCustomers(list);
-  }
-  function deleteCustomer(id){
-    saveCustomers(loadCustomers().filter(function(c){ return c.id!==id; }));
-  }
-  // apaga um cliente mas permite desfazer por alguns segundos (mesmo padrão usado ao apagar linha de venda)
-  function deleteCustomerWithUndo(id, onDone){
-    var list = loadCustomers();
-    var idx=-1, item=null;
-    for (var i=0;i<list.length;i++){ if (list[i].id===id){ idx=i; item=list[i]; break; } }
-    if (idx===-1) return;
-    list.splice(idx,1);
-    saveCustomers(list);
-    onDone();
-    showUndoToast("Cliente apagado", function(){
-      var list2 = loadCustomers();
-      list2.splice(Math.min(idx,list2.length), 0, item);
-      saveCustomers(list2);
-      onDone();
-    });
-  }
-  // compatível com clientes antigos que só tinham "cpf" salvo direto
   function customerDocInfo(c){
     if (!c) return {tipo:"cpf", documento:""};
-    var tipo = c.tipoDocumento || "cpf";
-    var documento = (c.documento!==undefined && c.documento!==null && c.documento!=="") ? c.documento : (c.cpf || "");
-    return {tipo: tipo, documento: documento};
+    return {tipo: c.tipoDocumento || "cpf", documento: c.documento || c.cpf || ""};
   }
   function customerDocLabel(c){
-    var info = customerDocInfo(c);
-    if (!info.documento) return "";
+    var info = customerDocInfo(c); if (!info.documento) return "";
     return (info.tipo==="cnpj" ? "CNPJ" : "CPF") + ": " + info.documento;
   }
 
-  // ---------- notas emitidas ----------
-  function loadNotas(){
-    return lsGetJSON(K_NOTAS, []);
-  }
-  function saveNotas(list){
-    return lsSetJSON(K_NOTAS, list);
-  }
-  function deleteNota(notaId){
-    var list = loadNotas().filter(function(n){ return n.id !== notaId; });
-    saveNotas(list);
-  }
-  // apaga uma nota mas permite desfazer por alguns segundos
-  function deleteNotaWithUndo(id, onDone){
-    var list = loadNotas();
-    var idx=-1, item=null;
-    for (var i=0;i<list.length;i++){ if (list[i].id===id){ idx=i; item=list[i]; break; } }
-    if (idx===-1) return;
-    list.splice(idx,1);
-    saveNotas(list);
-    onDone();
-    showUndoToast("Nota apagada", function(){
-      var list2 = loadNotas();
-      list2.splice(Math.min(idx,list2.length), 0, item);
-      saveNotas(list2);
-      onDone();
-    });
-  }
-  function addNota(obj){
-    var list = loadNotas();
-    list.push(obj);
-    saveNotas(list);
-    return obj;
-  }
+  function loadNotas(){ return lsGetJSON(K_NOTAS, []); }
+  function saveNotas(list){ return lsSetJSON(K_NOTAS, list); }
+  function addNota(obj){ var list = loadNotas(); list.push(obj); saveNotas(list); return obj; }
 
-  // ---------- estoque (medida, marca, quantidade, preço) ----------
   function loadEstoque(){ return lsGetJSON(K_ESTOQUE, []); }
   function saveEstoque(list){ return lsSetJSON(K_ESTOQUE, list); }
-  function estoqueItem(id){ return loadEstoque().filter(function(i){ return i.id===id; })[0] || null; }
-  function estoqueLabel(item){ return item ? (item.medida + (item.marca ? " · " + item.marca : "")) : ""; }
-  function addEstoqueItem(obj){
-    var list = loadEstoque();
-    obj.id = uid();
-    obj.quantidade = Math.max(0, parseNum(obj.quantidade));
-    obj.preco = Math.max(0, parseNum(obj.preco));
-    list.push(obj);
-    saveEstoque(list);
-    return obj;
-  }
-  function updateEstoqueItem(id, changes){
-    var list = loadEstoque();
-    for (var i=0;i<list.length;i++){
-      if (list[i].id===id){
-        Object.keys(changes).forEach(function(k){ list[i][k] = changes[k]; });
-        list[i].quantidade = Math.max(0, parseNum(list[i].quantidade));
-        list[i].preco = Math.max(0, parseNum(list[i].preco));
-        break;
-      }
-    }
-    saveEstoque(list);
-  }
-  function deleteEstoqueItem(id){
-    saveEstoque(loadEstoque().filter(function(i){ return i.id!==id; }));
-  }
-  // apaga um item do estoque mas permite desfazer por alguns segundos
-  function deleteEstoqueItemWithUndo(id, onDone){
-    var list = loadEstoque();
-    var idx=-1, item=null;
-    for (var i=0;i<list.length;i++){ if (list[i].id===id){ idx=i; item=list[i]; break; } }
-    if (idx===-1) return;
-    list.splice(idx,1);
-    saveEstoque(list);
-    onDone();
-    showUndoToast("Item apagado do estoque", function(){
-      var list2 = loadEstoque();
-      list2.splice(Math.min(idx,list2.length), 0, item);
-      saveEstoque(list2);
-      onDone();
-    });
-  }
-  // movimenta o estoque de um item: delta positivo entra, negativo sai.
-  // nunca deixa negativo — se faltar, para no 0. devolve quanto realmente mexeu.
-  function moveEstoque(id, delta){
-    if (!id || !delta) return 0;
-    var list = loadEstoque();
-    var moved = 0;
-    for (var i=0;i<list.length;i++){
-      if (list[i].id===id){
-        var atual = Math.max(0, parseNum(list[i].quantidade));
-        var novo = atual + delta;
-        if (novo < 0) novo = 0;
-        moved = novo - atual;
-        list[i].quantidade = novo;
-        break;
-      }
-    }
-    if (moved !== 0) saveEstoque(list);
-    return moved;
-  }
-  // acerta a baixa de estoque de uma linha de venda conforme a medida e a quantidade escolhidas
-  function syncRowEstoque(row){
-    var desejada = row.medidaId ? Math.max(0, parseNum(row.quantidade)) : 0;
-    var jaBaixado = Math.max(0, parseNum(row.medidaBaixa));
-    var delta = desejada - jaBaixado;
-    if (delta === 0) return;
-    var moved = moveEstoque(row.medidaId, -delta);
-    row.medidaBaixa = jaBaixado - moved; // moved vem negativo quando saiu do estoque
-  }
-  // devolve pro estoque tudo que essa linha já havia baixado
-  function releaseRowEstoque(row){
-    var jaBaixado = Math.max(0, parseNum(row.medidaBaixa));
-    if (row.medidaId && jaBaixado>0) moveEstoque(row.medidaId, jaBaixado);
-    row.medidaBaixa = 0;
-  }
 
-  // ---------- histórico: logins e movimentações manuais de estoque ----------
-  function loadLoginLog(){ return lsGetJSON(K_LOGIN_LOG, []); }
-  function saveLoginLog(list){ return lsSetJSON(K_LOGIN_LOG, list); }
-  function addLoginLog(email){
-    var list = loadLoginLog();
-    list.push({id: uid(), email: email || "(desconhecido)", ts: new Date().toISOString()});
-    if (list.length > 500) list = list.slice(list.length - 500); // mantém só os últimos 500
-    saveLoginLog(list);
-  }
-  function loadEstoqueLog(){ return lsGetJSON(K_ESTOQUE_LOG, []); }
-  function saveEstoqueLog(list){ return lsSetJSON(K_ESTOQUE_LOG, list); }
-  // tipo: "entrada" | "saida" | "ajuste" — nunca chamado pelas baixas automáticas de venda (syncRowEstoque)
-  function addEstoqueLog(tipo, medidaLabel, qtd){
-    var list = loadEstoqueLog();
-    list.push({id: uid(), email: state.userEmail || "(desconhecido)", tipo: tipo, medida: medidaLabel, qtd: qtd, ts: new Date().toISOString()});
-    if (list.length > 500) list = list.slice(list.length - 500);
-    saveEstoqueLog(list);
-  }
-
-  // ---------- nota de venda (impressão) ----------
-  function nextVendaNumber(){
-    var n = parseInt(localStorage.getItem(K_VENDA_SEQ)||"0",10);
-    if (isNaN(n)) n = 0;
-    var next = n+1;
-    localStorage.setItem(K_VENDA_SEQ, String(next));
-    cloudPush(K_VENDA_SEQ, next);
-    return n;
-  }
-
-  function buildNotaItems(row){
-    var items = [];
-    function addItem(desc, qty, total){
-      qty = parseNum(qty); total = parseNum(total);
-      if (total<=0) return;
-      if (qty<=0) qty = 1;
-      var unit = total/qty;
-      items.push({desc:desc, qty:qty, unit:unit, total:total});
-    }
-    addItem("Pneus", row.quantidade, row.valorPneus);
-    addItem("Bico/Válvulas", row.qtdBicos, row.valorBicos);
-    addItem("Alinhamento", 1, row.alinhamento);
-    addItem("Cambagem", row.qtdCambagem, row.valorCambagem);
-    addItem("Balanceamento", row.qtdBalanceamento, row.valorBalanceamento);
-    addItem("Desempeno de roda", row.qtdRodas, row.valorRodas);
-    addItem("Mão de obra", 1, row.maoDeObra);
-    addItem("Outros", 1, row.outros);
-    return items;
-  }
-
-  function buildNotaHtml(nota){
-    var itemsRows = (nota.items||[]).map(function(it){
-      return '<tr>'+
-        '<td>'+escHtml(it.desc)+'</td>'+
-        '<td class="c">'+it.qty+'</td>'+
-        '<td class="r">'+fmtCurrency(it.unit)+'</td>'+
-        '<td class="r">'+fmtCurrency(it.total)+'</td>'+
-      '</tr>';
-    }).join("") || '<tr><td colspan="4" class="c" style="color:#888;">Nenhum item lançado nesta venda.</td></tr>';
-
-    var d = new Date(nota.createdAt);
-    var emitido = pad(d.getDate())+"/"+pad(d.getMonth()+1)+"/"+d.getFullYear()+" "+
-                  pad(d.getHours())+":"+pad(d.getMinutes())+":"+pad(d.getSeconds());
-    var customer = nota.customer || {};
-
-    return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">'+
-      '<title>Nota de venda #'+nota.vendaNum+'</title>'+
-      '<style>'+
-        '*{box-sizing:border-box;}'+
-        'body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;margin:0;padding:28px;font-size:13px;}'+
-        '.head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #1a1a1a;padding-bottom:12px;margin-bottom:16px;}'+
-        '.head .empresa{max-width:60%;}'+
-        '.head .empresa h1{font-size:16px;margin:0 0 4px;}'+
-        '.head .empresa p{margin:0;font-size:11.5px;color:#444;line-height:1.5;}'+
-        '.head .venda{text-align:right;}'+
-        '.head .venda .num{font-size:18px;font-weight:bold;}'+
-        '.head .venda .emit{font-size:11px;color:#555;margin-top:2px;}'+
-        '.cliente{border:1px solid #ccc;border-radius:4px;padding:10px 14px;margin-bottom:16px;}'+
-        '.cliente h2{font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:#555;margin:0 0 6px;}'+
-        '.cliente p{margin:0;font-size:12.5px;line-height:1.6;}'+
-        'table{width:100%;border-collapse:collapse;margin-bottom:16px;}'+
-        'th{background:#1a1a1a;color:#fff;font-size:11px;text-transform:uppercase;padding:8px 10px;text-align:left;}'+
-        'td{padding:8px 10px;border-bottom:1px solid #ddd;font-size:12.5px;}'+
-        'th.c,td.c{text-align:center;}'+
-        'th.r,td.r{text-align:right;}'+
-        '.totals{width:260px;margin-left:auto;}'+
-        '.totals div{display:flex;justify-content:space-between;padding:4px 0;font-size:12.5px;}'+
-        '.totals .grand{border-top:2px solid #1a1a1a;margin-top:4px;padding-top:8px;font-size:15px;font-weight:bold;}'+
-        '.pagamento{margin-top:14px;font-size:12.5px;color:#333;}'+
-        '.garantia-box{margin-top:24px;border:1px solid #1a1a1a;padding:12px 14px;border-radius:4px;font-size:11px;line-height:1.45;color:#222;}'+
-        '.garantia-box h3{margin:0 0 8px;font-size:12px;text-align:center;text-transform:uppercase;border-bottom:1px solid #ccc;padding-bottom:4px;}'+
-        '.garantia-box ul{margin:4px 0 8px;padding-left:18px;}'+
-        '.garantia-box li{margin-bottom:2px;}'+
-        '.garantia-box .alerta{font-weight:bold;margin:8px 0;text-align:center;}'+
-        '.garantia-box .assinatura{margin-top:20px;border-top:1px solid #1a1a1a;width:60%;margin-left:auto;margin-right:auto;text-align:center;padding-top:4px;}'+
-        '.footer{margin-top:24px;text-align:center;color:#999;font-size:10.5px;border-top:1px solid #ddd;padding-top:10px;}'+
-        '@media print{ body{padding:0 12px;} }'+
-      '</style></head><body>'+
-        '<div class="head">'+
-          '<div class="empresa">'+
-            '<h1>'+escHtml(EMPRESA.nome)+'</h1>'+
-            '<p>'+escHtml(EMPRESA.telefone)+' &middot; '+escHtml(EMPRESA.email)+'<br>'+
-            'CNPJ: '+escHtml(EMPRESA.cnpj)+'<br>'+
-            escHtml(EMPRESA.endereco)+'<br>'+escHtml(EMPRESA.cidade)+'</p>'+
-          '</div>'+
-          '<div class="venda">'+
-            '<div class="num">NOTA #'+nota.vendaNum+'</div>'+
-            '<div class="emit">EMITIDO EM: '+emitido+'</div>'+
-          '</div>'+
-        '</div>'+
-        '<div class="cliente">'+
-          '<h2>Cliente</h2>'+
-          '<p><b>'+escHtml(customer.nome||"")+'</b>'+
-          (customerDocLabel(customer) ? '<br>'+escHtml(customerDocLabel(customer)) : '')+
-          (customer.telefone ? '<br>'+escHtml(customer.telefone) : '')+
-          (customer.email ? (customer.telefone?' &middot; ':'<br>')+escHtml(customer.email) : '')+
-          (customer.endereco ? '<br>'+escHtml(customer.endereco) : '')+
-          '</p>'+
-        '</div>'+
-        '<table><thead><tr><th>Descrição</th><th class="c">Quantidade</th><th class="r">Valor Unitário</th><th class="r">Total</th></tr></thead>'+
-        '<tbody>'+itemsRows+'</tbody></table>'+
-        '<div class="totals">'+
-          '<div><span>Total Produtos</span><span>'+fmtCurrency(nota.totalProdutos)+'</span></div>'+
-          '<div><span>Desconto</span><span>'+fmtCurrency(0)+'</span></div>'+
-          '<div><span>Frete</span><span>'+fmtCurrency(0)+'</span></div>'+
-          '<div class="grand"><span>TOTAL VENDA</span><span>'+fmtCurrency(nota.totalProdutos)+'</span></div>'+
-        '</div>'+
-        (nota.formaPagamento ? '<div class="pagamento">Forma de pagamento: <b>'+escHtml(nota.formaPagamento)+'</b>'+(nota.pago?' &middot; '+escHtml(nota.pago==="✅"?"Pago":"Pendente"):'')+
-          (Array.isArray(nota.pagamentosMultiplos) && nota.pagamentosMultiplos.length
-            ? '<br><span style="font-size:11px;">'+nota.pagamentosMultiplos.map(function(p){ return escHtml(p.metodo)+": "+fmtCurrency(parseNum(p.valor)); }).join(" &middot; ")+'</span>'
-            : '')+
-        '</div>' : '')+
-
-        '<div class="garantia-box">'+
-          '<h3>TERMO DE GARANTIA - PNEUS SEMINOVOS</h3>'+
-          '<p><b>Cobertura:</b> A garantia para pneus seminovos é de 3 anos a partir da data da compra ou até o desgaste total da banda de rodagem (atingir o indicador TWI/pneu alisar), o que ocorrer primeiro.</p>'+
-          '<p><b>Exclusões da Garantia (Avarias Acidentais):</b> A garantia cobre exclusivamente defeitos de estrutura/fabricação ou no conserto. <b>*GARANTIA NÃO É SEGURO*</b>.<br>Não possuem cobertura danos decorrentes de uso, acidentes ou fatores externos, tais como:</p>'+
-          '<ul>'+
-            '<li>Pneus cortados, furados ou rasgados;</li>'+
-            '<li>Bolhas ou deformações causadas por impacto em buracos, meio-fio ou obstáculos;</li>'+
-            '<li>Danos causados por rodar sem pressão de ar, suspensão danificada ou falta de alinhamento.</li>'+
-          '</ul>'+
-          '<p class="alerta">VOCÊ COMPROU PNEU USADO, TENHA CONSCIÊNCIA.</p>'+
-          '<p>A lei nos obriga a dar garantia em relação a qualquer produto usado de 90 dias corridos, mas por consideração ao nosso cliente e confiança dos nossos produtos fornecemos garantia de 3 anos depois da data de compra.</p>'+
-          '<p><b>Políticas de devolução:</b> quaisquer produtos comprados <i>PRESENCIALMENTE EM LOJA FÍSICA</i> com a opção de escolha e análise por conta própria, não se aplica o direto de devolução por insatisfação. Conforme o código de direito do consumidor art.18 nossa empresa tem o dever de resolver o problema em até 30 dias corridos, após esse período, aí sim o cliente tem o seu direito de ter os valores ressarcidos integralmente.</p>'+
-          '<div class="assinatura">Assinatura do cliente:</div>'+
-        '</div>'+
-
-        '<div class="footer">Painel de Vendas — Oficina</div>'+
-      '</body></html>';
-  }
-
-  function buildEstoqueReportHtml(list, estoquista){
-    var totalUnidades = 0, totalValor = 0;
-    var rows = list.map(function(i){
-      var qt = Math.max(0, parseNum(i.quantidade));
-      var preco = parseNum(i.preco);
-      totalUnidades += qt;
-      totalValor += qt * preco;
-      return '<tr>'+
-        '<td>'+escHtml(i.medida||"—")+'</td>'+
-        '<td>'+escHtml(i.marca||"")+'</td>'+
-        '<td class="c'+(qt<=0?' zero':'')+'">'+qt+'</td>'+
-        (estoquista ? '' : '<td class="r">'+fmtCurrency(preco)+'</td><td class="r">'+fmtCurrency(qt*preco)+'</td>')+
-      '</tr>';
-    }).join("") || '<tr><td colspan="'+(estoquista?3:5)+'" class="c" style="color:#888;">Nenhuma medida cadastrada.</td></tr>';
-
-    var d = new Date();
-    var emitido = pad(d.getDate())+"/"+pad(d.getMonth()+1)+"/"+d.getFullYear()+" "+pad(d.getHours())+":"+pad(d.getMinutes());
-
-    return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">'+
-      '<title>Relatório de estoque</title>'+
-      '<style>'+
-        '*{box-sizing:border-box;}'+
-        'body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;margin:0;padding:28px;font-size:13px;}'+
-        '.head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #1a1a1a;padding-bottom:12px;margin-bottom:16px;}'+
-        '.head .empresa{max-width:60%;}'+
-        '.head .empresa h1{font-size:16px;margin:0 0 4px;}'+
-        '.head .empresa p{margin:0;font-size:11.5px;color:#444;line-height:1.5;}'+
-        '.head .rel{text-align:right;}'+
-        '.head .rel .num{font-size:18px;font-weight:bold;}'+
-        '.head .rel .emit{font-size:11px;color:#555;margin-top:2px;}'+
-        'table{width:100%;border-collapse:collapse;margin-bottom:16px;}'+
-        'th{background:#1a1a1a;color:#fff;font-size:11px;text-transform:uppercase;padding:8px 10px;text-align:left;}'+
-        'td{padding:7px 10px;border-bottom:1px solid #ddd;font-size:12.5px;}'+
-        'th.c,td.c{text-align:center;}'+
-        'th.r,td.r{text-align:right;}'+
-        'td.zero{color:#c0392b;font-weight:bold;}'+
-        '.totals{width:280px;margin-left:auto;}'+
-        '.totals div{display:flex;justify-content:space-between;padding:4px 0;font-size:12.5px;}'+
-        '.totals .grand{border-top:2px solid #1a1a1a;margin-top:4px;padding-top:8px;font-size:15px;font-weight:bold;}'+
-        '.footer{margin-top:24px;text-align:center;color:#999;font-size:10.5px;border-top:1px solid #ddd;padding-top:10px;}'+
-        '@media print{ body{padding:0 12px;} }'+
-      '</style></head><body>'+
-        '<div class="head">'+
-          '<div class="empresa">'+
-            '<h1>'+escHtml(EMPRESA.nome)+'</h1>'+
-            '<p>'+escHtml(EMPRESA.telefone)+' &middot; '+escHtml(EMPRESA.email)+'<br>'+
-            'CNPJ: '+escHtml(EMPRESA.cnpj)+'<br>'+
-            escHtml(EMPRESA.endereco)+'<br>'+escHtml(EMPRESA.cidade)+'</p>'+
-          '</div>'+
-          '<div class="rel">'+
-            '<div class="num">RELATÓRIO DE ESTOQUE</div>'+
-            '<div class="emit">EMITIDO EM: '+emitido+'</div>'+
-          '</div>'+
-        '</div>'+
-        '<table><thead><tr><th>Medida</th><th>Marca</th><th class="c">Qtd.</th>'+
-          (estoquista ? '' : '<th class="r">Preço unit.</th><th class="r">Valor total</th>')+
-        '</tr></thead>'+
-        '<tbody>'+rows+'</tbody></table>'+
-        '<div class="totals">'+
-          '<div><span>Medidas cadastradas</span><span>'+list.length+'</span></div>'+
-          '<div><span>Unidades em estoque</span><span>'+totalUnidades+'</span></div>'+
-          (estoquista ? '' : '<div class="grand"><span>Valor do estoque</span><span>'+fmtCurrency(totalValor)+'</span></div>')+
-        '</div>'+
-        '<div class="footer">Painel de Vendas — Oficina</div>'+
-      '</body></html>';
-  }
-
-  function openPrintWindow(html){
-    var win = window.open("", "_blank", "width=820,height=920");
-    if (!win){
-      alert("Não foi possível abrir a janela de impressão. Verifique se o navegador está bloqueando pop-ups para este site.");
-      return;
-    }
-    win.document.open();
-    win.document.write(html);
-    win.document.close();
-    win.focus();
-    setTimeout(function(){ win.print(); }, 300);
-  }
-
-  function printNota(row, customer){
-    var vendaNum = nextVendaNumber();
-    var nota = {
-      id: uid(),
-      vendaNum: vendaNum,
-      date: state.date,
-      rowId: row.id,
-      customerId: customer.id,
-      customer: {
-        nome: customer.nome||"", tipoDocumento: (customer.tipoDocumento||"cpf"), documento: (customer.documento||customer.cpf||""), email: customer.email||"",
-        telefone: customer.telefone||"", endereco: customer.endereco||""
-      },
-      items: buildNotaItems(row),
-      totalProdutos: computeValor(row),
-      formaPagamento: row.formaPagamento||"",
-      pagamentosMultiplos: Array.isArray(row.pagamentosMultiplos) ? row.pagamentosMultiplos : null,
-      splitValor: (row.splitValor!==undefined ? row.splitValor : null),
-      pago: row.pago||"",
-      createdAt: Date.now()
-    };
-    addNota(nota);
-    openPrintWindow(buildNotaHtml(nota));
-  }
-
-  function reprintNota(nota){
-    openPrintWindow(buildNotaHtml(nota));
-  }
-
-  // ---------- gerar o PDF da nota (mesmo layout da impressão) ----------
-  function renderNotaToCanvas(nota, cb){
-    var full = buildNotaHtml(nota);
-    var styleMatch = full.match(/<style>[\s\S]*?<\/style>/);
-    var bodyMatch = full.match(/<body[^>]*>([\s\S]*)<\/body>/i);
-    var container = document.createElement("div");
-    container.style.position = "fixed";
-    container.style.left = "-10000px";
-    container.style.top = "0";
-    container.style.width = "780px";
-    container.style.background = "#ffffff";
-    container.innerHTML = (styleMatch?styleMatch[0]:"") + (bodyMatch?bodyMatch[1]:full);
-    document.body.appendChild(container);
-    window.html2canvas(container, {scale:2, backgroundColor:"#ffffff"}).then(function(canvas){
-      document.body.removeChild(container);
-      cb(canvas);
-    }).catch(function(err){
-      document.body.removeChild(container);
-      console.error("Erro ao gerar PDF", err);
-      cb(null);
-    });
-  }
-  function canvasToPdfBlob(canvas){
-    var imgData = canvas.toDataURL("image/jpeg", 0.92);
-    var pdf = new window.jspdf.jsPDF({unit:"pt", format:"a4"});
-    var pageWidth = pdf.internal.pageSize.getWidth();
-    var pageHeight = pdf.internal.pageSize.getHeight();
-    var imgWidth = pageWidth;
-    var imgHeight = canvas.height * (imgWidth/canvas.width);
-    var heightLeft = imgHeight;
-    var position = 0;
-    pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
-    heightLeft -= pageHeight;
-    while (heightLeft > 0){
-      position = heightLeft - imgHeight;
-      pdf.addPage();
-      pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-    }
-    return pdf.output("blob");
-  }
-
-  // ---------- enviar o PDF da nota por WhatsApp ----------
-  function sendNotaPdfWhatsapp(row, customer){
-    if (!window.html2canvas || !window.jspdf){
-      alert("As bibliotecas de PDF ainda estão carregando (ou não carregaram por falta de internet). Tente novamente em alguns segundos.");
-      return;
-    }
-    var vendaNum = nextVendaNumber();
-    var nota = {
-      id: uid(), vendaNum: vendaNum, date: state.date, rowId: row.id, customerId: customer.id,
-      customer: {
-        nome: customer.nome||"", tipoDocumento: (customer.tipoDocumento||"cpf"), documento: (customer.documento||customer.cpf||""), email: customer.email||"",
-        telefone: customer.telefone||"", endereco: customer.endereco||""
-      },
-      items: buildNotaItems(row),
-      totalProdutos: computeValor(row),
-      formaPagamento: row.formaPagamento||"",
-      pagamentosMultiplos: Array.isArray(row.pagamentosMultiplos) ? row.pagamentosMultiplos : null,
-      splitValor: (row.splitValor!==undefined ? row.splitValor : null),
-      pago: row.pago||"",
-      createdAt: Date.now()
-    };
-    addNota(nota);
-
-    renderNotaToCanvas(nota, function(canvas){
-      if (!canvas){ alert("Não foi possível gerar o PDF da nota."); return; }
-      var blob = canvasToPdfBlob(canvas);
-      var fileName = "nota-venda-"+nota.vendaNum+".pdf";
-      var caption = "Olá"+(customer.nome?" "+customer.nome:"")+"! Segue em anexo a nota da sua compra na "+EMPRESA.nome+".";
-      var phoneDigits = String(customer.telefone||"").replace(/\D/g,"");
-      var phone = phoneDigits ? (phoneDigits.length<=11 ? "55"+phoneDigits : phoneDigits) : "";
-
-      var file;
-      try{ file = new File([blob], fileName, {type:"application/pdf"}); }catch(e){ file = null; }
-
-      if (file && navigator.canShare && navigator.canShare({files:[file]})){
-        // celular/navegador com suporte: abre a folha de compartilhar nativa,
-        // já com o PDF anexado — o usuário só escolhe o WhatsApp na lista.
-        navigator.share({files:[file], title:fileName, text:caption}).catch(function(){ /* usuário cancelou — sem problema */ });
-      } else {
-        // fallback (principalmente desktop): baixa o PDF e abre o WhatsApp
-        // com a mensagem, pedindo pra anexar o arquivo que acabou de baixar.
-        var url = URL.createObjectURL(blob);
-        var a = document.createElement("a");
-        a.href = url; a.download = fileName;
-        document.body.appendChild(a); a.click(); document.body.removeChild(a);
-        setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
-        var waMsg = caption + " (o PDF foi baixado agora — é só anexar aqui no chat)";
-        var waUrl = phone
-          ? "https://wa.me/"+phone+"?text="+encodeURIComponent(waMsg)
-          : "https://wa.me/?text="+encodeURIComponent(waMsg);
-        window.open(waUrl, "_blank");
-      }
-    });
-  }
-
-  // ---------- backup / restauração ----------
-  function exportBackup(auto){
-    var data = {};
-    for (var i=0;i<localStorage.length;i++){
-      var k = localStorage.key(i);
-      if (k && (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS)) data[k] = localStorage.getItem(k);
-    }
-    var now = new Date();
-    var stamp = today+"-"+pad(now.getHours())+"h"+pad(now.getMinutes());
-    var blob = new Blob([JSON.stringify(data,null,2)], {type:"application/json"});
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement("a");
-    a.href = url; a.download = "backup-vendas-"+stamp+(auto?"-auto":"")+".json";
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
-  function autoBackupToStorage(){
-    // backup silencioso: salva uma cópia dos dados dentro do próprio navegador,
-    // sem baixar arquivo nenhum (evita o navegador pedindo permissão de download).
-    var data = {};
-    for (var i=0;i<localStorage.length;i++){
-      var k = localStorage.key(i);
-      if (k && (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS)) data[k] = localStorage.getItem(k);
-    }
-    try{
-      localStorage.setItem(K_AUTOBACKUP, JSON.stringify({ts:Date.now(), data:data}));
-    }catch(e){ /* sem espaço — não é crítico, backup manual continua funcionando */ }
-  }
-  function importBackupFile(file){
-    var reader = new FileReader();
-    reader.onload = function(){
-      try{
-        var data = JSON.parse(reader.result);
-        var n = 0;
-        Object.keys(data).forEach(function(k){
-          if (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS){ localStorage.setItem(k, data[k]); n++; }
-        });
-        state.monthSummaryCache = {};
-        state.monthPartsCache = {};
-        alert(n+" registro(s) importado(s) com sucesso.");
-        render();
-      }catch(e){
-        alert("Não foi possível ler esse arquivo de backup.");
-      }
-    };
-    reader.readAsText(file);
-  }
-
-  // ---------- utils ----------
   function parseNum(v){
     if (v===undefined||v===null||v==="") return 0;
-    var n = parseFloat(String(v).replace(",", "."));
-    return isNaN(n) ? 0 : n;
+    var n = parseFloat(String(v).replace(",", ".")); return isNaN(n) ? 0 : n;
   }
-  function fmtCurrency(n){
-    return (n||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
-  }
+  function fmtCurrency(n){ return (n||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"}); }
   function pad(n){ return n<10 ? "0"+n : ""+n; }
   function toISO(d){ return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
   function fromISO(s){ var p=s.split("-"); return new Date(parseInt(p[0]),parseInt(p[1])-1,parseInt(p[2])); }
   function fmtDateBR(iso){ var p=iso.split("-"); return p[2]+"/"+p[1]+"/"+p[0]; }
-  function fmtDateTimeBR(isoDateTime){
-    var d = new Date(isoDateTime);
-    if (isNaN(d.getTime())) return "—";
-    var dd = String(d.getDate()).padStart(2,"0");
-    var mm = String(d.getMonth()+1).padStart(2,"0");
-    var yy = d.getFullYear();
-    var hh = String(d.getHours()).padStart(2,"0");
-    var mi = String(d.getMinutes()).padStart(2,"0");
-    return dd+"/"+mm+"/"+yy+" às "+hh+":"+mi;
-  }
-  function daysInMonth(monthStr){ var p=monthStr.split("-"); return new Date(parseInt(p[0]), parseInt(p[1]), 0).getDate(); }
-  function monthLabel(monthStr){
-    var p=monthStr.split("-"); var d=new Date(parseInt(p[0]), parseInt(p[1])-1, 1);
-    return d.toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
-  }
-  function weekdayLabel(iso){
-    return fromISO(iso).toLocaleDateString("pt-BR",{weekday:"long", day:"2-digit", month:"long"});
-  }
-  function addMonths(monthStr, delta){
-    var p=monthStr.split("-"); var d=new Date(parseInt(p[0]), parseInt(p[1])-1+delta, 1);
-    return d.getFullYear()+"-"+pad(d.getMonth()+1);
-  }
-  function addDays(iso, delta){
-    var d=fromISO(iso); d.setDate(d.getDate()+delta); return toISO(d);
-  }
-
-  // ---------- feriados nacionais (não trabalhamos aos domingos nem feriados) ----------
-  var nationalHolidaysCache = {};
-  function easterISO(year){
-    // algoritmo de Meeus/Jones/Butcher
-    var a=year%19, b=Math.floor(year/100), c=year%100, d=Math.floor(b/4), e=b%4,
-        f=Math.floor((b+8)/25), g=Math.floor((b-f+1)/3), h=(19*a+b-d-g+15)%30,
-        i=Math.floor(c/4), k=c%4, l=(32+2*e+2*i-h-k)%7, m=Math.floor((a+11*h+22*l)/451),
-        month=Math.floor((h+l-7*m+114)/31), day=((h+l-7*m+114)%31)+1;
-    return toISO(new Date(year, month-1, day));
-  }
-  function nationalHolidays(year){
-    if (nationalHolidaysCache[year]) return nationalHolidaysCache[year];
-    var easter = easterISO(year);
-    var list = [
-      year+"-01-01",              // confraternização universal
-      addDays(easter, -48),       // carnaval (segunda)
-      addDays(easter, -47),       // carnaval (terça)
-      addDays(easter, -2),        // sexta-feira santa
-      year+"-04-21",              // tiradentes
-      year+"-05-01",              // dia do trabalho
-      addDays(easter, 60),        // corpus christi
-      year+"-09-07",              // independência
-      year+"-10-12",              // n. sra. aparecida
-      year+"-11-02",              // finados
-      year+"-11-15",              // proclamação da república
-      year+"-12-25"               // natal
-    ];
-    if (year>=2024) list.push(year+"-11-20"); // consciência negra (feriado nacional desde 2024)
-    nationalHolidaysCache[year] = list;
-    return list;
-  }
-  function isBusinessDay(iso){
-    if (fromISO(iso).getDay()===0) return false; // domingo
-    return nationalHolidays(parseInt(iso.slice(0,4),10)).indexOf(iso)===-1;
-  }
-  // conta dias úteis (sem domingo/feriado) de fromDay até o fim do mês
-  function countBusinessDays(monthStr, fromDayInclusive){
-    var nd = daysInMonth(monthStr);
-    var count = 0;
-    for (var day=fromDayInclusive; day<=nd; day++){
-      if (isBusinessDay(monthStr+"-"+pad(day))) count++;
-    }
-    return count;
-  }
   function escAttr(v){ return String(v===undefined||v===null?"":v).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;"); }
   function escHtml(v){ return escAttr(v); }
   function uid(){ return "r"+Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
@@ -1346,14 +627,11 @@
       qtdBicos:"0", valorBicos:"", qtdCambagem:"0", valorCambagem:"",
       qtdBalanceamento:"0", valorBalanceamento:"", qtdRodas:"0", valorRodas:"",
       outros:"", valorPecas:"", maoDeObra:"", valorPneus:"",
-      formaPagamento:"Nenhum", pago:"❌", carro:"Carro 1", vendedor:VENDEDORES[0], detalhes:"",
-      clienteId:""
+      formaPagamento:"Nenhum", pago:"❌", carro:"Carro 1", vendedor:VENDEDORES[0], detalhes:"", clienteId:""
     };
   }
 
-  // ---------- state ----------
   var today = toISO(new Date());
-  var yesterday = addDays(today, -1);
   var state = {
     view: "dashboard",
     dashMonth: today.slice(0,7),
@@ -1363,2172 +641,355 @@
     authed: sessionStorage.getItem("vf_auth")==="1",
     hideValues: sessionStorage.getItem("vf_hide")==="1",
     saving:false,
-    modal:null, // {type:'auth', error:''}
+    modal:null,
     monthSummaryCache: {},
     monthPartsCache: {},
-    yesterdaySummary: null,
-    role: "vendedor",          // "vendedor" (vê o painel de vendas), "estoquista" (só estoque) ou "master" (tudo + histórico + usuários)
-    estoqueQuery: "",
-    clientesQuery: "",
-    clientesDetailId: null,
-    usuariosList: null,
-    usuariosLoading: false,
+    role: "vendedor",
     onlyPending: false,
     showAdvancedCols: (function(){ try{ return localStorage.getItem("vo_show_advanced")==="1"; }catch(e){ return false; } })()
   };
 
   var root = document.getElementById("app");
-  var saveTimer = null;
-  var autoBackupTimer = null;
-  var AUTO_BACKUP_IDLE_MS = 120000; // 2 minutos sem alterações
 
   function render(){
-    var estoquista = state.role === "estoquista";
-    var isMaster = state.role === "master";
-    root.classList.toggle("wide", state.view==="table" && !estoquista);
-    if (estoquista) renderEstoque();
-    else if (state.view==="estoque") renderEstoque();
-    else if (state.view==="clientes") renderClientes();
-    else if (state.view==="historico" && isMaster) renderHistorico();
-    else if (state.view==="usuarios" && isMaster) renderUsuarios();
-    else if (state.view==="dashboard") renderDashboard();
+    root.classList.toggle("wide", state.view==="table");
+    if (state.view==="dashboard") renderDashboard();
     else renderTable();
+
     if (state.modal) renderModal(); else {
       var ex = document.querySelector(".overlay"); if (ex) ex.remove();
     }
   }
 
-  // ---------- encolhe a tabela para caber na largura da tela, sem scroll lateral ----------
-  var fitRAF = null;
-  function fitGridToWidth(){
-    var wrap = document.querySelector(".grid-scroll");
-    var inner = document.getElementById("gridInner");
-    var headWrap = document.querySelector(".grid-scroll-head");
-    var headRow = headWrap ? headWrap.querySelector(".grid-row.head") : null;
-    if (!wrap || !inner) return;
-    inner.style.transform = "none";
-    wrap.style.height = "";
-    if (headRow) headRow.style.transform = "none";
-    if (headWrap) headWrap.style.height = "";
-
-    var naturalWidth = Math.max(inner.scrollWidth, headRow ? headRow.scrollWidth : 0);
-    var naturalHeight = inner.scrollHeight;
-    var headNaturalHeight = headRow ? headRow.scrollHeight : 0;
-    var available = wrap.clientWidth;
-    var scale = available > 0 && naturalWidth > available ? (available / naturalWidth) : 1;
-    if (scale < 1){
-      inner.style.transform = "scale(" + scale + ")";
-      wrap.style.height = Math.ceil(naturalHeight * scale) + "px";
-      if (headRow){
-        headRow.style.transform = "scale(" + scale + ")";
-        headRow.style.transformOrigin = "top left";
-        if (headWrap) headWrap.style.height = Math.ceil(headNaturalHeight * scale) + "px";
-      }
-    }
-  }
-  function scheduleFitGrid(){
-    if (fitRAF) cancelAnimationFrame(fitRAF);
-    fitRAF = requestAnimationFrame(fitGridToWidth);
-  }
-  window.addEventListener("resize", scheduleFitGrid);
-
-  // ---------- dashboard ----------
-  function loadDashboardData(cb){
-    var need = [];
-    if (!state.monthSummaryCache[state.dashMonth]) need.push(state.dashMonth);
-    var ym = yesterday.slice(0,7);
-    if (!state.monthSummaryCache[ym]) need.push(ym);
-    var jobs = need.map(function(m){ return getSummary(m).then(function(s){ state.monthSummaryCache[m]=s; }); });
-    if (!state.monthPartsCache[state.dashMonth]){
-      jobs.push(loadMonthParts(state.dashMonth).then(function(totals){ state.monthPartsCache[state.dashMonth]=totals; }));
-    }
-    if (jobs.length===0) return cb();
-    Promise.all(jobs).then(cb);
-  }
-
-  // soma qtd./valor de bicos, cambagens e rodas em todos os dias lançados no mês
-  function loadMonthParts(month){
-    var dates = listAllDates().filter(function(d){ return d.slice(0,7)===month; });
-    return Promise.all(dates.map(function(d){ return getRows(d); })).then(function(allRows){
-      var t = {qtdBicos:0, valorBicos:0, qtdCambagem:0, valorCambagem:0, qtdRodas:0, valorRodas:0, porVendedor:{}};
-      VENDEDORES.forEach(function(v){ if (v!=="Nenhum") t.porVendedor[v] = {count:0, total:0}; });
-      allRows.forEach(function(rows){
-        rows.forEach(function(r){
-          t.qtdBicos += parseNum(r.qtdBicos);
-          t.valorBicos += parseNum(r.valorBicos);
-          t.qtdCambagem += parseNum(r.qtdCambagem);
-          t.valorCambagem += parseNum(r.valorCambagem);
-          t.qtdRodas += parseNum(r.qtdRodas);
-          t.valorRodas += parseNum(r.valorRodas);
-          var v = r.vendedor;
-          if (v && t.porVendedor[v]){
-            t.porVendedor[v].count += 1;
-            t.porVendedor[v].total += computeValor(r);
-          }
-        });
-      });
-      return t;
-    });
-  }
-
-  function loadArchiveIndex(cb){
-    var dates = listAllDates().sort().reverse();
-    var months = [];
-    dates.forEach(function(d){ var m=d.slice(0,7); if (months.indexOf(m)===-1) months.push(m); });
-    Promise.all(months.map(function(m){
-      if (state.monthSummaryCache[m]) return Promise.resolve();
-      return getSummary(m).then(function(s){ state.monthSummaryCache[m]=s; });
-    })).then(function(){ cb(dates); });
+  function authZoneHtml(){
+    return '<div class="auth-zone">'+
+      '<button class="btn primary small" data-act="open-orcamento">📋 Orçamento</button>'+
+      '<button class="btn ghost small" data-act="nav-dash">Painel</button>'+
+      '<button class="btn ghost small" data-act="nav-today">Hoje</button>'+
+    '</div>';
   }
 
   function renderDashboard(){
-    loadDashboardData(function(){
-      var monthSummary = state.monthSummaryCache[state.dashMonth] || {};
-      var nd = daysInMonth(state.dashMonth);
-      var points = [];
-      var monthTotal = 0;
-      for (var i=1;i<=nd;i++){
-        var iso = state.dashMonth+"-"+pad(i);
-        var v = (monthSummary[iso] && monthSummary[iso].total) || 0;
-        monthTotal += v;
-        points.push({day:i, iso:iso, v:v});
-      }
-      var pct1 = Math.min(100, (monthTotal/GOAL_1)*100);
-      var pct2 = Math.min(100, (monthTotal/GOAL_2)*100);
-
-      var ySummary = state.monthSummaryCache[yesterday.slice(0,7)] || {};
-      var yData = ySummary[yesterday] || {total:0, count:0};
-      var parts = state.monthPartsCache[state.dashMonth] || {qtdBicos:0, valorBicos:0, qtdCambagem:0, valorCambagem:0, qtdRodas:0, valorRodas:0, porVendedor:{}};
-
-      function partCardHtml(label, color, qty, val){
-        var valDisplay = state.hideValues ? '••••' : fmtCurrency(val);
-        var qtyDisplay = state.hideValues ? '••' : qty;
-        return '<div class="parts-card pc-'+color+'">'+
-          '<div class="pc-top"><span class="pc-label">'+escHtml(label)+'</span><span class="pc-qty">'+qtyDisplay+' un.</span></div>'+
-          '<div class="pc-value">'+valDisplay+'</div>'+
-        '</div>';
-      }
-      function sellerCardHtml(nome, count, total, color){
-        var valDisplay = state.hideValues ? '••••' : fmtCurrency(total);
-        var qtyDisplay = state.hideValues ? '••' : count;
-        return '<div class="parts-card pc-'+color+'">'+
-          '<div class="pc-top"><span class="pc-label">'+escHtml(nome)+'</span><span class="pc-qty">'+qtyDisplay+' venda(s)</span></div>'+
-          '<div class="pc-value">'+valDisplay+'</div>'+
-        '</div>';
-      }
-
-      // dias úteis restantes no mês exibido (sem domingos nem feriados), para calcular quanto falta vender por dia
-      var curMonthKey = today.slice(0,7);
-      var daysLeft;
-      if (state.dashMonth < curMonthKey) daysLeft = 0;
-      else if (state.dashMonth > curMonthKey) daysLeft = countBusinessDays(state.dashMonth, 1);
-      else daysLeft = countBusinessDays(state.dashMonth, parseInt(today.slice(8,10),10));
-
-      function dailyTargetCardHtml(label, goal){
-        var remaining = goal - monthTotal;
-        if (remaining<=0){
-          return '<div class="dt-card dt-done"><div class="dt-label">'+escHtml(label)+'</div>'+
-            '<div class="dt-value">Meta batida ✓</div>'+
-            '<div class="dt-sub">'+(state.hideValues?'••••':fmtCurrency(-remaining))+' acima da meta</div></div>';
-        }
-        if (daysLeft<=0){
-          return '<div class="dt-card dt-closed"><div class="dt-label">'+escHtml(label)+'</div>'+
-            '<div class="dt-value">'+(state.hideValues?'••••':fmtCurrency(remaining))+'</div>'+
-            '<div class="dt-sub">faltaram — mês encerrado ou sem dias úteis restantes</div></div>';
-        }
-        var perDay = remaining/daysLeft;
-        return '<div class="dt-card"><div class="dt-label">'+escHtml(label)+'</div>'+
-          '<div class="dt-value">'+(state.hideValues?'••••':fmtCurrency(perDay))+'<span class="dt-unit">/ dia</span></div>'+
-          '<div class="dt-sub">faltam '+(state.hideValues?'••••':fmtCurrency(remaining))+' em '+daysLeft+' dia(s) útil(eis)</div></div>';
-      }
-
-      var totalParts = fmtCurrency(monthTotal).split(",");
-
-      root.innerHTML =
-        '<div class="topbar">'+
-          '<div class="brand"><span class="mark"></span><h1>Painel de Vendas</h1><span class="tag">OFICINA · CONTROLE DIÁRIO</span>'+syncBadgeHtml()+'</div>'+
-          authZoneHtml()+
-        '</div>'+
-
-        '<div class="hero">'+
-          '<div class="hero-left">'+
-            '<div class="month-nav">'+
-              '<button data-act="prevmonth">‹</button>'+
-              '<span class="label">'+escHtml(monthLabel(state.dashMonth))+'</span>'+
-              '<button data-act="nextmonth">›</button>'+
-              '<button class="btn ghost small hide-vals-btn" data-act="togglehide" title="'+(state.hideValues?"Mostrar valores":"Ocultar valores")+'">'+(state.hideValues?"🙈 Mostrar":"👁 Ocultar")+'</button>'+
-            '</div>'+
-            '<div class="big-total">'+(state.hideValues?'••••••':(totalParts[0]+(totalParts[1]?','+totalParts[1]:'')))+'</div>'+
-            '<div class="sub">faturamento total do mês</div>'+
-            '<div class="goal-row">'+
-              '<div class="goal-label"><span>Meta 350 mil</span><b>'+(state.hideValues?'••%':pct1.toFixed(0)+'%')+'</b></div>'+
-              '<div class="goal-track"><div class="goal-fill'+(pct1>=100?' reached':'')+'" style="width:'+(state.hideValues?0:pct1)+'%"></div></div>'+
-            '</div>'+
-            '<div class="goal-row">'+
-              '<div class="goal-label"><span>Meta 450 mil</span><b>'+(state.hideValues?'••%':pct2.toFixed(0)+'%')+'</b></div>'+
-              '<div class="goal-track"><div class="goal-fill'+(pct2>=100?' reached':'')+'" style="width:'+(state.hideValues?0:pct2)+'%"></div></div>'+
-            '</div>'+
-          '</div>'+
-          '<div class="hero-right">'+
-            '<h2>Evolução diária</h2>'+
-            '<div class="chart-wrap">'+buildChartSvg(points)+'</div>'+
-          '</div>'+
-        '</div>'+
-
-        '<div class="daily-target-head">Quanto falta vender por dia para bater a meta <span style="color:var(--text-faint);">(sem contar domingos e feriados)</span></div>'+
-        '<div class="daily-target">'+
-          dailyTargetCardHtml("Meta 350 mil", GOAL_1)+
-          dailyTargetCardHtml("Meta 450 mil", GOAL_2)+
-        '</div>'+
-
-        '<div class="parts-visor-head">Peças vendidas no mês</div>'+
-        '<div class="parts-visor">'+
-          partCardHtml("Bicos", "teal", parts.qtdBicos, parts.valorBicos)+
-          partCardHtml("Cambagens", "yellow", parts.qtdCambagem, parts.valorCambagem)+
-          partCardHtml("Rodas", "green", parts.qtdRodas, parts.valorRodas)+
-        '</div>'+
-
-        '<div class="parts-visor-head">Vendas por vendedor no mês</div>'+
-        '<div class="parts-visor">'+
-          VENDEDORES.filter(function(v){ return v!=="Nenhum"; }).map(function(v, i){
-            var vd = parts.porVendedor[v] || {count:0, total:0};
-            var colors = ["teal","yellow","green"];
-            return sellerCardHtml(v, vd.count, vd.total, colors[i % colors.length]);
-          }).join("")+
-        '</div>'+
-
-        '<div class="row2">'+
-          '<div class="card">'+
-            '<h3>Resumo de ontem</h3>'+
-            '<div class="yesterday-total">'+fmtCurrency(yData.total)+'</div>'+
-            '<div class="yesterday-meta">'+escHtml(weekdayLabel(yesterday))+' · '+yData.count+' venda(s) registrada(s)</div>'+
-            '<button class="btn ghost small" data-act="opendate" data-date="'+yesterday+'">Ver tabela de ontem</button>'+
-          '</div>'+
-          '<div class="card today-card">'+
-            '<div>'+
-              '<h3>Tabela do dia</h3>'+
-              '<div class="date-big">'+escHtml(weekdayLabel(today))+'</div>'+
-            '</div>'+
-            '<button class="btn primary" data-act="opentoday">Abrir tabela de hoje →</button>'+
-          '</div>'+
-        '</div>'+
-
-        '<div class="archive-head"><h2>Todas as tabelas</h2></div>'+
-        '<div class="archive-list" id="archiveList"><div class="arow-empty">Carregando…</div></div>'+
-
-        '<div class="archive-head" style="margin-top:22px;"><h2>Clientes</h2><span class="hint">busque por nome, CPF ou telefone</span></div>'+
-        '<div class="card" style="padding:14px 16px;">'+
-          '<input type="text" id="dashCustSearch" class="dash-cust-search" placeholder="Buscar cliente...">'+
-          '<div id="dashCustArea"></div>'+
-        '</div>';
-
-      attachDashboardEvents();
-      bindBackupControls();
-      setupClientesSection();
-      loadArchiveIndex(function(dates){ renderArchiveList(dates); });
-    });
-  }
-
-  function setupClientesSection(){
-    var input = document.getElementById("dashCustSearch");
-    var area = document.getElementById("dashCustArea");
-    if (!input || !area) return;
-    var local = { query:"", selectedId:null };
-
-    function draw(){
-      if (local.selectedId) drawDetail(); else drawList();
-    }
-
-    function drawList(){
-      var customers = loadCustomers();
-      if (customers.length===0){
-        area.innerHTML = '<div class="cust-empty">Nenhum cliente cadastrado ainda. Cadastre um cliente na hora de imprimir uma nota.</div>';
-        return;
-      }
-      var q = local.query.trim().toLowerCase();
-      var filtered = q ? customers.filter(function(c){
-        return (c.nome||"").toLowerCase().indexOf(q)>-1 ||
-               (customerDocInfo(c).documento||"").toLowerCase().indexOf(q)>-1 ||
-               (c.telefone||"").toLowerCase().indexOf(q)>-1;
-      }) : customers;
-      if (filtered.length===0){
-        area.innerHTML = '<div class="cust-empty">Nenhum cliente encontrado para "'+escHtml(local.query)+'".</div>';
-        return;
-      }
-      var notas = loadNotas();
-      area.innerHTML = '<div class="cust-list" style="max-height:320px;">'+
-        filtered.map(function(c){
-          var count = notas.filter(function(n){return n.customerId===c.id;}).length;
-          var sub = [customerDocLabel(c), c.telefone].filter(Boolean).join(" · ");
-          return '<button class="cust-item" data-cid="'+escAttr(c.id)+'">'+
-            '<span class="cust-name">'+escHtml(c.nome)+'</span>'+
-            '<span class="cust-sub">'+(sub?escHtml(sub)+' · ':'')+count+' nota(s)</span>'+
-          '</button>';
-        }).join("")+
-      '</div>';
-      area.querySelectorAll(".cust-item").forEach(function(btn){
-        btn.addEventListener("click", function(){
-          local.selectedId = btn.getAttribute("data-cid");
-          draw();
-        });
-      });
-    }
-
-    function drawDetail(){
-      var customers = loadCustomers();
-      var customer = customers.filter(function(c){return c.id===local.selectedId;})[0];
-      if (!customer){ local.selectedId=null; drawList(); return; }
-      var notas = loadNotas().filter(function(n){return n.customerId===customer.id;})
-        .sort(function(a,b){ return b.createdAt - a.createdAt; });
-      var sub = [customerDocLabel(customer), customer.telefone, customer.email].filter(Boolean).join(" · ");
-      var notasHtml = notas.length
-        ? notas.map(function(n){
-            return '<div class="arow">'+
-              '<span class="d" data-nota="'+escAttr(n.id)+'" role="button" tabindex="0" style="cursor:pointer;">Venda #'+n.vendaNum+' · '+fmtDateBR(n.date)+'</span>'+
-              '<span class="stats"><span><b>'+fmtCurrency(n.totalProdutos)+'</b></span><span>'+escHtml(n.formaPagamento||"")+'</span>'+
-              '<button class="icon-btn" data-delnota="'+escAttr(n.id)+'" title="Apagar nota">✕</button></span>'+
-            '</div>';
-          }).join("")
-        : '<div class="arow-empty">Nenhuma nota registrada para este cliente ainda.</div>';
-      area.innerHTML =
-        '<button class="backlink" id="custBack" style="padding:4px 0 10px;">‹ Voltar aos clientes</button>'+
-        '<div style="margin-bottom:10px;">'+
-          '<div class="cust-detail-name">'+escHtml(customer.nome)+'</div>'+
-          (sub?'<div class="cust-detail-sub">'+escHtml(sub)+'</div>':'')+
-          (customer.endereco?'<div class="cust-detail-sub">'+escHtml(customer.endereco)+'</div>':'')+
-        '</div>'+
-        '<div class="archive-list">'+notasHtml+'</div>';
-
-      var backBtn = document.getElementById("custBack");
-      if (backBtn) backBtn.onclick = function(){ local.selectedId=null; draw(); };
-
-      area.querySelectorAll("[data-nota]").forEach(function(el){
-        el.onclick = function(){
-          var id = el.getAttribute("data-nota");
-          var nota = loadNotas().filter(function(n){return n.id===id;})[0];
-          if (nota) reprintNota(nota);
-        };
-      });
-      area.querySelectorAll("[data-delnota]").forEach(function(btn){
-        btn.onclick = function(e){
-          e.stopPropagation();
-          var id = btn.getAttribute("data-delnota");
-          deleteNotaWithUndo(id, function(){ drawDetail(); });
-        };
-      });
-    }
-
-    input.oninput = function(){
-      local.query = input.value;
-      local.selectedId = null;
-      draw();
-    };
-
-    draw();
-  }
-
-  function renderArchiveList(dates){
-    var el = document.getElementById("archiveList");
-    if (!el) return;
-    if (dates.length===0){
-      el.innerHTML = '<div class="arow-empty">Nenhuma tabela registrada ainda.</div>';
-      return;
-    }
-    el.innerHTML = dates.map(function(d){
-      var m = d.slice(0,7);
-      var s = (state.monthSummaryCache[m] && state.monthSummaryCache[m][d]) || {total:0,count:0};
-      return '<div class="arow" data-act="opendate" data-date="'+d+'" role="button" tabindex="0">'+
-        '<span class="d">'+fmtDateBR(d)+'</span>'+
-        '<span class="stats"><span><b>'+fmtCurrency(s.total)+'</b></span><span>'+s.count+' venda(s)</span></span>'+
-        '</div>';
-    }).join("");
-    el.querySelectorAll("[data-act=opendate]").forEach(function(node){
-      node.addEventListener("click", function(){ openDate(node.getAttribute("data-date")); });
-    });
-  }
-
-  function buildChartSvg(points){
-    if (points.every(function(p){return p.v===0;})){
-      return '<div class="chart-empty">Sem lançamentos neste mês ainda.</div>';
-    }
-    var W = 720, H = 190, padL = 6, padR = 6, padT = 14, padB = 22;
-    var maxV = Math.max.apply(null, points.map(function(p){return p.v;}));
-    if (maxV<=0) maxV = 1;
-    var stepX = (W-padL-padR) / Math.max(1, points.length-1);
-    function xFor(i){ return padL + i*stepX; }
-    function yFor(v){ return padT + (1 - v/maxV) * (H-padT-padB); }
-
-    var linePts = points.map(function(p,i){ return xFor(i).toFixed(1)+","+yFor(p.v).toFixed(1); }).join(" ");
-    var circles = points.map(function(p,i){
-      var x=xFor(i).toFixed(1), y=yFor(p.v).toFixed(1);
-      var r = p.v>0 ? 3.4 : 2;
-      var fill = p.v>0 ? "var(--teal)" : "var(--border)";
-      return '<circle cx="'+x+'" cy="'+y+'" r="'+r+'" fill="'+fill+'"><title>Dia '+p.day+': '+fmtCurrency(p.v)+'</title></circle>';
-    }).join("");
-    var labelEvery = points.length>20 ? 5 : (points.length>10?2:1);
-    var labels = points.map(function(p,i){
-      if (p.day % labelEvery !== 0 && p.day!==1 && p.day!==points.length) return "";
-      return '<text x="'+xFor(i).toFixed(1)+'" y="'+(H-6)+'" font-size="8.5" fill="var(--text-faint)" text-anchor="middle" font-family="IBM Plex Mono, monospace">'+p.day+'</text>';
-    }).join("");
-
-    return '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none">'+
-      '<line x1="'+padL+'" y1="'+(H-padB)+'" x2="'+(W-padR)+'" y2="'+(H-padB)+'" stroke="var(--border-soft)" stroke-width="1"/>'+
-      '<polyline points="'+linePts+'" fill="none" stroke="var(--teal)" stroke-width="1.6" opacity="0.85"/>'+
-      circles + labels +
-      '</svg>';
-  }
-  // ---------- histórico: logins e movimentações de estoque ----------
-  function renderHistorico(){
-    var tab = state.historicoTab || "logins";
-    var logins = loadLoginLog().slice().reverse();
-    var movs = loadEstoqueLog().slice().reverse();
-
-    var loginsHtml = logins.length
-      ? logins.map(function(l){
-          return '<div class="arow">'+
-            '<span class="d">'+fmtDateTimeBR(l.ts)+'</span>'+
-            '<span class="stats"><span><b>'+escHtml(l.email)+'</b></span></span>'+
-          '</div>';
-        }).join("")
-      : '<div class="arow-empty">Nenhum login registrado ainda.</div>';
-
-    var tipoLabel = {entrada:"Entrada", saida:"Saída", ajuste:"Ajuste"};
-    var tipoColor = {entrada:"var(--green)", saida:"var(--red)", ajuste:"var(--yellow)"};
-    var movsHtml = movs.length
-      ? movs.map(function(m){
-          var sinal = m.tipo==="saida" ? "-" : (m.tipo==="entrada" ? "+" : (m.qtd>=0?"+":"-"));
-          return '<div class="arow">'+
-            '<span class="d">'+fmtDateTimeBR(m.ts)+'</span>'+
-            '<span class="stats">'+
-              '<span style="color:'+(tipoColor[m.tipo]||"var(--text)")+';font-weight:600;">'+(tipoLabel[m.tipo]||m.tipo)+'</span>'+
-              '<span>'+escHtml(m.medida||"—")+'</span>'+
-              '<span><b>'+sinal+Math.abs(parseNum(m.qtd))+' un.</b></span>'+
-              '<span>'+escHtml(m.email)+'</span>'+
-            '</span>'+
-          '</div>';
-        }).join("")
-      : '<div class="arow-empty">Nenhuma movimentação manual de estoque registrada ainda.</div>';
-
     root.innerHTML =
       '<div class="topbar">'+
-        '<div class="brand"><span class="mark"></span><h1>Histórico</h1><span class="tag">LOGINS · MOVIMENTAÇÕES DE ESTOQUE</span>'+syncBadgeHtml()+'</div>'+
-        '<div class="auth-zone">'+
-          '<button class="btn ghost small" data-act="back">‹ Painel de vendas</button>'+
-          '<button class="btn ghost small" data-act="openestoque">📦 Estoque</button>'+
-          '<button class="btn ghost small" data-act="openclientes">👥 Clientes</button>'+
-          '<button class="btn ghost small" data-act="openusuarios">👤 Usuários</button>'+
-        '</div>'+
+        '<div class="brand"><span class="mark"></span><h1>Painel de Vendas</h1><span class="tag">OFICINA</span>'+syncBadgeHtml()+'</div>'+
+        authZoneHtml()+
       '</div>'+
-
-      '<div class="tbl-head">'+
-        '<div class="tbl-head-left">'+
-          '<button class="btn small'+(tab==="logins"?" primary":" ghost")+'" data-act="historicotab" data-tab="logins">Logins</button> '+
-          '<button class="btn small'+(tab==="estoque"?" primary":" ghost")+'" data-act="historicotab" data-tab="estoque" style="margin-left:8px;">Movimentações de estoque</button>'+
-        '</div>'+
-      '</div>'+
-
-      '<div class="card" style="padding:14px 16px;">'+
-        '<div class="archive-list">'+
-          (tab==="logins" ? loginsHtml : movsHtml)+
-        '</div>'+
-      '</div>';
-
-    root.querySelectorAll("[data-act]").forEach(function(node){
-      node.addEventListener("click", function(){ handleAction(node.getAttribute("data-act"), node); });
-    });
-  }
-
-  // ---------- usuários: criar logins e alterar cargos (somente master) ----------
-  var PAPEIS = ["vendedor","estoquista","master"];
-  function papelLabel(p){ return p==="master" ? "Master" : (p==="estoquista" ? "Estoquista" : "Vendedor"); }
-  function renderUsuarios(){
-    if (!sb){
-      root.innerHTML =
-        '<div class="topbar">'+
-          '<div class="brand"><span class="mark"></span><h1>Usuários</h1>'+syncBadgeHtml()+'</div>'+
-          '<div class="auth-zone"><button class="btn ghost small" data-act="back">‹ Painel de vendas</button></div>'+
-        '</div>'+
-        '<div class="card" style="padding:14px 16px;">Configure o Supabase no início do arquivo para gerenciar usuários.</div>';
-      root.querySelectorAll("[data-act]").forEach(function(node){
-        node.addEventListener("click", function(){ handleAction(node.getAttribute("data-act"), node); });
-      });
-      return;
-    }
-
-    if (!state.usuariosList && !state.usuariosLoading){
-      state.usuariosLoading = true;
-      sb.from("perfis").select("user_id,email,papel").then(function(res){
-        state.usuariosLoading = false;
-        state.usuariosList = (res && res.data) || [];
-        render();
-      }).catch(function(){
-        state.usuariosLoading = false;
-        state.usuariosList = [];
-        render();
-      });
-    }
-
-    var list = state.usuariosList || [];
-    var rowsHtml = list.length
-      ? list.map(function(u){
-          return '<div class="arow">'+
-            '<span class="d">'+escHtml(u.email || u.user_id)+'</span>'+
-            '<span class="stats" style="gap:8px;">'+
-              '<select class="sel-papel" data-uid="'+escAttr(u.user_id)+'" style="background:var(--panel-alt);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:5px 8px;font-size:12.5px;">'+
-                PAPEIS.map(function(p){ return '<option value="'+p+'"'+(u.papel===p?' selected':'')+'>'+papelLabel(p)+'</option>'; }).join("")+
-              '</select>'+
-              '<button class="btn small primary" data-savepapel="'+escAttr(u.user_id)+'">Salvar</button>'+
-            '</span>'+
-          '</div>';
-        }).join("")
-      : (state.usuariosLoading ? '<div class="arow-empty">Carregando usuários...</div>' : '<div class="arow-empty">Nenhum usuário cadastrado ainda.</div>');
-
-    root.innerHTML =
-      '<div class="topbar">'+
-        '<div class="brand"><span class="mark"></span><h1>Usuários</h1><span class="tag">LOGINS E CARGOS</span>'+syncBadgeHtml()+'</div>'+
-        '<div class="auth-zone">'+
-          '<button class="btn ghost small" data-act="back">‹ Painel de vendas</button>'+
-          '<button class="btn ghost small" data-act="openestoque">📦 Estoque</button>'+
-          '<button class="btn ghost small" data-act="openclientes">👥 Clientes</button>'+
-          '<button class="btn ghost small" data-act="openhistorico">🕘 Histórico</button>'+
-        '</div>'+
-      '</div>'+
-
-      '<div class="card" style="padding:14px 16px;margin-bottom:16px;">'+
-        '<h2 style="margin:0 0 12px;font-size:14px;color:var(--text);">Criar novo login</h2>'+
-        '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">'+
-          '<div><label style="display:block;font-size:11.5px;color:var(--text-dim);margin-bottom:4px;">E-mail</label>'+
-            '<input type="email" id="nuEmail" placeholder="email@exemplo.com" style="min-width:220px;"></div>'+
-          '<div><label style="display:block;font-size:11.5px;color:var(--text-dim);margin-bottom:4px;">Senha</label>'+
-            '<input type="password" id="nuSenha" placeholder="Senha (mín. 6 caracteres)"></div>'+
-          '<div><label style="display:block;font-size:11.5px;color:var(--text-dim);margin-bottom:4px;">Cargo</label>'+
-            '<select id="nuPapel" style="background:var(--panel-alt);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:9px 8px;font-size:13px;">'+
-              PAPEIS.map(function(p){ return '<option value="'+p+'">'+papelLabel(p)+'</option>'; }).join("")+
-            '</select></div>'+
-          '<button class="btn primary small" id="nuCreate">Criar login</button>'+
-        '</div>'+
-        '<div class="err" id="nuErr" style="margin-top:8px;"></div>'+
-      '</div>'+
-
-      '<div class="tbl-head">'+
-        '<div class="tbl-head-left"><h2>Usuários cadastrados</h2></div>'+
-      '</div>'+
-      '<div class="card" style="padding:14px 16px;">'+
-        '<div class="archive-list">'+rowsHtml+'</div>'+
-      '</div>';
-
-    root.querySelectorAll("[data-act]").forEach(function(node){
-      node.addEventListener("click", function(){ handleAction(node.getAttribute("data-act"), node); });
-    });
-
-    var createBtn = document.getElementById("nuCreate");
-    if (createBtn){
-      createBtn.addEventListener("click", function(){
-        var errEl = document.getElementById("nuErr");
-        var email = document.getElementById("nuEmail").value.trim();
-        var senha = document.getElementById("nuSenha").value;
-        var papel = document.getElementById("nuPapel").value;
-        errEl.textContent = "";
-        if (!email || !senha){ errEl.textContent = "Preencha e-mail e senha."; return; }
-        if (senha.length < 6){ errEl.textContent = "A senha precisa ter pelo menos 6 caracteres."; return; }
-        var temp = getTempClient();
-        if (!temp){ errEl.textContent = "Não foi possível criar login agora."; return; }
-        createBtn.disabled = true; createBtn.textContent = "Criando...";
-        temp.auth.signUp({email:email, password:senha}).then(function(res){
-          if (res.error){
-            errEl.textContent = res.error.message || "Erro ao criar login.";
-            createBtn.disabled = false; createBtn.textContent = "Criar login";
-            return;
-          }
-          var novo = res.data && res.data.user;
-          if (!novo){
-            errEl.textContent = "Login criado, mas não foi possível concluir o cadastro do cargo.";
-            createBtn.disabled = false; createBtn.textContent = "Criar login";
-            return;
-          }
-          sb.from("perfis").upsert({user_id:novo.id, email:email, papel:papel}).then(function(r2){
-            createBtn.disabled = false; createBtn.textContent = "Criar login";
-            if (r2.error){
-              errEl.textContent = "Login criado, mas não foi possível salvar o cargo: "+r2.error.message;
-            } else {
-              state.usuariosList = null;
-              render();
-            }
-          });
-        });
-      });
-    }
-
-    root.querySelectorAll("[data-savepapel]").forEach(function(btn){
-      btn.addEventListener("click", function(){
-        var uid = btn.getAttribute("data-savepapel");
-        var sel = root.querySelector('select[data-uid="'+uid+'"]');
-        var novoPapel = sel ? sel.value : null;
-        if (!novoPapel) return;
-        btn.disabled = true; btn.textContent = "Salvando...";
-        sb.from("perfis").update({papel:novoPapel}).eq("user_id", uid).then(function(r){
-          btn.disabled = false; btn.textContent = "Salvar";
-          if (r.error){ alert("Não foi possível salvar o cargo: "+r.error.message); }
-          else { state.usuariosList = null; render(); }
-        });
-      });
-    });
-  }
-
-  function authZoneHtml(){
-    var estoquista = state.role==="estoquista";
-    var isMaster = state.role==="master";
-    var backupBtns =
-      '<button class="btn ghost small" data-act="exportbackup" title="Baixa um arquivo com todos os dados salvos neste navegador">Backup</button>'+
-      '<label class="btn ghost small" for="importInput" style="margin:0;">Importar'+
-        '<input type="file" id="importInput" accept="application/json" style="display:none;">'+
-      '</label>'+
-      (sb ? '<button class="btn ghost small" data-act="pushcloud" title="Envia tudo que está salvo neste navegador para a nuvem">↑ Enviar p/ nuvem</button>' : '');
-    var acctLogout = sb ? '<button class="btn ghost small" data-act="accountlogout" title="Sair da sua conta do sistema">Sair da conta</button>' : '';
-    var estoqueBtn = '<button class="btn ghost small" data-act="openestoque" title="Abrir o controle de estoque">📦 Estoque</button>';
-    var clientesBtn = '<button class="btn ghost small" data-act="openclientes" title="Cadastrar e editar clientes">👥 Clientes</button>';
-    var historicoBtn = isMaster ? '<button class="btn ghost small" data-act="openhistorico" title="Ver logins e movimentações de estoque">🕘 Histórico</button>' : '';
-    var usuariosBtn = isMaster ? '<button class="btn ghost small" data-act="openusuarios" title="Criar logins e alterar cargos">👤 Usuários</button>' : '';
-    if (state.authed){
-      return '<div class="auth-zone"><span class="pill on">✓ edição de dias anteriores liberada</span>'+estoqueBtn+clientesBtn+historicoBtn+usuariosBtn+backupBtns+'<button class="btn ghost small" data-act="logout">Sair</button>'+acctLogout+'</div>';
-    }
-    return '<div class="auth-zone">'+estoqueBtn+clientesBtn+historicoBtn+usuariosBtn+backupBtns+'<button class="btn small" data-act="login">Entrar com senha</button>'+acctLogout+'</div>';
-  }
-
-  function bindBackupControls(){
-    var imp = document.getElementById("importInput");
-    if (imp){
-      imp.addEventListener("change", function(e){
-        var file = e.target.files && e.target.files[0];
-        if (file) importBackupFile(file);
-      });
-    }
-  }
-
-  function attachDashboardEvents(){
-    root.querySelectorAll("[data-act]").forEach(function(node){
-      var act = node.getAttribute("data-act");
-      if (act==="opendate") return; // handled after list render for archive rows; hero uses same attr though
-      node.addEventListener("click", function(){ handleAction(act, node); });
-    });
-    // hero-level opendate buttons (yesterday card) need explicit binding too since selector above skips 'opendate'
-    root.querySelectorAll(".card [data-act=opendate]").forEach(function(node){
-      node.addEventListener("click", function(){ openDate(node.getAttribute("data-date")); });
-    });
-  }
-
-  function handleAction(act, node){
-    if (act==="prevmonth"){ state.dashMonth = addMonths(state.dashMonth,-1); render(); }
-    else if (act==="nextmonth"){ state.dashMonth = addMonths(state.dashMonth,1); render(); }
-    else if (act==="opentoday"){ openDate(today); }
-    else if (act==="login"){ state.modal = {type:"auth", error:""}; render(); }
-    else if (act==="logout"){ state.authed=false; sessionStorage.removeItem("vf_auth"); render(); }
-    else if (act==="back"){ state.view="dashboard"; render(); }
-    else if (act==="addrow"){ addRow(); }
-    else if (act==="prevday"){ openDate(addDays(state.date,-1)); }
-    else if (act==="nextday"){ openDate(addDays(state.date,1)); }
-    else if (act==="exportbackup"){ exportBackup(); }
-    else if (act==="pushcloud"){
-      var n = pushAllLocalToCloud();
-      alert(n>0 ? "Enviando "+n+" registro(s) deste navegador para a nuvem…" : "Não há dados salvos neste navegador para enviar.");
-    }
-    else if (act==="accountlogout"){
-      if (sb) sb.auth.signOut().then(function(){ location.reload(); });
-    }
-    else if (act==="togglehide"){
-      state.hideValues = !state.hideValues;
-      sessionStorage.setItem("vf_hide", state.hideValues?"1":"0");
-      render();
-    }
-    else if (act==="printnote"){
-      state.modal = {type:"selectCustomer", rowId: node.getAttribute("data-id"), purpose:"print"};
-      render();
-    }
-    else if (act==="sendwhatsapp"){
-      state.modal = {type:"selectCustomer", rowId: node.getAttribute("data-id"), purpose:"whatsapp"};
-      render();
-    }
-    else if (act==="openestoque"){ state.view="estoque"; render(); }
-    else if (act==="openclientes"){ state.clientesDetailId = null; state.view="clientes"; render(); }
-    else if (act==="clientenew"){ state.modal = {type:"customerForm", error:""}; renderModal(); }
-    else if (act==="clientedit"){ state.modal = {type:"customerForm", customerId: node.getAttribute("data-id"), error:""}; renderModal(); }
-    else if (act==="openhistorico"){ if (state.role==="master"){ state.view="historico"; state.historicoTab = state.historicoTab || "logins"; render(); } }
-    else if (act==="historicotab"){ state.historicoTab = node.getAttribute("data-tab"); render(); }
-    else if (act==="openusuarios"){ if (state.role==="master"){ state.view="usuarios"; render(); } }
-    else if (act==="selectmedida"){
-      state.modal = {type:"selectMedida", rowId: node.getAttribute("data-id")};
-      render();
-    }
-    else if (act==="printestoque"){
-      openPrintWindow(buildEstoqueReportHtml(estoqueSorted(), state.role==="estoquista"));
-    }
-    else if (act==="estoquenew"){
-      state.modal = {type:"estoqueForm", itemId:null, error:""};
-      render();
-    }
-    else if (act==="togglepending"){
-      state.onlyPending = !state.onlyPending;
-      renderTable();
-    }
-    else if (act==="togglemorefields"){
-      state.showAdvancedCols = !state.showAdvancedCols;
-      try{ localStorage.setItem("vo_show_advanced", state.showAdvancedCols?"1":"0"); }catch(e){}
-      renderTable();
-    }
-    else if (act==="linkcustomer"){
-      state.modal = {type:"selectCustomer", rowId: node.getAttribute("data-id"), purpose:"link"};
-      render();
-    }
-    else if (act==="duplicaterow"){
-      duplicateRow(node.getAttribute("data-id"));
-    }
-    else if (act==="garantia"){
-      state.modal = {type:"garantiaForm", medidaId:"", qtd:"", error:""};
-      render();
-    }
-  }
-
-  function openDate(iso){
-    state.date = iso;
-    state.view = "table";
-    state.openDetails = {};
-    getRows(iso).then(function(rows){
-      state.rows = rows;
-      render();
-    });
-  }
-
-  // ---------- table view ----------
-  function isEditable(dateIso){
-    return dateIso === today || state.authed;
+      '<div class="yellow-sub-bar"></div>'+
+      '<div class="hero"><div class="hero-left"><h2>Bem-vindo ao Painel</h2></div></div>'+
+      '<button class="btn primary" data-act="opentoday">Abrir Tabela do Dia →</button>';
+    
+    attachGlobalEvents();
   }
 
   function renderTable(){
-    var editable = isEditable(state.date);
-    var isToday = state.date === today;
-    var t = computeTotals();
+    getRows(state.date).then(function(rows){
+      state.rows = rows;
+      
+      var filteredRows = state.rows.filter(function(r){
+        if (state.onlyPending) return r.pago === "❌";
+        return true;
+      });
 
-    var cols = visibleColumns();
-    var colTemplate = cols.map(function(c){return c.w;}).join(" ") + " " + ROWACTIONS_W;
+      var totalGeral = 0;
+      filteredRows.forEach(function(r){ totalGeral += computeValor(r); });
 
-    var pendentesCount = state.rows.filter(function(r){ return r.pago!=="✅"; }).length;
-    var displayRows = state.onlyPending ? state.rows.filter(function(r){ return r.pago!=="✅"; }) : state.rows;
-    var hiddenColsCount = COLUMNS.filter(function(c){return c.advanced;}).length;
-
-    root.innerHTML =
-      '<div class="topbar">'+
-        '<button class="backlink" data-act="back">‹ Painel</button>'+
-        syncBadgeHtml()+
-        authZoneHtml()+
-      '</div>'+
-
-      '<div class="tbl-head">'+
-        '<div class="tbl-head-left">'+
-          '<div class="day-nav"><button data-act="prevday">‹</button><button data-act="nextday">›</button></div>'+
-          '<h2>'+escHtml(weekdayLabel(state.date))+'</h2>'+
-          '<span class="save-flag" id="saveFlag">salvo</span>'+
+      root.innerHTML =
+        '<div class="topbar">'+
+          '<div class="brand"><span class="mark"></span><h1>Painel de Vendas</h1>'+syncBadgeHtml()+'</div>'+
+          authZoneHtml()+
         '</div>'+
-        '<div style="display:flex;align-items:center;gap:8px;">'+
-          (editable
-            ? '<button class="btn primary" data-act="addrow">+ Adicionar linha</button>'
-            : '<span style="display:flex;align-items:center;gap:8px;"><span class="pill">somente leitura</span><button class="btn small" data-act="login">Entrar com senha para editar</button></span>'
-          )+
-        '</div>'+
-      '</div>'+
-      (!isToday && !editable ? '<p style="color:var(--text-faint);font-size:12.5px;margin:-8px 2px 14px;">Esta é uma data anterior — apenas hoje pode ser editado sem senha.</p>' : '')+
+        '<div class="yellow-sub-bar"></div>'+
 
-      (state.rows.length===0 ? '' :
-        '<div class="tbl-toolbar">'+
-          '<button class="btn small'+(state.onlyPending?' primary':' ghost')+'" data-act="togglepending" title="Mostrar só as vendas ainda não pagas">'+
-            (state.onlyPending ? "✕ Mostrando só pendentes" : "🔍 Só pendentes")+
-            (pendentesCount>0 ? ' <span class="count-badge">'+pendentesCount+'</span>' : '')+
-          '</button>'+
-          '<button class="btn small ghost" data-act="togglemorefields" title="'+(state.showAdvancedCols?'Esconder os campos usados com menos frequência':'Mostrar todos os campos, incluindo os usados com menos frequência')+'">'+
-            (state.showAdvancedCols ? "▲ Mostrar menos campos" : "▼ Mostrar mais campos ("+hiddenColsCount+")")+
-          '</button>'+
-        '</div>'
-      )+
+        /* CÓDIGO UNIFICADO PARA ROLAGEM JUNTO (STICKY HEAD BLOCK) */
+        '<div class="sticky-head-block">'+
+          '<div class="tbl-head">'+
+            '<div class="tbl-head-left">'+
+              '<h2>Tabela de Vendas (' + fmtDateBR(state.date) + ')</h2>'+
+            '</div>'+
+          '</div>'+
 
-      '<div class="sticky-head-block">'+
-        '<div class="totals-bar">'+
-          tstat("Valor", fmtCurrency(t.valor), true)+
-          tstat("Qtd. bicos", t.qtdBicos)+
-          tstat("Bicos", fmtCurrency(t.valorBicos))+
-          tstat("Qtd. cambagem", t.qtdCambagem)+
-          tstat("Cambagem", fmtCurrency(t.valorCambagem))+
-          tstat("Qtd. rodas", t.qtdRodas)+
-          tstat("Rodas", fmtCurrency(t.valorRodas))+
-          tstat("Valor das peças", fmtCurrency(t.valorPecas))+
-          tstat("Mão de obra", fmtCurrency(t.maoDeObra))+
+          '<div class="totals-bar">'+
+            '<div class="tstat"><div class="k">TOTAL REGISTRADO</div><div class="v accent">'+fmtCurrency(totalGeral)+'</div></div>'+
+            '<div class="tstat"><div class="k">QTD. VENDAS</div><div class="v">'+filteredRows.length+'</div></div>'+
+          '</div>'+
+
+          '<div class="tbl-toolbar">'+
+            '<button class="btn small '+(state.onlyPending?'primary':'ghost')+'" data-act="toggle-pending">'+(state.onlyPending?'✓ Só Pendentes':'Só Pendentes')+'</button>'+
+            '<button class="btn small ghost" data-act="toggle-advanced">'+(state.showAdvancedCols?'Mostrar menos':'Mostrar mais')+'</button>'+
+          '</div>'+
+
+          '<div class="grid-scroll-head">'+
+            '<div class="grid-row head" style="grid-template-columns: repeat('+COLUMNS.length+', 120px) '+ROWACTIONS_W+';">'+
+              COLUMNS.map(function(c){ return '<div class="cell">'+escHtml(c.label)+'</div>'; }).join("")+
+              '<div class="cell head-actions-cell">Ações</div>'+
+            '</div>'+
+          '</div>'+
         '</div>'+
 
-        '<div class="totals-bar" style="margin-top:8px;">'+
-          tstat("💵 Dinheiro", fmtCurrency(t.porPagamento["Dinheiro"]))+
-          tstat("📲 Pix", fmtCurrency(t.porPagamento["Pix"]))+
-          tstat("💳 Débito", fmtCurrency(t.porPagamento["Débito"]))+
-          tstat("💳 Crédito", fmtCurrency(t.porPagamento["Crédito"]))+
+        '<div class="grid-scroll">'+
+          '<div id="gridInner">'+
+            filteredRows.map(function(row, idx){
+              var totalRow = computeValor(row);
+              var customer = loadCustomers().filter(function(c){ return c.id === row.clienteId; })[0];
+              
+              return '<div class="grid-row data" style="grid-template-columns: repeat('+COLUMNS.length+', 120px) '+ROWACTIONS_W+';">'+
+                COLUMNS.map(function(col){
+                  if (col.type === "computed") {
+                    return '<div class="cell"><input class="cellval computed" readonly value="'+fmtCurrency(totalRow)+'"></div>';
+                  }
+                  return '<div class="cell"><input class="cellval" value="'+escAttr(row[col.key]||"")+'" data-rowid="'+row.id+'" data-key="'+col.key+'"></div>';
+                }).join("")+
+                '<div class="cell rowactions">'+
+                  '<button class="icon-btn cli-btn '+(customer?'has':'')+'" data-act="link-cli" data-rowid="'+row.id+'" title="'+(customer?'Ver Cliente: '+customer.nome:'Vincular Cliente')+'">👤</button>'+
+                  '<button class="icon-btn print-btn" data-act="print-row" data-rowid="'+row.id+'" title="Imprimir Nota">🖨️</button>'+
+                  '<button class="icon-btn del-btn" data-act="del-row" data-rowid="'+row.id+'" title="Apagar Line">✕</button>'+
+                '</div>'+
+              '</div>';
+            }).join("")+
+          '</div>'+
         '</div>'+
-
-        (state.rows.length===0 ? '' : '<div class="grid-scroll-head">'+gridHeadHtml(colTemplate, editable, cols)+'</div>')+
-      '</div>'+
-
-      (state.rows.length===0
-        ? emptyStateHtml(editable)
-        : (displayRows.length===0
-            ? '<div class="empty-state"><p>Nenhuma venda pendente — tudo pago por aqui. 🎉</p>'+
-                '<button class="btn ghost small" data-act="togglepending">Mostrar todas as vendas</button></div>'
-            : '<div class="grid-scroll"><div id="gridInner">'+
-                displayRows.map(function(r){ return rowHtml(r, colTemplate, editable, cols); }).join("")+
-              '</div></div>'
-          )
-      )+
-
-      '<div class="tbl-footer">'+
-        (editable && state.rows.length>0 ? '<button class="btn ghost small" data-act="addrow">+ Adicionar linha</button>' : '<span></span>')+
-        '<span></span>'+
-      '</div>';
-
-    attachTableEvents();
-    bindBackupControls();
-    scheduleFitGrid();
-    syncHeadScroll();
-  }
-
-  // no celular a tabela permite arrastar de lado; isso mantém o cabeçalho
-  // (Quantidade, Medida, Serviço...) alinhado com as colunas enquanto arrasta
-  function syncHeadScroll(){
-    var headWrap = document.querySelector(".grid-scroll-head");
-    var rowsWrap = document.querySelector(".grid-scroll");
-    if (!headWrap || !rowsWrap) return;
-    rowsWrap.addEventListener("scroll", function(){ headWrap.scrollLeft = rowsWrap.scrollLeft; });
-    headWrap.addEventListener("scroll", function(){ rowsWrap.scrollLeft = headWrap.scrollLeft; });
-  }
-
-  function tstat(label, val, accent){
-    return '<div class="tstat"><div class="k">'+escHtml(label)+'</div><div class="v'+(accent?' accent':'')+'">'+val+'</div></div>';
-  }
-
-  function emptyStateHtml(editable){
-    return '<div class="empty-state">'+
-      '<p>'+(editable ? "Nenhuma venda registrada nesta data ainda." : "Nenhuma venda registrada nesta data.")+'</p>'+
-      (editable ? '<button class="btn primary" data-act="addrow">+ Adicionar primeira linha</button>' : '')+
-      '</div>';
-  }
-
-  function gridHeadHtml(colTemplate, editable, cols){
-    var cells = (cols||visibleColumns()).map(function(c){ return '<div class="cell">'+escHtml(c.label)+'</div>'; }).join("");
-    cells += '<div class="cell head-actions-cell">'+
-      '<button class="btn small ghost" data-act="garantia" title="Dar baixa no estoque por troca em garantia (sem gerar venda)">🛡️ Garantia</button>'+
-    '</div>';
-    return '<div class="grid-row head" style="grid-template-columns:'+colTemplate+'">'+cells+'</div>';
-  }
-
-  // nome do cliente vinculado direto à linha (ligado sem precisar imprimir a nota)
-  function customerNameById(id){
-    if (!id) return "";
-    var c = loadCustomers().filter(function(x){ return x.id===id; })[0];
-    return c ? c.nome : "";
-  }
-
-  function rowHtml(row, colTemplate, editable, cols){
-    var valor = computeValor(row);
-    var cells = (cols||visibleColumns()).map(function(c){ return cellHtml(row, c, editable, valor); }).join("");
-    var custName = customerNameById(row.clienteId);
-    cells += '<div class="cell rowactions">'+
-      '<button class="icon-btn cli-btn'+(custName?' has':'')+'" data-act="linkcustomer" data-id="'+row.id+'" title="'+(custName?('Cliente: '+escAttr(custName)+' — clique para alterar'):'Vincular cliente a esta linha')+'">👤</button>'+
-      '<button class="icon-btn print-btn" data-act="printnote" data-id="'+row.id+'" title="Imprimir nota">🖨</button>'+
-      '<button class="icon-btn wa-btn" data-act="sendwhatsapp" data-id="'+row.id+'" title="Enviar por WhatsApp">💬</button>'+
-      (editable ? '<button class="icon-btn dup-btn" data-act="duplicaterow" data-id="'+row.id+'" title="Duplicar linha (repete os dados, menos a medida do pneu)">⧉</button>' : '')+
-      (editable ? '<button class="icon-btn" data-act="delrow" data-id="'+row.id+'" title="Remover linha">✕</button>' : '')+
-      '</div>';
-    var open = !!state.openDetails[row.id];
-    var mainRow = '<div class="grid-row data" style="grid-template-columns:'+colTemplate+'" data-row="'+row.id+'">'+cells+'</div>';
-    var toggleRow = '<div class="grid-row" style="grid-template-columns:'+colTemplate+'">'+
-      '<div class="detail-toggle-row"><button class="detail-toggle'+(open?' open':'')+'" data-act="toggledetail" data-id="'+row.id+'"><span class="car">▸</span> detalhes da venda</button></div>'+
-      '</div>';
-    var detailRow = "";
-    if (open){
-      detailRow = '<div class="grid-row" style="grid-template-columns:'+colTemplate+'">'+
-        '<div class="detail-box"><label>Observações / detalhes extras</label>'+
-        '<textarea data-field="detalhes" data-id="'+row.id+'" '+(editable?"":"disabled")+' placeholder="'+(editable?'Ex: cliente pediu retorno em 30 dias, garantia, observações...':'')+'">'+escHtml(row.detalhes||"")+'</textarea>'+
-        '</div></div>';
-    }
-    return mainRow + toggleRow + detailRow;
-  }
-
-  function cellHtml(row, col, editable, computedValor){
-    var val = row[col.key];
-    var mismatch = pairMismatch(row, col.key);
-    var cellClass = "cell"+(mismatch?" cell-warn":"");
-    var warnTitle = mismatch ? ' title="Confira: a quantidade e o valor deste grupo não batem"' : '';
-    if (col.type==="computed"){
-      return '<div class="'+cellClass+'"><input class="cellval computed" value="'+escAttr(fmtCurrency(computedValor))+'" disabled></div>';
-    }
-    if (col.type==="medida"){
-      return '<div class="'+cellClass+'"><button class="medida-btn'+(row.medida?' has':'')+'" data-act="selectmedida" data-id="'+row.id+'" '+(editable?"":"disabled")+' title="Escolher a medida do pneu">'+
-        escHtml(row.medida || "Escolher medida")+'</button></div>';
-    }
-    if (col.type==="select"){
-      var opts = col.options.map(function(o){
-        return '<option value="'+escAttr(o)+'"'+(o===val?" selected":"")+'>'+escHtml(o)+'</option>';
-      }).join("");
-      var selectHtml = '<select class="cellval" data-field="'+col.key+'" data-id="'+row.id+'" '+(editable?"":"disabled")+'>'+opts+'</select>';
-      if (col.key==="formaPagamento" && val && val.indexOf("/")>-1){
-        var selectHtmlNarrow = '<select class="cellval" data-field="'+col.key+'" data-id="'+row.id+'" '+(editable?"":"disabled")+' style="flex:1;min-width:0;">'+opts+'</select>';
-        return '<div class="'+cellClass+'" style="display:flex;gap:4px;align-items:center;">'+selectHtmlNarrow+
-          '<button class="icon-btn" data-act="splitpag" data-id="'+row.id+'" title="Definir quanto foi em cada forma de pagamento" style="flex:0 0 auto;">÷</button>'+
+        '<div class="tbl-footer">'+
+          '<button class="btn primary" data-act="add-row">+ Adicionar Venda</button>'+
         '</div>';
-      }
-      if (col.key==="formaPagamento" && val && val.indexOf("Múltiplo")===0){
-        var selectHtmlNarrow2 = '<select class="cellval" data-field="'+col.key+'" data-id="'+row.id+'" '+(editable?"":"disabled")+' style="flex:1;min-width:0;">'+opts+'</select>';
-        return '<div class="'+cellClass+'" style="display:flex;gap:4px;align-items:center;">'+selectHtmlNarrow2+
-          '<button class="icon-btn" data-act="multipag" data-id="'+row.id+'" title="Dividir entre até 4 formas de pagamento" style="flex:0 0 auto;">⚙</button>'+
-        '</div>';
-      }
-      return '<div class="'+cellClass+'"'+warnTitle+'>'+selectHtml+'</div>';
-    }
-    if (col.type==="number"){
-      return '<div class="'+cellClass+'"><input class="cellval" type="text" inputmode="numeric" data-field="'+col.key+'" data-id="'+row.id+'" value="'+escAttr(val)+'" '+(editable?"":"disabled")+' placeholder="0"></div>';
-    }
-    // currency free text
-    return '<div class="'+cellClass+'"'+warnTitle+'><input class="cellval" type="text" inputmode="decimal" data-field="'+col.key+'" data-id="'+row.id+'" value="'+escAttr(val)+'" '+(editable?"":"disabled")+' placeholder="R$ 0,00"></div>';
-  }
 
-  function computeTotals(){
-    var t = {valor:0, qtdBicos:0, valorBicos:0, qtdCambagem:0, valorCambagem:0, qtdRodas:0, valorRodas:0, valorPecas:0, maoDeObra:0,
-              porPagamento:{"Dinheiro":0, "Pix":0, "Débito":0, "Crédito":0}};
-    state.rows.forEach(function(r){
-      t.valor += computeValor(r);
-      t.qtdBicos += parseNum(r.qtdBicos);
-      t.valorBicos += parseNum(r.valorBicos);
-      t.qtdCambagem += parseNum(r.qtdCambagem);
-      t.valorCambagem += parseNum(r.valorCambagem);
-      t.qtdRodas += parseNum(r.qtdRodas);
-      t.valorRodas += parseNum(r.valorRodas);
-      t.valorPecas += parseNum(r.valorPecas);
-      t.maoDeObra += parseNum(r.maoDeObra);
-      var pb = paymentBreakdown(r);
-      t.porPagamento["Dinheiro"] += pb["Dinheiro"];
-      t.porPagamento["Pix"] += pb["Pix"];
-      t.porPagamento["Débito"] += pb["Débito"];
-      t.porPagamento["Crédito"] += pb["Crédito"];
+      attachGlobalEvents();
     });
-    t.qtdBicos = t.qtdBicos.toFixed(0);
-    t.qtdCambagem = t.qtdCambagem.toFixed(0);
-    t.qtdRodas = t.qtdRodas.toFixed(0);
-    return t;
   }
 
-  // colunas realmente exibidas na tabela agora (algumas ficam escondidas por padrão)
-  function visibleColumns(){
-    return COLUMNS.filter(function(c){ return !c.advanced || state.showAdvancedCols; });
+  function attachGlobalEvents(){
+    document.querySelectorAll("[data-act]").forEach(function(btn){
+      btn.onclick = function(e){
+        var act = btn.getAttribute("data-act");
+        if (act==="opentoday" || act==="nav-today"){ state.view="table"; state.date=today; render(); }
+        if (act==="nav-dash"){ state.view="dashboard"; render(); }
+        if (act==="toggle-pending"){ state.onlyPending = !state.onlyPending; render(); }
+        if (act==="toggle-advanced"){ state.showAdvancedCols = !state.showAdvancedCols; localStorage.setItem("vo_show_advanced", state.showAdvancedCols?"1":"0"); render(); }
+        if (act==="add-row"){ state.rows.push(newRow()); saveRows(state.date, state.rows).then(render); }
+        if (act==="del-row"){
+          var id = btn.getAttribute("data-rowid");
+          state.rows = state.rows.filter(function(r){ return r.id!==id; });
+          saveRows(state.date, state.rows).then(render);
+        }
+        if (act==="open-orcamento"){
+          openOrcamentoModal();
+        }
+        if (act==="link-cli"){
+          var rowId = btn.getAttribute("data-rowid");
+          openClienteViewOrLinkModal(rowId);
+        }
+      };
+    });
+
+    document.querySelectorAll(".cellval").forEach(function(inp){
+      inp.onchange = function(){
+        var rid = inp.getAttribute("data-rowid");
+        var key = inp.getAttribute("data-key");
+        if (!rid || !key) return;
+        state.rows.forEach(function(r){ if(r.id===rid) r[key] = inp.value; });
+        saveRows(state.date, state.rows);
+      };
+    });
   }
-  // detecta quantidade e valor de um mesmo grupo (bicos, cambagem, balanceamento, rodas) que não batem
-  function pairMismatch(row, key){
-    for (var i=0;i<QTY_VALUE_PAIRS.length;i++){
-      var qtyKey = QTY_VALUE_PAIRS[i][0], valKey = QTY_VALUE_PAIRS[i][1];
-      if (key!==qtyKey && key!==valKey) continue;
-      var qty = parseNum(row[qtyKey]);
-      var val = parseNum(row[valKey]);
-      return (qty>0 && val===0) || (qty===0 && val>0);
-    }
-    return false;
-  }
-  // duplica uma linha (mesmo serviço, carro, forma de pagamento etc.) — a medida do pneu
-  // não é copiada, pra não confundir o controle de estoque com uma baixa que nunca aconteceu
-  function duplicateRow(id){
-    var row = state.rows.filter(function(r){ return r.id===id; })[0];
+
+  /* ---- NOVO SISTEMA DE VER CLIENTE VINCULADO OU VINCULAR OUTRO ---- */
+  function openClienteViewOrLinkModal(rowId){
+    var row = state.rows.filter(function(r){ return r.id===rowId; })[0];
     if (!row) return;
-    var copy = {};
-    Object.keys(row).forEach(function(k){ copy[k] = row[k]; });
-    copy.id = uid();
-    copy.medida = ""; copy.medidaId = ""; copy.medidaBaixa = 0;
-    var idx = state.rows.indexOf(row);
-    state.rows.splice(idx+1, 0, copy);
-    renderTable();
-    scheduleSave();
-  }
-  // ---------- toast de "desfazer" (usado ao apagar uma linha) ----------
-  var undoState = null; // {timer, node}
-  function dismissUndoToast(){
-    if (!undoState) return;
-    clearTimeout(undoState.timer);
-    if (undoState.node && undoState.node.parentNode) undoState.node.parentNode.removeChild(undoState.node);
-    undoState = null;
-  }
-  function showUndoToast(message, onUndo){
-    dismissUndoToast(); // só um toast de cada vez — o anterior vira definitivo
-    var node = document.createElement("div");
-    node.className = "undo-toast";
-    node.innerHTML = '<span>'+escHtml(message)+'</span><button type="button" class="undo-btn">Desfazer</button>';
-    document.body.appendChild(node);
-    var timer = setTimeout(function(){ dismissUndoToast(); }, 5000);
-    undoState = {timer:timer, node:node};
-    node.querySelector(".undo-btn").addEventListener("click", function(){
-      dismissUndoToast();
-      onUndo();
-    });
-  }
 
-  function attachTableEvents(){
-    root.querySelectorAll("[data-act]").forEach(function(node){
-      var act = node.getAttribute("data-act");
-      if (act==="delrow" || act==="toggledetail" || act==="splitpag" || act==="multipag") return;
-      node.addEventListener("click", function(){ handleAction(act, node); });
-    });
-    root.querySelectorAll("[data-act=delrow]").forEach(function(node){
-      node.addEventListener("click", function(){ delRow(node.getAttribute("data-id")); });
-    });
-    root.querySelectorAll("[data-act=toggledetail]").forEach(function(node){
-      node.addEventListener("click", function(){
-        var id = node.getAttribute("data-id");
-        state.openDetails[id] = !state.openDetails[id];
-        renderTable();
-      });
-    });
-    root.querySelectorAll("[data-act=splitpag]").forEach(function(node){
-      node.addEventListener("click", function(){
-        var id = node.getAttribute("data-id");
-        var row = state.rows.filter(function(r){return r.id===id;})[0];
-        if (!row) return;
-        var fp = row.formaPagamento || "";
-        var parts = fp.split("/");
-        if (parts.length!==2) return;
-        var total = computeValor(row);
-        var atual = (row.splitValor!==undefined && row.splitValor!==null && row.splitValor!=="") ? parseNum(row.splitValor) : total/2;
-        var resp = window.prompt(
-          "Total da venda: "+fmtCurrency(total)+"\nQuanto foi pago em "+parts[0]+"? (o restante vai automaticamente para "+parts[1]+")",
-          atual.toFixed(2).replace(".", ",")
-        );
-        if (resp===null) return; // cancelou
-        var n = parseNum(resp);
-        if (isNaN(n)) return;
-        n = Math.max(0, Math.min(n, total));
-        row.splitValor = n;
-        updateLiveDisplays();
-        scheduleSave();
-      });
-    });
-    root.querySelectorAll("[data-act=multipag]").forEach(function(node){
-      node.addEventListener("click", function(){
-        var id = node.getAttribute("data-id");
-        state.modal = {type:"multiPag", rowId: id};
-        renderModal();
-      });
-    });
-    root.querySelectorAll("[data-field]").forEach(function(node){
-      var handler = function(){
-        var id = node.getAttribute("data-id");
-        var field = node.getAttribute("data-field");
-        var row = state.rows.filter(function(r){return r.id===id;})[0];
-        if (!row) return;
-        if (field==="formaPagamento") { delete row.splitValor; delete row.pagamentosMultiplos; } // forma mudou: descarta divisões manuais antigas
-        row[field] = node.value;
-        // mudou a quantidade de uma linha que já tem medida escolhida: acerta a baixa no estoque
-        if (field==="quantidade" && row.medidaId) syncRowEstoque(row);
-        if (field==="formaPagamento"){
-          // precisa redesenhar a linha pra mostrar (ou esconder) na hora o botão "÷"/"⚙" de dividir o pagamento
-          scheduleSave();
-          renderTable();
-          if (row.formaPagamento && row.formaPagamento.indexOf("Múltiplo")===0){
-            // já abre a divisão, já que aqui não existe um "meio a meio" padrão como nas combinações de 2 formas
-            state.modal = {type:"multiPag", rowId: row.id};
-            renderModal();
-          }
-          return;
-        }
-        if (field!=="detalhes"){
-          // live-update totals & computed valor without full re-render jank: simplest is re-render totals bar + this row's computed cell
-          updateLiveDisplays();
-        }
-        scheduleSave();
+    var customer = loadCustomers().filter(function(c){ return c.id === row.clienteId; })[0];
+
+    if (customer) {
+      // Já existe cliente vinculado -> Mostrar Dados do Cliente
+      state.modal = {
+        type: 'view_customer',
+        rowId: rowId,
+        customer: customer
       };
-      if (node.tagName==="SELECT"){
-        node.addEventListener("change", handler);
-      } else if (node.tagName==="TEXTAREA"){
-        node.addEventListener("input", handler);
-      } else {
-        node.addEventListener("input", handler);
-      }
-    });
-  }
-
-  function updateLiveDisplays(){
-    var t = computeTotals();
-    var bars = document.querySelectorAll(".totals-bar");
-    var bar = bars[0], payBar = bars[1];
-    if (bar){
-      bar.innerHTML =
-        tstat("Valor", fmtCurrency(t.valor), true)+
-        tstat("Qtd. bicos", t.qtdBicos)+
-        tstat("Bicos", fmtCurrency(t.valorBicos))+
-        tstat("Qtd. cambagem", t.qtdCambagem)+
-        tstat("Cambagem", fmtCurrency(t.valorCambagem))+
-        tstat("Qtd. rodas", t.qtdRodas)+
-        tstat("Rodas", fmtCurrency(t.valorRodas))+
-        tstat("Valor das peças", fmtCurrency(t.valorPecas))+
-        tstat("Mão de obra", fmtCurrency(t.maoDeObra));
-    }
-    if (payBar){
-      payBar.innerHTML =
-        tstat("💵 Dinheiro", fmtCurrency(t.porPagamento["Dinheiro"]))+
-        tstat("📲 Pix", fmtCurrency(t.porPagamento["Pix"]))+
-        tstat("💳 Débito", fmtCurrency(t.porPagamento["Débito"]))+
-        tstat("💳 Crédito", fmtCurrency(t.porPagamento["Crédito"]));
-    }
-    state.rows.forEach(function(r){
-      var rowNode = document.querySelector('.grid-row[data-row="'+r.id+'"]');
-      if (!rowNode) return;
-      var computedInput = rowNode.querySelector('input.computed');
-      if (computedInput) computedInput.value = fmtCurrency(computeValor(r));
-    });
-  }
-
-  function addRow(){
-    state.rows.push(newRow());
-    renderTable();
-    scheduleSave();
-  }
-  function delRow(id){
-    var idx = -1;
-    for (var i=0;i<state.rows.length;i++){ if (state.rows[i].id===id){ idx=i; break; } }
-    if (idx===-1) return;
-    var row = state.rows[idx];
-    releaseRowEstoque(row); // devolve pro estoque o que essa linha havia baixado
-    state.rows.splice(idx, 1);
-    delete state.openDetails[id];
-    renderTable();
-    scheduleSave();
-    showUndoToast("Linha apagada", function(){
-      state.rows.splice(idx, 0, row);
-      syncRowEstoque(row); // baixa de novo o estoque que tinha sido devolvido
-      renderTable();
-      scheduleSave();
-    });
-  }
-
-  function scheduleSave(){
-    state.saving = true;
-    clearTimeout(saveTimer);
-    clearTimeout(autoBackupTimer);
-    autoBackupTimer = setTimeout(function(){ autoBackupToStorage(); }, AUTO_BACKUP_IDLE_MS);
-    saveTimer = setTimeout(function(){
-      saveRows(state.date, state.rows).then(function(){
-        state.saving = false;
-        var flag = document.getElementById("saveFlag");
-        if (flag){
-          flag.textContent = "salvo ✓";
-          flag.classList.add("show");
-          setTimeout(function(){ flag.classList.remove("show"); }, 1400);
-        }
-        // invalidate cached month summary so dashboard reflects new totals next visit
-        delete state.monthSummaryCache[state.date.slice(0,7)];
-        delete state.monthPartsCache[state.date.slice(0,7)];
-      }).catch(function(err){
-        state.saving = false;
-        var flag = document.getElementById("saveFlag");
-        if (flag){
-          flag.style.color = "var(--red)";
-          flag.textContent = "erro ao salvar";
-          flag.classList.add("show");
-        }
-        alert("Não foi possível salvar as alterações. " + (err && err.message ? err.message : "Verifique o espaço de armazenamento do navegador."));
-      });
-    }, 550);
-  }
-
-  // ---------- auth modal ----------
-  function renderModal(){
-    var ex = document.querySelector(".overlay");
-    if (ex) ex.remove();
-    if (!state.modal) return;
-    if (state.modal.type==="selectCustomer") renderSelectCustomerModal();
-    else if (state.modal.type==="customerForm") renderCustomerFormModal();
-    else if (state.modal.type==="selectMedida") renderSelectMedidaModal();
-    else if (state.modal.type==="estoqueForm") renderEstoqueFormModal();
-    else if (state.modal.type==="garantiaForm") renderGarantiaFormModal();
-    else if (state.modal.type==="multiPag") renderMultiPagModal();
-    else renderAuthModal();
-  }
-
-  function renderAuthModal(){
-    var div = document.createElement("div");
-    div.className = "overlay";
-    div.innerHTML =
-      '<div class="modal">'+
-        '<h3>Entrar em modo edição</h3>'+
-        '<p>Informe a senha para editar tabelas de dias anteriores. A tabela de hoje pode ser editada sem senha.</p>'+
-        '<input type="password" id="pwInput" placeholder="Senha" autocomplete="off">'+
-        '<div class="err">'+(state.modal.error||"")+'</div>'+
-        '<div class="modal-actions">'+
-          '<button class="btn ghost small" id="pwCancel">Cancelar</button>'+
-          '<button class="btn primary small" id="pwOk">Entrar</button>'+
-        '</div>'+
-      '</div>';
-    document.body.appendChild(div);
-    var input = document.getElementById("pwInput");
-    input.focus();
-    function tryAuth(){
-      if (input.value === PASSWORD){
-        state.authed = true;
-        sessionStorage.setItem("vf_auth","1");
-        state.modal = null;
-        render();
-      } else {
-        state.modal.error = "Senha incorreta.";
-        render();
-      }
-    }
-    document.getElementById("pwOk").addEventListener("click", tryAuth);
-    document.getElementById("pwCancel").addEventListener("click", function(){ state.modal=null; render(); });
-    input.addEventListener("keydown", function(e){ if (e.key==="Enter") tryAuth(); });
-    div.addEventListener("click", function(e){ if (e.target===div){ state.modal=null; render(); } });
-  }
-
-  // ---------- modal: selecionar cliente ----------
-  function renderSelectCustomerModal(){
-    var div = document.createElement("div");
-    div.className = "overlay";
-    var customers = loadCustomers();
-    var rowId = state.modal.rowId;
-    var purpose = state.modal.purpose||"print";
-    var currentRow = state.rows.filter(function(r){return r.id===rowId;})[0];
-    var listHtml = customers.length
-      ? customers.map(function(c){
-          var sub = [customerDocLabel(c), c.telefone].filter(Boolean).join(" \u00b7 ");
-          var search = ((c.nome||"")+" "+(customerDocInfo(c).documento||"")+" "+(c.telefone||"")).toLowerCase();
-          return '<button class="cust-item" data-cid="'+escAttr(c.id)+'" data-search="'+escAttr(search)+'">'+
-            '<span class="cust-name">'+escHtml(c.nome)+'</span>'+
-            (sub ? '<span class="cust-sub">'+escHtml(sub)+'</span>' : '')+
-          '</button>';
-        }).join("")
-      : '<div class="cust-empty">Nenhum cliente cadastrado ainda.</div>';
-    div.innerHTML =
-      '<div class="modal wide">'+
-        '<h3>'+(purpose==="whatsapp" ? "Enviar nota por WhatsApp" : (purpose==="link" ? "Vincular cliente \u00e0 linha" : "Selecionar cliente"))+'</h3>'+
-        '<p>'+(purpose==="whatsapp"
-          ? "Escolha o cliente para enviar o PDF da nota por WhatsApp. Se ele ainda n\u00e3o estiver cadastrado, use o bot\u00e3o abaixo."
-          : (purpose==="link"
-            ? "Escolha quem comprou nesta linha. Isso fica salvo mesmo sem imprimir \u2014 d\u00e1 pra ver depois quem levou e religar uma nota a qualquer momento."
-            : "Escolha quem comprou para gerar a nota. Se o cliente ainda n\u00e3o estiver cadastrado, use o bot\u00e3o abaixo."))+'</p>'+
-        (customers.length ? '<input type="text" id="custSearch" class="search-input" placeholder="Buscar por nome, CPF ou telefone...">' : '')+
-        '<div class="cust-list" id="custList">'+listHtml+'</div>'+
-        '<div class="modal-actions" style="justify-content:space-between;margin-top:14px;">'+
-          '<button class="btn ghost small" id="custCancel">Cancelar</button>'+
-          (purpose==="link" && currentRow && currentRow.clienteId ? '<button class="btn ghost small" id="custUnlink" style="color:var(--red);">Remover v\u00ednculo</button>' : '')+
-          '<button class="btn primary small" id="custNew">+ Cadastrar cliente</button>'+
-        '</div>'+
-      '</div>';
-    document.body.appendChild(div);
-    div.querySelectorAll(".cust-item").forEach(function(btn){
-      btn.addEventListener("click", function(){
-        var cid = btn.getAttribute("data-cid");
-        var customer = customers.filter(function(c){return c.id===cid;})[0];
-        var row = state.rows.filter(function(r){return r.id===rowId;})[0];
-        state.modal = null;
-        if (row && customer){
-          row.clienteId = customer.id; // fica ligado na linha independente de imprimir ou n\u00e3o
-          scheduleSave();
-        }
-        render();
-        if (row && customer && purpose!=="link"){
-          if (purpose==="whatsapp") sendNotaPdfWhatsapp(row, customer);
-          else printNota(row, customer);
-        }
-      });
-    });
-    var searchInput = document.getElementById("custSearch");
-    if (searchInput){
-      searchInput.addEventListener("input", function(){
-        var q = searchInput.value.trim().toLowerCase();
-        var list = document.getElementById("custList");
-        var items = list.querySelectorAll(".cust-item");
-        var anyVisible = false;
-        items.forEach(function(btn){
-          var hay = btn.getAttribute("data-search")||"";
-          var match = !q || hay.indexOf(q)>-1;
-          btn.style.display = match ? "" : "none";
-          if (match) anyVisible = true;
-        });
-        var emptyMsg = list.querySelector(".cust-empty-search");
-        if (!anyVisible){
-          if (!emptyMsg){
-            emptyMsg = document.createElement("div");
-            emptyMsg.className = "cust-empty cust-empty-search";
-            emptyMsg.textContent = "Nenhum cliente encontrado.";
-            list.appendChild(emptyMsg);
-          }
-        } else if (emptyMsg){
-          emptyMsg.remove();
-        }
-      });
-      searchInput.focus();
-    }
-    document.getElementById("custNew").addEventListener("click", function(){
-      state.modal = {type:"customerForm", rowId: rowId, returnTo:"selectCustomer", purpose: purpose, error:""};
-      render();
-    });
-    var unlinkBtn = document.getElementById("custUnlink");
-    if (unlinkBtn){
-      unlinkBtn.addEventListener("click", function(){
-        var row = state.rows.filter(function(r){return r.id===rowId;})[0];
-        if (row) { row.clienteId = ""; scheduleSave(); }
-        state.modal = null;
-        render();
-      });
-    }
-    document.getElementById("custCancel").addEventListener("click", function(){ state.modal=null; render(); });
-    div.addEventListener("click", function(e){ if (e.target===div){ state.modal=null; render(); } });
-  }
-
-  // ---------- modal: cadastrar / editar cliente ----------
-  function renderCustomerFormModal(){
-    var customer = state.modal.customerId ? loadCustomers().filter(function(c){return c.id===state.modal.customerId;})[0] : null;
-    var docInfo = customerDocInfo(customer || {});
-    var tipoAtual = state.modal.tipoDocumento || docInfo.tipo || "cpf";
-    var div = document.createElement("div");
-    div.className = "overlay";
-    var err = state.modal.error || "";
-    div.innerHTML =
-      '<div class="modal wide">'+
-        '<h3>'+(customer ? "Editar cliente" : "Cadastrar cliente")+'</h3>'+
-        '<div class="field-group">'+
-          '<label>Nome</label><input type="text" id="cfNome" placeholder="Nome completo" value="'+escAttr(customer?customer.nome:"")+'">'+
-          '<label>Tipo de documento</label>'+
-          '<div style="display:flex;gap:8px;margin-bottom:10px;">'+
-            '<button type="button" class="btn small'+(tipoAtual==="cpf"?" primary":" ghost")+'" id="cfTipoCpf" style="flex:1;">Pessoa física (CPF)</button>'+
-            '<button type="button" class="btn small'+(tipoAtual==="cnpj"?" primary":" ghost")+'" id="cfTipoCnpj" style="flex:1;">Pessoa jurídica (CNPJ)</button>'+
-          '</div>'+
-          '<label id="cfDocLabel">'+(tipoAtual==="cnpj"?"CNPJ":"CPF")+'</label>'+
-          '<input type="text" id="cfDocumento" placeholder="'+(tipoAtual==="cnpj"?"00.000.000/0000-00":"000.000.000-00")+'" value="'+escAttr(docInfo.documento||"")+'">'+
-          '<label>E-mail</label><input type="email" id="cfEmail" placeholder="cliente@exemplo.com" value="'+escAttr(customer?customer.email:"")+'">'+
-          '<label>Telefone</label><input type="text" id="cfTelefone" placeholder="(47) 90000-0000" value="'+escAttr(customer?customer.telefone:"")+'">'+
-          '<label>Endereço</label><input type="text" id="cfEndereco" placeholder="Rua, número, bairro, cidade" value="'+escAttr(customer?customer.endereco:"")+'">'+
-        '</div>'+
-        '<div class="err">'+escHtml(err)+'</div>'+
-        '<div class="modal-actions">'+
-          '<button class="btn ghost small" id="cfCancel">Voltar</button>'+
-          '<button class="btn primary small" id="cfSave">Salvar</button>'+
-        '</div>'+
-      '</div>';
-    document.body.appendChild(div);
-    document.getElementById("cfNome").focus();
-
-    function setTipo(novoTipo){
-      state.modal.tipoDocumento = novoTipo;
-      renderModal();
-    }
-    document.getElementById("cfTipoCpf").addEventListener("click", function(){ setTipo("cpf"); });
-    document.getElementById("cfTipoCnpj").addEventListener("click", function(){ setTipo("cnpj"); });
-
-    function goBack(){
-      if (state.modal.returnTo==="selectCustomer"){
-        state.modal = {type:"selectCustomer", rowId: state.modal.rowId, purpose: state.modal.purpose};
-      } else {
-        state.modal = null;
-      }
-      render();
-    }
-    document.getElementById("cfCancel").addEventListener("click", goBack);
-    div.addEventListener("click", function(e){ if (e.target===div){ goBack(); } });
-    document.getElementById("cfSave").addEventListener("click", function(){
-      var nome = document.getElementById("cfNome").value.trim();
-      if (!nome){
-        state.modal.error = "Informe ao menos o nome do cliente.";
-        renderModal();
-        return;
-      }
-      var dados = {
-        nome: nome,
-        tipoDocumento: tipoAtual,
-        documento: document.getElementById("cfDocumento").value.trim(),
-        email: document.getElementById("cfEmail").value.trim(),
-        telefone: document.getElementById("cfTelefone").value.trim(),
-        endereco: document.getElementById("cfEndereco").value.trim()
-      };
-      var saved;
-      if (customer){
-        updateCustomer(customer.id, dados);
-        saved = loadCustomers().filter(function(c){return c.id===customer.id;})[0];
-      } else {
-        saved = addCustomer(dados);
-      }
-      var rowId = state.modal.rowId;
-      var returnTo = state.modal.returnTo;
-      var purpose = state.modal.purpose||"print";
-      state.modal = null;
-      if (returnTo==="selectCustomer" && rowId){
-        var row = state.rows.filter(function(r){return r.id===rowId;})[0];
-        if (row){
-          row.clienteId = saved.id; // já liga o cliente recém-cadastrado a esta linha
-          scheduleSave();
-        }
-        render();
-        if (row && purpose!=="link"){
-          if (purpose==="whatsapp") sendNotaPdfWhatsapp(row, saved);
-          else printNota(row, saved);
-        }
-      } else {
-        render();
-      }
-    });
-  }
-
-  // ---------- tela de estoque ----------
-  // extrai largura/perfil/aro de uma medida tipo "195/55/16" ou "175/70 R14"
-  function parseMedidaNums(medida){
-    var m = String(medida||"").match(/(\d{2,3})\D+(\d{2,3})\D+(\d{2,3})/);
-    if (!m) return null;
-    return { largura: parseInt(m[1],10), perfil: parseInt(m[2],10), aro: parseInt(m[3],10) };
-  }
-  function estoqueSorted(){
-    return loadEstoque().slice().sort(function(a,b){
-      var pa = parseMedidaNums(a.medida), pb = parseMedidaNums(b.medida);
-      if (pa && pb){
-        // 1º pelo aro (3º número), 2º pela largura (1º número), 3º pelo perfil (2º número)
-        if (pa.aro !== pb.aro) return pa.aro - pb.aro;
-        if (pa.largura !== pb.largura) return pa.largura - pb.largura;
-        if (pa.perfil !== pb.perfil) return pa.perfil - pb.perfil;
-        return String(a.medida||"").localeCompare(String(b.medida||""), "pt-BR", {numeric:true});
-      }
-      if (pa && !pb) return -1; // medidas sem números reconhecíveis vão para o final
-      if (!pa && pb) return 1;
-      return String(a.medida||"").localeCompare(String(b.medida||""), "pt-BR", {numeric:true});
-    });
-  }
-
-  function estoqueRowHtml(i){
-    var qtd = Math.max(0, parseNum(i.quantidade));
-    return '<div class="arow">'+
-      '<span class="d">'+escHtml(i.medida||"—")+(i.marca?' <span style="color:var(--text-faint);">· '+escHtml(i.marca)+'</span>':'')+'</span>'+
-      '<span class="stats">'+
-        '<span><b'+(qtd<=0?' class="est-zero"':'')+'>'+qtd+' un.</b></span>'+
-        '<span>'+fmtCurrency(parseNum(i.preco))+'</span>'+
-        '<span class="est-actions">'+
-          '<button class="icon-btn" data-est-out="'+escAttr(i.id)+'" title="Retirar do estoque">−</button>'+
-          '<button class="icon-btn" data-est-in="'+escAttr(i.id)+'" title="Adicionar ao estoque">+</button>'+
-          '<button class="icon-btn" data-est-edit="'+escAttr(i.id)+'" title="Editar medida, marca ou preço">✎</button>'+
-          '<button class="icon-btn" data-est-del="'+escAttr(i.id)+'" title="Apagar item">✕</button>'+
-        '</span>'+
-      '</span>'+
-    '</div>';
-  }
-
-  function renderEstoque(){
-    var estoquista = state.role==="estoquista";
-    var list = estoqueSorted();
-    var q = (state.estoqueQuery||"").trim().toLowerCase();
-    var filtered = q ? list.filter(function(i){
-      return ((i.medida||"")+" "+(i.marca||"")).toLowerCase().indexOf(q)>-1;
-    }) : list;
-    var totalUnidades = 0, totalValor = 0, zerados = 0;
-    list.forEach(function(i){
-      var qt = Math.max(0, parseNum(i.quantidade));
-      totalUnidades += qt;
-      totalValor += qt * parseNum(i.preco);
-      if (qt<=0) zerados++;
-    });
-
-    root.innerHTML =
-      '<div class="topbar">'+
-        '<div class="brand"><span class="mark"></span><h1>Estoque</h1><span class="tag">MEDIDA · MARCA · QUANTIDADE · PREÇO</span>'+syncBadgeHtml()+'</div>'+
-        '<div class="auth-zone">'+
-          (estoquista ? '' : '<button class="btn ghost small" data-act="back">‹ Painel de vendas</button>')+
-          '<button class="btn ghost small" data-act="openclientes" title="Cadastrar e editar clientes">👥 Clientes</button>'+
-          (state.role==="master" ? '<button class="btn ghost small" data-act="openhistorico" title="Ver logins e movimentações de estoque">🕘 Histórico</button>' : '')+
-          (state.role==="master" ? '<button class="btn ghost small" data-act="openusuarios" title="Criar logins e alterar cargos">👤 Usuários</button>' : '')+
-          (sb ? '<button class="btn ghost small" data-act="accountlogout" title="Sair da sua conta">Sair da conta</button>' : '')+
-        '</div>'+
-      '</div>'+
-
-      '<div class="totals-bar">'+
-        tstat("Medidas cadastradas", list.length, true)+
-        tstat("Unidades em estoque", totalUnidades)+
-        tstat("Medidas zeradas", zerados)+
-        (estoquista ? '' : tstat("Valor do estoque", fmtCurrency(totalValor)))+
-      '</div>'+
-
-      '<div class="tbl-head">'+
-        '<div class="tbl-head-left"><h2>Itens em estoque</h2><span class="save-flag" id="saveFlag">salvo</span></div>'+
-        '<span style="display:flex;gap:8px;">'+
-          '<button class="btn ghost" data-act="printestoque" title="Imprimir relatório do estoque">🖨 Imprimir relatório</button>'+
-          '<button class="btn primary" data-act="estoquenew">+ Cadastrar medida</button>'+
-        '</span>'+
-      '</div>'+
-
-      '<div class="card" style="padding:14px 16px;">'+
-        '<input type="text" id="estSearch" class="dash-cust-search" placeholder="Buscar por medida ou marca..." value="'+escAttr(state.estoqueQuery||"")+'">'+
-        '<div class="archive-list">'+
-          (filtered.length
-            ? filtered.map(estoqueRowHtml).join("")
-            : '<div class="arow-empty">'+(list.length ? 'Nenhum item encontrado.' : 'Nenhuma medida cadastrada ainda. Use o botão “+ Cadastrar medida”.')+'</div>')+
-        '</div>'+
-      '</div>';
-
-    root.querySelectorAll("[data-act]").forEach(function(node){
-      node.addEventListener("click", function(){ handleAction(node.getAttribute("data-act"), node); });
-    });
-
-    var search = document.getElementById("estSearch");
-    if (search){
-      search.addEventListener("input", function(){
-        state.estoqueQuery = search.value;
-        var pos = search.selectionStart;
-        renderEstoque();
-        var again = document.getElementById("estSearch");
-        if (again){ again.focus(); try{ again.setSelectionRange(pos,pos); }catch(e){} }
-      });
-    }
-
-    function askQtd(mensagem){
-      var v = window.prompt(mensagem, "1");
-      if (v===null) return 0;
-      var n = Math.floor(parseNum(v));
-      return n>0 ? n : 0;
-    }
-
-    root.querySelectorAll("[data-est-in]").forEach(function(btn){
-      btn.addEventListener("click", function(){
-        var id = btn.getAttribute("data-est-in");
-        var item = estoqueItem(id);
-        if (!item) return;
-        var n = askQtd("Quantas unidades ENTRARAM de "+estoqueLabel(item)+"?");
-        if (n>0){
-          var moved = moveEstoque(id, n);
-          if (moved>0) addEstoqueLog("entrada", estoqueLabel(item), moved);
-          renderEstoque();
-        }
-      });
-    });
-    root.querySelectorAll("[data-est-out]").forEach(function(btn){
-      btn.addEventListener("click", function(){
-        var id = btn.getAttribute("data-est-out");
-        var item = estoqueItem(id);
-        if (!item) return;
-        var n = askQtd("Quantas unidades SAÍRAM de "+estoqueLabel(item)+"?");
-        if (n>0){
-          var moved = moveEstoque(id, -n);
-          if (moved<0) addEstoqueLog("saida", estoqueLabel(item), Math.abs(moved));
-          renderEstoque();
-        }
-      });
-    });
-    root.querySelectorAll("[data-est-edit]").forEach(function(btn){
-      btn.addEventListener("click", function(){
-        state.modal = {type:"estoqueForm", itemId: btn.getAttribute("data-est-edit"), error:""};
-        renderModal();
-      });
-    });
-    root.querySelectorAll("[data-est-del]").forEach(function(btn){
-      btn.addEventListener("click", function(){
-        var id = btn.getAttribute("data-est-del");
-        var item = estoqueItem(id);
-        if (!item) return;
-        deleteEstoqueItemWithUndo(id, function(){ renderEstoque(); });
-      });
-    });
-  }
-
-  // ---------- clientes: área dedicada (cadastrar, editar, apagar, ver notas) ----------
-  function clienteRowHtml(c, notasCount){
-    var docLabel = customerDocLabel(c);
-    return '<div class="arow">'+
-      '<span class="d" data-cli-open="'+escAttr(c.id)+'" role="button" tabindex="0" style="cursor:pointer;min-width:160px;">'+escHtml(c.nome||"—")+'</span>'+
-      '<span class="stats">'+
-        (docLabel ? '<span>'+escHtml(docLabel)+'</span>' : '')+
-        (c.telefone ? '<span>'+escHtml(c.telefone)+'</span>' : '')+
-        '<span>'+notasCount+' nota(s)</span>'+
-        '<span class="est-actions">'+
-          '<button class="icon-btn" data-cli-edit="'+escAttr(c.id)+'" title="Editar cliente">✎</button>'+
-          '<button class="icon-btn" data-cli-del="'+escAttr(c.id)+'" title="Apagar cliente">✕</button>'+
-        '</span>'+
-      '</span>'+
-    '</div>';
-  }
-
-  function clientesTopbarHtml(titulo, tag){
-    var estoquista = state.role==="estoquista";
-    return '<div class="topbar">'+
-      '<div class="brand"><span class="mark"></span><h1>'+titulo+'</h1><span class="tag">'+tag+'</span>'+syncBadgeHtml()+'</div>'+
-      '<div class="auth-zone">'+
-        (estoquista ? '' : '<button class="btn ghost small" data-act="back">‹ Painel de vendas</button>')+
-        '<button class="btn ghost small" data-act="openestoque">📦 Estoque</button>'+
-        (state.role==="master" ? '<button class="btn ghost small" data-act="openhistorico">🕘 Histórico</button>' : '')+
-        (state.role==="master" ? '<button class="btn ghost small" data-act="openusuarios">👤 Usuários</button>' : '')+
-        (sb ? '<button class="btn ghost small" data-act="accountlogout">Sair da conta</button>' : '')+
-      '</div>'+
-    '</div>';
-  }
-
-  function renderClientes(){
-    if (state.clientesDetailId) return renderClienteDetalhe();
-
-    var customers = loadCustomers().slice().sort(function(a,b){
-      return String(a.nome||"").localeCompare(String(b.nome||""), "pt-BR");
-    });
-    var notas = loadNotas();
-    var q = (state.clientesQuery||"").trim().toLowerCase();
-    var filtered = q ? customers.filter(function(c){
-      return (c.nome||"").toLowerCase().indexOf(q)>-1 ||
-             (customerDocInfo(c).documento||"").toLowerCase().indexOf(q)>-1 ||
-             (c.telefone||"").toLowerCase().indexOf(q)>-1;
-    }) : customers;
-
-    var pf = customers.filter(function(c){ return customerDocInfo(c).tipo!=="cnpj"; }).length;
-    var pj = customers.filter(function(c){ return customerDocInfo(c).tipo==="cnpj"; }).length;
-
-    root.innerHTML =
-      clientesTopbarHtml("Clientes", "NOME · CPF/CNPJ · TELEFONE · E-MAIL · ENDEREÇO") +
-
-      '<div class="totals-bar">'+
-        tstat("Clientes cadastrados", customers.length, true)+
-        tstat("Pessoa física (CPF)", pf)+
-        tstat("Pessoa jurídica (CNPJ)", pj)+
-      '</div>'+
-
-      '<div class="tbl-head">'+
-        '<div class="tbl-head-left"><h2>Clientes</h2><span class="save-flag" id="saveFlag">salvo</span></div>'+
-        '<button class="btn primary" data-act="clientenew">+ Cadastrar cliente</button>'+
-      '</div>'+
-
-      '<div class="card" style="padding:14px 16px;">'+
-        '<input type="text" id="cliSearch" class="dash-cust-search" placeholder="Buscar por nome, CPF/CNPJ ou telefone..." value="'+escAttr(state.clientesQuery||"")+'">'+
-        '<div class="archive-list">'+
-          (filtered.length
-            ? filtered.map(function(c){
-                var count = notas.filter(function(n){return n.customerId===c.id;}).length;
-                return clienteRowHtml(c, count);
-              }).join("")
-            : '<div class="arow-empty">'+(customers.length ? 'Nenhum cliente encontrado.' : 'Nenhum cliente cadastrado ainda. Use o botão “+ Cadastrar cliente”.')+'</div>')+
-        '</div>'+
-      '</div>';
-
-    root.querySelectorAll("[data-act]").forEach(function(node){
-      node.addEventListener("click", function(){ handleAction(node.getAttribute("data-act"), node); });
-    });
-
-    var search = document.getElementById("cliSearch");
-    if (search){
-      search.addEventListener("input", function(){
-        state.clientesQuery = search.value;
-        var pos = search.selectionStart;
-        renderClientes();
-        var again = document.getElementById("cliSearch");
-        if (again){ again.focus(); try{ again.setSelectionRange(pos,pos); }catch(e){} }
-      });
-    }
-
-    root.querySelectorAll("[data-cli-open]").forEach(function(el){
-      el.addEventListener("click", function(){
-        state.clientesDetailId = el.getAttribute("data-cli-open");
-        renderClientes();
-      });
-    });
-    root.querySelectorAll("[data-cli-edit]").forEach(function(btn){
-      btn.addEventListener("click", function(){
-        state.modal = {type:"customerForm", customerId: btn.getAttribute("data-cli-edit"), error:""};
-        renderModal();
-      });
-    });
-    root.querySelectorAll("[data-cli-del]").forEach(function(btn){
-      btn.addEventListener("click", function(){
-        var id = btn.getAttribute("data-cli-del");
-        var c = customers.filter(function(x){return x.id===id;})[0];
-        if (!c) return;
-        deleteCustomerWithUndo(id, function(){ renderClientes(); });
-      });
-    });
-  }
-
-  function renderClienteDetalhe(){
-    var customer = loadCustomers().filter(function(c){return c.id===state.clientesDetailId;})[0];
-    if (!customer){ state.clientesDetailId = null; return renderClientes(); }
-    var notas = loadNotas().filter(function(n){return n.customerId===customer.id;})
-      .sort(function(a,b){ return b.createdAt - a.createdAt; });
-    var sub = [customerDocLabel(customer), customer.telefone, customer.email].filter(Boolean).join(" · ");
-    var notasHtml = notas.length
-      ? notas.map(function(n){
-          return '<div class="arow">'+
-            '<span class="d" data-nota="'+escAttr(n.id)+'" role="button" tabindex="0" style="cursor:pointer;">Venda #'+n.vendaNum+' · '+fmtDateBR(n.date)+'</span>'+
-            '<span class="stats"><span><b>'+fmtCurrency(n.totalProdutos)+'</b></span><span>'+escHtml(n.formaPagamento||"")+'</span>'+
-            '<button class="icon-btn" data-delnota="'+escAttr(n.id)+'" title="Apagar nota">✕</button></span>'+
-          '</div>';
-        }).join("")
-      : '<div class="arow-empty">Nenhuma nota registrada para este cliente ainda.</div>';
-
-    root.innerHTML =
-      clientesTopbarHtml("Clientes", "FICHA DO CLIENTE") +
-      '<div class="card" style="padding:14px 16px;">'+
-        '<button class="backlink" id="cliBack" style="padding:4px 0 10px;">‹ Voltar aos clientes</button>'+
-        '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px;">'+
-          '<div>'+
-            '<div class="cust-detail-name">'+escHtml(customer.nome)+'</div>'+
-            (sub?'<div class="cust-detail-sub">'+escHtml(sub)+'</div>':'')+
-            (customer.endereco?'<div class="cust-detail-sub">'+escHtml(customer.endereco)+'</div>':'')+
-          '</div>'+
-          '<button class="btn ghost small" data-act="clientedit" data-id="'+escAttr(customer.id)+'">✎ Editar</button>'+
-        '</div>'+
-        '<div class="archive-list">'+notasHtml+'</div>'+
-      '</div>';
-
-    root.querySelectorAll("[data-act]").forEach(function(node){
-      node.addEventListener("click", function(){ handleAction(node.getAttribute("data-act"), node); });
-    });
-    var backBtn = document.getElementById("cliBack");
-    if (backBtn) backBtn.addEventListener("click", function(){ state.clientesDetailId = null; renderClientes(); });
-
-    root.querySelectorAll("[data-nota]").forEach(function(el){
-      el.addEventListener("click", function(){
-        var id = el.getAttribute("data-nota");
-        var nota = loadNotas().filter(function(n){return n.id===id;})[0];
-        if (nota) reprintNota(nota);
-      });
-    });
-    root.querySelectorAll("[data-delnota]").forEach(function(btn){
-      btn.addEventListener("click", function(e){
-        e.stopPropagation();
-        var id = btn.getAttribute("data-delnota");
-        deleteNotaWithUndo(id, function(){ renderClienteDetalhe(); });
-      });
-    });
-  }
-
-  // ---------- modal: cadastrar / editar medida do estoque ----------
-  function renderEstoqueFormModal(){
-    var item = state.modal.itemId ? estoqueItem(state.modal.itemId) : null;
-    var div = document.createElement("div");
-    div.className = "overlay";
-    div.innerHTML =
-      '<div class="modal wide">'+
-        '<h3>'+(item ? "Editar medida" : "Cadastrar medida")+'</h3>'+
-        '<div class="field-group">'+
-          '<label>Medida</label><input type="text" id="efMedida" placeholder="Ex: 175/70 R14" value="'+escAttr(item?item.medida:"")+'">'+
-          '<label>Marca</label><input type="text" id="efMarca" placeholder="Ex: Pirelli" value="'+escAttr(item?item.marca:"")+'">'+
-          '<label>Quantidade em estoque</label><input type="text" inputmode="numeric" id="efQtd" placeholder="0" value="'+escAttr(item?Math.max(0,parseNum(item.quantidade)):"")+'">'+
-          '<label>Preço por unidade (R$)</label><input type="text" inputmode="decimal" id="efPreco" placeholder="0,00" value="'+escAttr(item?parseNum(item.preco):"")+'">'+
-        '</div>'+
-        '<div class="err">'+escHtml(state.modal.error||"")+'</div>'+
-        '<div class="modal-actions">'+
-          '<button class="btn ghost small" id="efCancel">Voltar</button>'+
-          '<button class="btn primary small" id="efSave">Salvar</button>'+
-        '</div>'+
-      '</div>';
-    document.body.appendChild(div);
-    document.getElementById("efMedida").focus();
-
-    function goBack(){
-      if (state.modal.returnTo==="selectMedida"){
-        state.modal = {type:"selectMedida", rowId: state.modal.rowId};
-      } else {
-        state.modal = null;
-      }
-      render();
-    }
-    document.getElementById("efCancel").addEventListener("click", goBack);
-    div.addEventListener("click", function(e){ if (e.target===div) goBack(); });
-    document.getElementById("efSave").addEventListener("click", function(){
-      var medida = document.getElementById("efMedida").value.trim();
-      if (!medida){
-        state.modal.error = "Informe a medida.";
-        renderModal();
-        return;
-      }
-      var dados = {
-        medida: medida,
-        marca: document.getElementById("efMarca").value.trim(),
-        quantidade: document.getElementById("efQtd").value,
-        preco: document.getElementById("efPreco").value
-      };
-      if (item){
-        var antes = Math.max(0, parseNum(item.quantidade));
-        var depois = Math.max(0, parseNum(dados.quantidade));
-        updateEstoqueItem(item.id, dados);
-        var diff = depois - antes;
-        if (diff !== 0) addEstoqueLog("ajuste", estoqueLabel({medida:medida, marca:dados.marca}), diff);
-      } else {
-        addEstoqueItem(dados);
-      }
-      goBack();
-    });
-  }
-
-  // ---------- modal: dar baixa no estoque por garantia (troca de pneu sem gerar venda) ----------
-  function renderGarantiaFormModal(){
-    var list = estoqueSorted();
-    var selecionado = state.modal.medidaId || "";
-    var div = document.createElement("div");
-    div.className = "overlay";
-    var listHtml = list.length
-      ? list.map(function(i){
-          var qtd = Math.max(0, parseNum(i.quantidade));
-          var search = ((i.medida||"")+" "+(i.marca||"")).toLowerCase();
-          return '<button type="button" class="cust-item'+(selecionado===i.id?' sel':'')+'" data-mid="'+escAttr(i.id)+'" data-search="'+escAttr(search)+'">'+
-            '<span class="cust-name">'+escHtml(i.medida||"—")+(i.marca?' · '+escHtml(i.marca):'')+'</span>'+
-            '<span class="cust-sub"'+(qtd<=0?' style="color:#e2554c;"':'')+'>'+(qtd<=0 ? 'sem estoque' : qtd+' un. em estoque')+'</span>'+
-          '</button>';
-        }).join("")
-      : '<div class="cust-empty">Nenhuma medida cadastrada no estoque ainda.</div>';
-
-    div.innerHTML =
-      '<div class="modal wide">'+
-        '<h3>🛡️ Garantia — baixa de estoque</h3>'+
-        '<p>Use quando um pneu sai do estoque por troca em garantia, sem gerar uma venda.</p>'+
-        '<div class="field-group">'+
-          '<label>Medida</label>'+
-          (list.length
-            ? '<input type="text" id="grMedSearch" class="search-input" placeholder="Buscar medida ou marca...">'+
-              '<div class="cust-list" id="grMedList" style="max-height:200px;">'+listHtml+'</div>'+
-              '<div id="grMedSel" style="font-size:12px;color:var(--text-dim);margin:6px 0 12px;">'+
-                (selecionado && estoqueItem(selecionado) ? 'Selecionada: <b style="color:var(--text);">'+escHtml(estoqueLabel(estoqueItem(selecionado)))+'</b>' : 'Nenhuma medida selecionada')+
-              '</div>'
-            : '<div class="cust-empty" style="margin-bottom:12px;">Nenhuma medida cadastrada no estoque ainda.</div>')+
-          '<label>Quantidade</label><input type="text" inputmode="numeric" id="grQtd" placeholder="1" value="'+escAttr(state.modal.qtd||"")+'">'+
-        '</div>'+
-        '<div class="err">'+escHtml(state.modal.error||"")+'</div>'+
-        '<div class="modal-actions">'+
-          '<button class="btn ghost small" id="grCancel">Cancelar</button>'+
-          '<button class="btn primary small" id="grSave">Dar baixa</button>'+
-        '</div>'+
-      '</div>';
-    document.body.appendChild(div);
-
-    var selectedId = selecionado;
-
-    div.querySelectorAll(".cust-item").forEach(function(btn){
-      btn.addEventListener("click", function(){
-        selectedId = btn.getAttribute("data-mid");
-        state.modal.medidaId = selectedId;
-        div.querySelectorAll(".cust-item").forEach(function(b){ b.classList.remove("sel"); });
-        btn.classList.add("sel");
-        var selDiv = document.getElementById("grMedSel");
-        if (selDiv){
-          var item = estoqueItem(selectedId);
-          selDiv.innerHTML = item ? 'Selecionada: <b style="color:var(--text);">'+escHtml(estoqueLabel(item))+'</b>' : 'Nenhuma medida selecionada';
-        }
-      });
-    });
-
-    var searchInput = document.getElementById("grMedSearch");
-    if (searchInput){
-      searchInput.addEventListener("input", function(){
-        var q = searchInput.value.trim().toLowerCase();
-        div.querySelectorAll(".cust-item").forEach(function(btn){
-          var hay = btn.getAttribute("data-search")||"";
-          btn.style.display = (!q || hay.indexOf(q)>-1) ? "" : "none";
-        });
-      });
-      searchInput.focus();
     } else {
-      var qtdInput = document.getElementById("grQtd");
-      if (qtdInput) qtdInput.focus();
-    }
-
-    function goBack(){ state.modal = null; render(); }
-    document.getElementById("grCancel").addEventListener("click", goBack);
-    div.addEventListener("click", function(e){ if (e.target===div) goBack(); });
-
-    var saveBtn = document.getElementById("grSave");
-    if (saveBtn){
-      saveBtn.addEventListener("click", function(){
-        var id = selectedId;
-        var item = id ? estoqueItem(id) : null;
-        var qtd = Math.floor(parseNum(document.getElementById("grQtd").value));
-        state.modal.qtd = document.getElementById("grQtd").value;
-        if (!item){
-          state.modal.error = "Escolha a medida do pneu.";
-          renderModal();
-          return;
-        }
-        if (!qtd || qtd<=0){
-          state.modal.error = "Informe uma quantidade válida.";
-          renderModal();
-          return;
-        }
-        var atual = Math.max(0, parseNum(item.quantidade));
-        if (qtd > atual && !window.confirm("O estoque de "+estoqueLabel(item)+" tem só "+atual+" un. disponível(is). Baixar mesmo assim (o estoque vai zerar)?")){
-          return;
-        }
-        var moved = moveEstoque(id, -qtd);
-        if (moved<0) addEstoqueLog("saida", estoqueLabel(item)+" (Garantia)", Math.abs(moved));
-        state.modal = null;
-        render();
-      });
-    }
-  }
-
-  // ---------- modal: dividir o pagamento entre até 4 formas ----------
-  function renderMultiPagModal(){
-    var rowId = state.modal.rowId;
-    var row = state.rows.filter(function(r){ return r.id===rowId; })[0];
-    if (!row){ state.modal = null; render(); return; }
-    var total = computeValor(row);
-    var existentes = Array.isArray(row.pagamentosMultiplos) ? row.pagamentosMultiplos.slice() : [];
-    if (existentes.length===0){
-      existentes = [{metodo:"Dinheiro", valor: total}];
-    }
-    while (existentes.length < 4) existentes.push({metodo:"Nenhum", valor:""});
-    existentes = existentes.slice(0,4);
-
-    var div = document.createElement("div");
-    div.className = "overlay";
-    var opcoesMetodo = ["Nenhum"].concat(METODOS_PAGAMENTO);
-    var linhasHtml = existentes.map(function(p, i){
-      var selOpts = opcoesMetodo.map(function(m){
-        return '<option value="'+m+'"'+(p.metodo===m?" selected":"")+'>'+m+'</option>';
-      }).join("");
-      return '<div style="display:flex;gap:8px;margin-bottom:8px;">'+
-        '<select class="mpMetodo" data-idx="'+i+'" style="flex:1.2;background:var(--panel-alt);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:8px;">'+selOpts+'</select>'+
-        '<input type="text" inputmode="decimal" class="mpValor" data-idx="'+i+'" placeholder="0,00" value="'+escAttr(p.valor!==""&&p.valor!==undefined&&p.valor!==null?parseNum(p.valor):"")+'" style="flex:1;">'+
-      '</div>';
-    }).join("");
-
-    div.innerHTML =
-      '<div class="modal wide">'+
-        '<h3>Dividir pagamento (até 4 formas)</h3>'+
-        '<p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;">Total da venda: <b style="color:var(--text);">'+fmtCurrency(total)+'</b></p>'+
-        '<div id="mpLinhas">'+linhasHtml+'</div>'+
-        '<div id="mpResumo" style="font-size:12.5px;color:var(--text-dim);margin:6px 2px 12px;"></div>'+
-        '<div class="err">'+escHtml(state.modal.error||"")+'</div>'+
-        '<div class="modal-actions">'+
-          '<button class="btn ghost small" id="mpCancel">Voltar</button>'+
-          '<button class="btn primary small" id="mpSave">Salvar</button>'+
-        '</div>'+
-      '</div>';
-    document.body.appendChild(div);
-
-    function lerValores(){
-      var metodos = div.querySelectorAll(".mpMetodo");
-      var valores = div.querySelectorAll(".mpValor");
-      var lista = [];
-      for (var i=0;i<metodos.length;i++){
-        var m = metodos[i].value;
-        var v = parseNum(valores[i].value);
-        if (m!=="Nenhum" && v>0) lista.push({metodo:m, valor:v});
-      }
-      return lista;
-    }
-    function atualizarResumo(){
-      var lista = lerValores();
-      var soma = lista.reduce(function(s,p){ return s+p.valor; }, 0);
-      var resumo = document.getElementById("mpResumo");
-      var diff = total - soma;
-      if (!resumo) return;
-      if (Math.abs(diff) < 0.005){
-        resumo.innerHTML = '<span style="color:var(--green);">Soma bate certinho com o total (' + fmtCurrency(soma) + ').</span>';
-      } else if (diff > 0){
-        resumo.innerHTML = 'Soma atual: '+fmtCurrency(soma)+' — <span style="color:var(--yellow);">ainda falta '+fmtCurrency(diff)+'</span>';
-      } else {
-        resumo.innerHTML = 'Soma atual: '+fmtCurrency(soma)+' — <span style="color:var(--red);">passou '+fmtCurrency(-diff)+' do total</span>';
-      }
-    }
-    atualizarResumo();
-    div.querySelectorAll(".mpMetodo, .mpValor").forEach(function(el){
-      el.addEventListener("input", atualizarResumo);
-      el.addEventListener("change", atualizarResumo);
-    });
-
-    function goBack(){ state.modal = null; render(); }
-    document.getElementById("mpCancel").addEventListener("click", goBack);
-    div.addEventListener("click", function(e){ if (e.target===div) goBack(); });
-    document.getElementById("mpSave").addEventListener("click", function(){
-      var lista = lerValores();
-      if (lista.length===0){
-        state.modal.error = "Escolha ao menos uma forma de pagamento com um valor maior que zero.";
-        renderModal();
-        return;
-      }
-      var soma = lista.reduce(function(s,p){ return s+p.valor; }, 0);
-      if (Math.abs(soma-total) > 0.01){
-        if (!window.confirm("A soma das formas de pagamento (" + fmtCurrency(soma) + ") é diferente do total da venda (" + fmtCurrency(total) + "). Quer salvar assim mesmo?")) return;
-      }
-      row.formaPagamento = "Múltiplo (até 4 formas)";
-      row.pagamentosMultiplos = lista;
-      state.modal = null;
-      render();
-      scheduleSave();
-    });
-  }
-
-  // ---------- modal: escolher a medida na linha da venda ----------
-  function renderSelectMedidaModal(){
-    var rowId = state.modal.rowId;
-    var row = state.rows.filter(function(r){ return r.id===rowId; })[0];
-    var list = estoqueSorted();
-    var div = document.createElement("div");
-    div.className = "overlay";
-    var listHtml = list.length
-      ? list.map(function(i){
-          var qtd = Math.max(0, parseNum(i.quantidade));
-          var search = ((i.medida||"")+" "+(i.marca||"")).toLowerCase();
-          return '<button class="cust-item" data-mid="'+escAttr(i.id)+'" data-search="'+escAttr(search)+'">'+
-            '<span class="cust-name">'+escHtml(i.medida||"—")+(i.marca?' · '+escHtml(i.marca):'')+'</span>'+
-            '<span class="cust-sub"'+(qtd<=0?' style="color:#e2554c;"':'')+'>'+(qtd<=0 ? 'sem estoque — dá pra vender mesmo assim' : qtd+' un. em estoque')+' · '+fmtCurrency(parseNum(i.preco))+'</span>'+
-          '</button>';
-        }).join("")
-      : '<div class="cust-empty">Nenhuma medida cadastrada no estoque ainda.</div>';
-
-    div.innerHTML =
-      '<div class="modal wide">'+
-        '<h3>Escolher medida</h3>'+
-        (list.length ? '<input type="text" id="medSearch" class="search-input" placeholder="Buscar medida ou marca...">' : '')+
-        '<div class="cust-list" id="medList">'+listHtml+'</div>'+
-        '<div class="modal-actions" style="justify-content:space-between;margin-top:14px;">'+
-          '<button class="btn ghost small" id="medCancel">Cancelar</button>'+
-          '<span style="display:flex;gap:8px;">'+
-            (row && row.medidaId ? '<button class="btn ghost small" id="medClear">Limpar medida</button>' : '')+
-            '<button class="btn primary small" id="medNew">+ Cadastrar medida</button>'+
-          '</span>'+
-        '</div>'+
-      '</div>';
-    document.body.appendChild(div);
-
-    div.querySelectorAll(".cust-item").forEach(function(btn){
-      btn.addEventListener("click", function(){
-        var item = estoqueItem(btn.getAttribute("data-mid"));
-        if (row && item){
-          if (row.medidaId !== item.id) releaseRowEstoque(row);
-          row.medidaId = item.id;
-          row.medida = estoqueLabel(item);
-          syncRowEstoque(row);
-          if (!row.valorPneus && parseNum(item.preco)>0 && parseNum(row.quantidade)>0){
-            row.valorPneus = (parseNum(item.preco)*parseNum(row.quantidade)).toFixed(2);
-          }
-        }
-        state.modal = null;
-        render();
-        scheduleSave();
-      });
-    });
-
-    var searchInput = document.getElementById("medSearch");
-    if (searchInput){
-      searchInput.addEventListener("input", function(){
-        var q = searchInput.value.trim().toLowerCase();
-        div.querySelectorAll(".cust-item").forEach(function(btn){
-          var hay = btn.getAttribute("data-search")||"";
-          btn.style.display = (!q || hay.indexOf(q)>-1) ? "" : "none";
-        });
-      });
-      searchInput.focus();
-    }
-
-    var clearBtn = document.getElementById("medClear");
-    if (clearBtn){
-      clearBtn.addEventListener("click", function(){
-        if (row){
-          releaseRowEstoque(row);
-          row.medidaId = "";
-          row.medida = "";
-        }
-        state.modal = null;
-        render();
-        scheduleSave();
-      });
-    }
-    document.getElementById("medNew").addEventListener("click", function(){
-      state.modal = {type:"estoqueForm", itemId:null, rowId:rowId, returnTo:"selectMedida", error:""};
-      render();
-    });
-    document.getElementById("medCancel").addEventListener("click", function(){ state.modal=null; render(); });
-    div.addEventListener("click", function(e){ if (e.target===div){ state.modal=null; render(); } });
-  }
-
-  // ---------- reage a mudanças feitas em outro aparelho ----------
-  function handleRemoteChange(key){
-    if (key.indexOf(K_ROWS)===0){
-      var date = key.slice(K_ROWS.length);
-      var month = date.slice(0,7);
-      delete state.monthSummaryCache[month];
-      delete state.monthPartsCache[month];
-      // se a linha alterada é do dia aberto na tela e não há edição pendente,
-      // recarrega para não perder digitação em andamento
-      if (state.view==="table" && state.date===date && !state.saving){
-        getRows(date).then(function(rows){ state.rows = rows; render(); });
-        return;
-      }
-    } else if (key.indexOf(K_SUMMARY)===0){
-      var m = key.slice(K_SUMMARY.length);
-      delete state.monthSummaryCache[m];
-      delete state.monthPartsCache[m];
+      // Não tem cliente -> Modal para Buscar/Vincular
+      state.modal = {
+        type: 'link_customer',
+        rowId: rowId
+      };
     }
     render();
   }
 
-  // ---------- login de acesso ao site (Supabase Auth — senha nunca fica no código) ----------
-  function renderLoginScreen(errorMsg){
-    root.classList.remove("wide");
-    root.innerHTML =
-      '<div class="login-screen"><div class="login-card">'+
-        '<div class="brand"><span class="mark"></span><h1>Painel de Vendas</h1></div>'+
-        '<p class="hint">Entre com seu e-mail e senha para acessar o sistema.</p>'+
-        '<input type="email" id="loginEmail" placeholder="E-mail" autocomplete="username">'+
-        '<input type="password" id="loginPassword" placeholder="Senha" autocomplete="current-password">'+
-        '<div class="err">'+escHtml(errorMsg||"")+'</div>'+
-        '<button class="btn primary" id="loginBtn">Entrar</button>'+
-      '</div></div>';
-    var emailInput = document.getElementById("loginEmail");
-    var passInput = document.getElementById("loginPassword");
-    var btn = document.getElementById("loginBtn");
-    emailInput.focus();
-    function tryLogin(){
-      var email = emailInput.value.trim();
-      var pass = passInput.value;
-      if (!email || !pass){ renderLoginScreen("Preencha e-mail e senha."); return; }
-      btn.disabled = true; btn.textContent = "Entrando...";
-      sb.auth.signInWithPassword({email:email, password:pass}).then(function(res){
-        if (res.error){ renderLoginScreen((res.error && res.error.message) ? res.error.message : "E-mail ou senha inválidos."); }
-        else {
-          var u = res && res.data && res.data.user;
-          var emailLogado = u ? u.email : email;
-          // só registra o login DEPOIS de baixar a lista mais atual da nuvem,
-          // senão a gente sobrescreve o histórico com uma versão desatualizada
-          // (apagando por engano logins feitos em outros aparelhos)
-          bootApp(function(){ addLoginLog(emailLogado); });
-        }
-      });
-    }
-    btn.addEventListener("click", tryLogin);
-    passInput.addEventListener("keydown", function(e){ if (e.key==="Enter") tryLogin(); });
-    emailInput.addEventListener("keydown", function(e){ if (e.key==="Enter") passInput.focus(); });
+  /* ---- NOVO SISTEMA DE ORÇAMENTO ---- */
+  var tempOrcamento = {
+    clienteNome: "",
+    clienteTelefone: "",
+    itens: []
+  };
+
+  function openOrcamentoModal(){
+    tempOrcamento = { clienteNome: "", clienteTelefone: "", itens: [{desc:"", val:""}] };
+    state.modal = { type: 'orcamento' };
+    render();
   }
 
-  // ---------- papel do usuário: "vendedor" (painel de vendas), "estoquista" (só estoque) ou "master" (tudo + histórico + usuários) ----------
-  function loadRole(cb){
-    if (!sb){ state.role = "vendedor"; return cb(); }
-    sb.auth.getUser().then(function(res){
-      var user = res && res.data && res.data.user;
-      if (!user){ state.role = "vendedor"; return cb(); }
-      state.userEmail = user.email || "";
-      sb.from("perfis").select("papel").eq("user_id", user.id).limit(1).then(function(r){
-        var row = r && r.data && r.data[0];
-        var papel = row && row.papel;
-        state.role = (papel === "estoquista" || papel === "master") ? papel : "vendedor";
-        cb();
-      }).catch(function(){ state.role = "vendedor"; cb(); });
-    }).catch(function(){ state.role = "vendedor"; cb(); });
-  }
+  function renderModal(){
+    var ex = document.querySelector(".overlay"); if (ex) ex.remove();
+    var ov = document.createElement("div"); ov.className = "overlay";
 
-  function bootApp(afterPull){
-    loadRole(function(){
-      cloudPullAll(function(hadRemoteData){
-        if (typeof afterPull === "function") afterPull(); // ex: registrar o login já com os dados mais recentes em mãos
+    if (state.modal.type === 'view_customer'){
+      var c = state.modal.customer;
+      ov.innerHTML = '<div class="modal wide">'+
+        '<h3>Cliente Vinculado</h3>'+
+        '<div style="margin: 12px 0; font-size:14px; line-height:1.6">'+
+          '<p style="margin:0"><b>Nome:</b> '+escHtml(c.nome)+'</p>'+
+          '<p style="margin:0"><b>Documento:</b> '+escHtml(c.documento || c.cpf || "Não informado")+'</p>'+
+          '<p style="margin:0"><b>Telefone:</b> '+escHtml(c.telefone || "Não informado")+'</p>'+
+          '<p style="margin:0"><b>Endereço:</b> '+escHtml(c.endereco || "Não informado")+'</p>'+
+        '</div>'+
+        '<div class="modal-actions">'+
+          '<button class="btn danger small" id="btnUnlinkCust">Desvincular Cliente</button>'+
+          '<button class="btn ghost small" id="btnChangeCust">Alterar</button>'+
+          '<button class="btn primary small" id="btnCloseModal">Fechar</button>'+
+        '</div>'+
+      '</div>';
+      document.body.appendChild(ov);
+
+      document.getElementById("btnCloseModal").onclick = function(){ state.modal=null; render(); };
+      document.getElementById("btnUnlinkCust").onclick = function(){
+        state.rows.forEach(function(r){ if(r.id===state.modal.rowId) r.clienteId = ""; });
+        saveRows(state.date, state.rows).then(function(){ state.modal=null; render(); });
+      };
+      document.getElementById("btnChangeCust").onclick = function(){
+        var rid = state.modal.rowId;
+        state.modal = { type: 'link_customer', rowId: rid };
         render();
-        if (!hadRemoteData) pushAllLocalToCloud(); // primeira ativação: sobe o histórico local pra nuvem
-        initCloudSync(handleRemoteChange);
-      });
-    });
+      };
+    }
+
+    else if (state.modal.type === 'link_customer'){
+      var customers = loadCustomers();
+      ov.innerHTML = '<div class="modal wide">'+
+        '<h3>Vincular Cliente à Venda</h3>'+
+        '<input type="text" id="custSearchInp" class="search-input" placeholder="Buscar cliente por nome ou CPF...">'+
+        '<div class="cust-list" id="custListArea"></div>'+
+        '<div class="modal-actions">'+
+          '<button class="btn ghost small" id="btnCloseModal">Cancelar</button>'+
+        '</div>'+
+      '</div>';
+      document.body.appendChild(ov);
+
+      function drawList(q){
+        var listArea = document.getElementById("custListArea");
+        var filtered = customers.filter(function(c){
+          return (c.nome||"").toLowerCase().indexOf(q.toLowerCase())>-1 || (c.documento||c.cpf||"").indexOf(q)>-1;
+        });
+        listArea.innerHTML = filtered.map(function(c){
+          return '<button class="cust-item" data-id="'+c.id+'"><span class="cust-name">'+escHtml(c.nome)+'</span><span class="cust-sub">'+escHtml(c.telefone||"")+'</span></button>';
+        }).join("") || '<div class="cust-empty">Nenhum cliente encontrado.</div>';
+
+        listArea.querySelectorAll(".cust-item").forEach(function(b){
+          b.onclick = function(){
+            var cid = b.getAttribute("data-id");
+            state.rows.forEach(function(r){ if(r.id===state.modal.rowId) r.clienteId = cid; });
+            saveRows(state.date, state.rows).then(function(){ state.modal=null; render(); });
+          };
+        });
+      }
+
+      drawList("");
+      document.getElementById("custSearchInp").oninput = function(e){ drawList(e.target.value); };
+      document.getElementById("btnCloseModal").onclick = function(){ state.modal=null; render(); };
+    }
+
+    else if (state.modal.type === 'orcamento'){
+      ov.innerHTML = '<div class="modal wide">'+
+        '<h3>Gerar Orçamento</h3>'+
+        '<div class="field-group">'+
+          '<label>Nome do Cliente</label>'+
+          '<input type="text" id="orcNome" placeholder="Nome do Cliente" value="'+escAttr(tempOrcamento.clienteNome)+'">'+
+          '<label>Telefone</label>'+
+          '<input type="text" id="orcTel" placeholder="Telefone" value="'+escAttr(tempOrcamento.clienteTelefone)+'">'+
+        '</div>'+
+        '<h4>Itens do Orçamento</h4>'+
+        '<div id="orcItensList" class="orcamento-items-list"></div>'+
+        '<button class="btn ghost small" id="btnAddOrcItem" style="margin-top:6px;">+ Adicionar Item</button>'+
+        '<div class="modal-actions">'+
+          '<button class="btn ghost small" id="btnCloseModal">Cancelar</button>'+
+          '<button class="btn primary small" id="btnPrintOrc">Imprimir Orçamento</button>'+
+        '</div>'+
+      '</div>';
+      document.body.appendChild(ov);
+
+      function renderOrcItens(){
+        var area = document.getElementById("orcItensList");
+        area.innerHTML = tempOrcamento.itens.map(function(it, idx){
+          return '<div class="orcamento-item-row">'+
+            '<input type="text" placeholder="Descrição" class="orc-desc" data-idx="'+idx+'" value="'+escAttr(it.desc)+'">'+
+            '<input type="text" placeholder="Valor (R$)" class="orc-val" data-idx="'+idx+'" value="'+escAttr(it.val)+'">'+
+            '<button class="btn danger small del-orc-item" data-idx="'+idx+'">✕</button>'+
+          '</div>';
+        }).join("");
+
+        area.querySelectorAll(".orc-desc").forEach(function(i){
+          i.onchange = function(e){ tempOrcamento.itens[i.getAttribute("data-idx")].desc = e.target.value; };
+        });
+        area.querySelectorAll(".orc-val").forEach(function(i){
+          i.onchange = function(e){ tempOrcamento.itens[i.getAttribute("data-idx")].val = e.target.value; };
+        });
+        area.querySelectorAll(".del-orc-item").forEach(function(b){
+          b.onclick = function(){
+            tempOrcamento.itens.splice(b.getAttribute("data-idx"), 1);
+            renderOrcItens();
+          };
+        });
+      }
+
+      renderOrcItens();
+
+      document.getElementById("orcNome").onchange = function(e){ tempOrcamento.clienteNome = e.target.value; };
+      document.getElementById("orcTel").onchange = function(e){ tempOrcamento.clienteTelefone = e.target.value; };
+      document.getElementById("btnAddOrcItem").onclick = function(){
+        tempOrcamento.itens.push({desc:"", val:""});
+        renderOrcItens();
+      };
+      document.getElementById("btnCloseModal").onclick = function(){ state.modal=null; render(); };
+      document.getElementById("btnPrintOrc").onclick = function(){
+        imprimirOrcamento(tempOrcamento);
+        state.modal = null;
+        render();
+      };
+    }
   }
 
-  function checkAuthAndBoot(){
-    if (!sb){ bootApp(); return; } // sem Supabase configurado, não há como validar login sem expor a senha — segue liberado
-    sb.auth.getSession().then(function(res){
-      var session = res && res.data && res.data.session;
-      if (session) bootApp();
-      else renderLoginScreen();
-    });
+  function imprimirOrcamento(orcData){
+    var total = 0;
+    var rowsHtml = orcData.itens.map(function(it){
+      var val = parseNum(it.val);
+      total += val;
+      return '<tr><td>'+escHtml(it.desc)+'</td><td style="text-align:right;">'+fmtCurrency(val)+'</td></tr>';
+    }).join("");
+
+    var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Orçamento</title>'+
+      '<style>'+
+        'body{font-family:Arial,sans-serif;padding:20px;font-size:13px;}'+
+        'h1{font-size:18px;margin-bottom:4px;}'+
+        'table{width:100%;border-collapse:collapse;margin-top:15px;}'+
+        'th,td{border-bottom:1px solid #ddd;padding:8px;text-align:left;}'+
+        'th{background:#f4f4f4;}'+
+        '.total{text-align:right;font-size:16px;font-weight:bold;margin-top:15px;}'+
+      '</style></head><body>'+
+        '<h1>ORÇAMENTO — '+escHtml(EMPRESA.nome)+'</h1>'+
+        '<p><b>Cliente:</b> '+escHtml(orcData.clienteNome||"Não informado")+' | <b>Telefone:</b> '+escHtml(orcData.clienteTelefone||"Não informado")+'</p>'+
+        '<table><thead><tr><th>Descrição</th><th style="text-align:right;">Valor</th></tr></thead><tbody>'+
+        rowsHtml+
+        '</tbody></table>'+
+        '<div class="total">Total: '+fmtCurrency(total)+'</div>'+
+      '</body></html>';
+
+    var win = window.open("", "_blank");
+    win.document.write(html);
+    win.document.close();
+    setTimeout(function(){ win.print(); }, 250);
   }
 
-  checkAuthAndBoot();
+  render();
 })();
 </script>
 </body>
