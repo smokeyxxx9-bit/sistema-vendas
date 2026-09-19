@@ -34,7 +34,25 @@
     --teal:#3ac7c1;
     --red:#e2554c;
     --green:#4fae6c;
+    --radius-card:8px;
   }
+  html[data-theme="light"]{
+    --bg:#eef1f4;
+    --panel:#ffffff;
+    --panel-alt:#f4f6f8;
+    --border:#c9d1d8;
+    --border-soft:#dbe1e6;
+    --text:#1c2227;
+    --text-dim:#4a555e;
+    --text-faint:#6c7681;
+    --yellow:#c98f00;
+    --yellow-dim:#e7c473;
+    --teal:#0f8f89;
+    --red:#c8433b;
+    --green:#2f8c4f;
+  }
+  html[data-theme="light"] .brand .mark{background:var(--yellow);}
+  html[data-theme="light"] ::selection{background:var(--yellow);color:#fff;}
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
   body{
@@ -54,6 +72,12 @@
   input,select,textarea{font-family:inherit;}
   a{color:inherit;}
   ::selection{background:var(--yellow);color:#1c1c1c;}
+  /* ---- padronização de raio/contraste (cards, botões desativados, texto secundário) ---- */
+  .card, .dt-card, .parts-card, .archive-row, .cust-row, .est-row, .hero, .dd-card, .modal, .nota-row, .aviso-card, .aviso-row{
+    border-radius:var(--radius-card) !important;
+  }
+  .btn:disabled, button:disabled{ opacity:.55; color:var(--text-dim); }
+  .text-secondary, .dt-sub, .dd-note, .tag, .k, .hint{ color:var(--text-dim); }
 
   #app{max-width:1180px;margin:0 auto;padding:20px 20px 80px;}
   #app.wide{max-width:none;padding-left:16px;padding-right:16px;}
@@ -137,16 +161,20 @@
   .daily-target{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;}
   @media(max-width:600px){.daily-target{grid-template-columns:1fr;}}
   .dt-card{
-    background:linear-gradient(180deg,var(--panel-alt),var(--panel));
-    border:1px solid var(--border-soft);border-left:3px solid var(--yellow);border-radius:6px;
-    padding:16px 18px;
+    background:var(--panel);border:1px solid var(--border-soft);border-left:3px solid var(--teal);
+    border-radius:6px;padding:16px 18px;
   }
+  .dt-card:nth-child(2){border-left-color:var(--yellow);}
   .dt-card.dt-done{border-left-color:var(--green);}
   .dt-card.dt-closed{border-left-color:var(--text-faint);}
-  .dt-label{font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:9px;}
-  .dt-value{font-size:25px;color:var(--text);font-family:'IBM Plex Mono',monospace;line-height:1;}
+  .dt-top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:9px;}
+  .dt-label{font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.05em;}
+  .dt-percent{font-size:11.5px;color:var(--text-dim);font-family:'IBM Plex Mono',monospace;}
+  .dt-value{font-size:23px;color:var(--teal);font-family:'IBM Plex Mono',monospace;line-height:1;}
+  .dt-card:nth-child(2) .dt-value{color:var(--yellow);}
   .dt-value .dt-unit{font-size:13px;color:var(--text-faint);margin-left:5px;font-family:'IBM Plex Sans',sans-serif;}
   .dt-card.dt-done .dt-value{color:var(--green);font-size:19px;font-family:'IBM Plex Sans',sans-serif;font-weight:600;}
+  .dt-card.dt-closed .dt-value{color:var(--text-dim);}
   .dt-sub{font-size:12px;color:var(--text-dim);margin-top:8px;}
 
   .parts-visor-head{margin:0 2px 8px;font-size:13px;color:var(--text-dim);}
@@ -245,6 +273,66 @@
     .orc-item{grid-template-columns:1fr 60px 92px 36px;}
     .orc-item .tot{display:none;}
   }
+  .orc-cli-search{display:flex;gap:8px;}
+  .orc-cli-search input{flex:1;}
+  .orc-cli-results{margin-top:6px;max-height:260px;}
+  .orc-cli-chip{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+    background:var(--panel-alt);border:1px solid var(--teal);border-radius:4px;padding:9px 12px;}
+  .orc-cli-chip b{display:block;font-size:14px;color:var(--text);}
+  .orc-cli-chip span{font-size:12px;color:var(--text-dim);}
+  .orc-cli-actions{display:flex;gap:6px;}
+  .cust-item.cust-create{color:var(--yellow);}
+
+  /* ---- detalhes do dia (evolução diária) ---- */
+  .dd-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:6px 0 12px;}
+  .dd-head h2{font-size:15px;color:var(--text);}
+  .dd-head .dd-cmp-toggle{margin-right:auto;}
+  .dd-nav{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .dd-nav button.nav{background:transparent;border:1px solid var(--border);color:var(--text-dim);width:26px;height:26px;border-radius:3px;font-size:14px;line-height:1;}
+  .dd-nav button.nav:hover{border-color:var(--yellow);color:var(--yellow);}
+  .dd-nav .dd-date{font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--text);text-transform:capitalize;}
+  .dd-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:18px;}
+  @media(max-width:820px){.dd-grid{grid-template-columns:1fr;}}
+  .dd-card{border:1px solid var(--border-soft);border-radius:6px;background:var(--panel);padding:16px 18px;}
+  .dd-card.span2{grid-column:1 / -1;}
+   .dd-card h3{font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.06em;font-family:'IBM Plex Sans',sans-serif;font-weight:600;margin-bottom:12px;}
+   .dd-card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;}
+   .dd-card-head h3{margin-bottom:0;}
+   .dd-cmp-toggle{display:inline-flex;border:1px solid var(--border-soft);border-radius:99px;overflow:hidden;}
+   .dd-cmp-toggle .seg{background:none;border:none;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:11px;color:var(--text-dim);padding:4px 12px;line-height:1;}
+   .dd-cmp-toggle .seg.on{background:var(--yellow);color:#1c2227;font-weight:600;}
+  .dd-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;}
+  @media(max-width:520px){.dd-kpis{grid-template-columns:1fr 1fr;}}
+  .dd-kpi{background:var(--panel-alt);border-radius:4px;padding:10px 12px;}
+  .dd-kpi .k{font-size:10px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;}
+  .dd-kpi .v{font-family:'IBM Plex Mono',monospace;font-size:17px;color:var(--text);line-height:1.1;}
+  .dd-kpi.big .v{color:var(--yellow);font-size:21px;}
+  .dd-kpi.warn .v{color:var(--red);}
+  .dd-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border-soft);font-size:13px;}
+  .dd-row:last-child{border-bottom:none;}
+  .dd-row .lbl{flex:0 0 160px;color:var(--text);min-width:0;}
+  .dd-row .lbl small{white-space:normal;}
+  @media(max-width:520px){.dd-row .lbl{flex:0 0 110px;} .dd-row .pct{display:none;}}
+  .dd-row .lbl small{display:block;color:var(--text-faint);font-size:11px;}
+  .dd-row .track{flex:1;height:7px;background:var(--border-soft);border-radius:99px;overflow:hidden;}
+  .dd-row .fill{height:100%;border-radius:99px;background:var(--teal);}
+  .dd-row .fill.y{background:var(--yellow);} .dd-row .fill.g{background:var(--green);} .dd-row .fill.r{background:var(--red);}
+  .dd-row .val{flex:0 0 auto;font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--text);text-align:right;min-width:92px;}
+  .dd-row .pct{flex:0 0 44px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-faint);}
+  .dd-rank{flex:0 0 18px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-faint);}
+  .dd-cmp{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--border-soft);font-size:13px;}
+  .dd-cmp:last-child{border-bottom:none;}
+  .dd-cmp .who{color:var(--text-dim);}
+  .dd-cmp .who small{display:block;color:var(--text-faint);font-size:11px;}
+  .dd-cmp .amt{font-family:'IBM Plex Mono',monospace;color:var(--text);font-size:12.5px;}
+  .dd-delta{display:inline-block;min-width:58px;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:11.5px;padding:3px 7px;border-radius:99px;margin-left:8px;
+    background:var(--border-soft);color:var(--text-dim);}
+  .dd-delta.up{background:rgba(79,174,108,.16);color:var(--green);}
+  .dd-delta.down{background:rgba(226,85,76,.16);color:var(--red);}
+  .dd-empty{color:var(--text-faint);font-size:12.5px;padding:8px 0;}
+  .dd-hours svg{width:100%;height:auto;display:block;overflow:visible;}
+  .dd-note{font-size:11px;color:var(--text-faint);margin-top:8px;}
+  .chart-wrap circle[data-iso]{cursor:pointer;}
   .sticky-head-block .tbl-head{margin-bottom:12px;}
   .sticky-head-block .tbl-toolbar{margin:0 0 10px;}
   .grid-scroll-head{border:1px solid var(--border-soft);border-radius:4px 4px 0 0;border-bottom:none;overflow:hidden;background:var(--panel-alt);}
@@ -285,10 +373,30 @@
   }
   .icon-btn:hover{border-color:var(--red);color:var(--red);}
   .icon-btn.print-btn:hover{border-color:var(--teal);color:var(--teal);}
-  .icon-btn.wa-btn:hover{border-color:var(--green);color:var(--green);}
   .icon-btn.cli-btn.has{border-color:var(--teal);color:var(--teal);}
   .icon-btn.cli-btn:hover{border-color:var(--teal);color:var(--teal);}
-  .icon-btn.dup-btn:hover{border-color:var(--yellow);color:var(--yellow);}
+  .icon-btn.drag-btn{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;font-size:14px;letter-spacing:-1px;}
+  .icon-btn.drag-btn:hover{border-color:var(--yellow);color:var(--yellow);}
+  .icon-btn.drag-btn:active{cursor:grabbing;}
+  /* a linha (venda) e o toggle/detalhe dela viajam juntos como um único bloco
+     durante o arraste, pra não ter mais aquele "descolamento" visual entre
+     a linha principal e os detalhes abertos abaixo dela */
+  .row-group{position:relative;}
+  /* o bloco arrastado fica "levantado" e gruda no cursor/dedo, igual a aba de
+     navegador; as outras linhas abrem espaço deslizando em tempo real */
+  .row-group.row-dragging{
+    z-index:30;
+    background:var(--panel-alt);
+    border-radius:4px;
+    box-shadow:0 0 0 1px var(--yellow), 0 12px 26px rgba(0,0,0,.5);
+    will-change:transform;
+  }
+  .row-group.row-dragging .grid-row{background:transparent;border-bottom-color:transparent;}
+  .row-group.row-dragging .grid-row.data{border-bottom:none;}
+  /* deslizar das linhas que abrem espaço + encaixe final do bloco arrastado */
+  .row-group.row-shifting{transition:transform .17s cubic-bezier(.2,.8,.2,1);}
+  body.grid-dragging{cursor:grabbing;}
+  body.grid-dragging .grid-row.data:hover{background:transparent;}
 
   /* linha com quantidade x valor que não bate (ex: 3 bicos mas R$ 0,00) */
   .cell.cell-warn{box-shadow:inset 0 0 0 1.5px var(--yellow);background:rgba(245,183,0,.08);border-radius:3px;}
@@ -449,9 +557,146 @@
     .arow .stats{flex-wrap:wrap;gap:8px 14px;}
   }
 </style>
+
+<style id="oficina-redesign">
+:root{
+  --bg:#0d1114;--panel:#151b20;--panel-alt:#1b2329;--border:#34414a;--border-soft:#253039;
+  --text:#f4f5f2;--text-dim:#aab4ba;--text-faint:#74818a;--yellow:#ffc400;--yellow-dim:#846b11;
+  --teal:#37c9bd;--red:#ef6157;--green:#5dc779;
+}
+html{background:var(--bg);scrollbar-color:var(--border) var(--bg)}
+body{min-height:100vh;background-color:var(--bg);background-image:linear-gradient(rgba(255,255,255,.015) 1px,transparent 1px);background-size:100% 28px}
+body:before{content:"";position:fixed;inset:0 0 auto;height:4px;background:var(--yellow);z-index:1000}
+#app{max-width:1280px;padding:22px 24px 96px}
+.topbar{position:relative;padding:16px 0 20px;margin-bottom:22px;border-bottom:1px solid var(--border)}
+.brand{gap:12px}.brand .mark{width:14px;height:14px;border-radius:2px;box-shadow:0 0 0 4px rgba(255,196,0,.1)}
+.brand h1{font-size:25px;text-transform:uppercase}.brand span.tag{letter-spacing:.05em}
+.panel,.dash-hero,.daily-detail,.archive,.login-card,.modal,.estoque-wrap,.clientes-wrap,.usuarios-wrap,.historico-wrap{box-shadow:0 14px 38px rgba(0,0,0,.18)}
+button,.btn,input,select,textarea{border-radius:4px!important}
+.btn{min-height:38px;font-weight:600;transition:border-color .16s ease,background .16s ease,color .16s ease,transform .16s ease}
+.btn:active{transform:translateY(1px)}
+.btn.primary{box-shadow:0 5px 14px rgba(255,196,0,.12)}
+.dash-hero{border-color:var(--border);background:linear-gradient(135deg,var(--panel) 0%,var(--panel-alt) 100%);overflow:hidden;position:relative}
+.dash-hero:after{content:"";position:absolute;right:-50px;top:-70px;width:170px;height:170px;border:18px solid rgba(255,196,0,.045);border-radius:50%;pointer-events:none}
+.big-number,.hero-value,.dd-total{font-variant-numeric:tabular-nums}.progress-fill,.bar-fill{background:var(--yellow)!important}
+.parts-card,.seller-card,.daily-target-card,.stat-card{border-top:2px solid var(--yellow)!important;background:var(--panel)!important}
+.table-wrap,.estoque-table-wrap{border:1px solid var(--border);border-radius:6px;background:var(--panel);box-shadow:0 14px 35px rgba(0,0,0,.2)}
+thead th{background:#10161a!important;color:var(--text-dim)!important;text-transform:uppercase;letter-spacing:.06em;font-size:10px!important}
+tbody tr:hover{background:rgba(255,196,0,.035)}
+input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!important;outline-offset:-1px;border-color:var(--yellow)!important}
+.modal-overlay{backdrop-filter:blur(8px);background:rgba(5,8,10,.78)!important}
+.sync-badge{border-radius:3px!important}
+@media(max-width:700px){
+  body{background-size:100% 24px}
+  #app,#app.wide{width:100%;max-width:none;padding:12px 12px 92px}
+  .topbar{position:sticky;top:0;z-index:30;margin:0 -12px 14px;padding:14px 12px 12px;background:rgba(13,17,20,.96);backdrop-filter:blur(12px);gap:10px}
+  .brand{width:100%;align-items:center}.brand h1{font-size:20px}.brand span.tag{font-size:10px;flex:1}.brand .mark{width:11px;height:11px}
+  .auth-zone{width:100%;display:flex;overflow-x:auto;gap:7px;padding:0 0 3px;scrollbar-width:none;flex-wrap:nowrap!important}.auth-zone::-webkit-scrollbar{display:none}
+  .auth-zone .btn,.auth-zone .pill,.auth-zone .sync-badge{flex:0 0 auto;white-space:nowrap;min-height:36px}
+  .dash-title-row,.screen-head,.section-head,.dd-head{align-items:flex-start!important;gap:10px;flex-wrap:wrap!important}
+  .dash-title-row>*:first-child,.screen-head>*:first-child{min-width:0;flex:1}
+  h2{font-size:18px!important}.dash-sub,.subtitle{font-size:11px!important;line-height:1.45}
+  .dash-hero{padding:18px 16px!important;border-radius:6px!important}.dash-hero .hero-value,.big-number{font-size:34px!important;line-height:1.05}
+  .hero-grid,.summary-row,.secondary-row,.parts-grid,.seller-grid,.daily-targets{grid-template-columns:1fr 1fr!important;gap:8px!important}
+  .parts-card,.seller-card,.daily-target-card,.stat-card{min-width:0;padding:12px!important;border-radius:5px!important}
+  .pc-label,.dt-label{font-size:10px!important}.pc-value,.dt-value{font-size:18px!important;overflow-wrap:anywhere}.pc-qty,.dt-percent{font-size:9px!important}
+  .archive{padding:14px!important;border-radius:5px!important}.archive-list{gap:7px!important}.arow{padding:12px!important;gap:8px!important}
+  .table-screen{min-width:0}.table-toolbar,.filter-bar,.day-actions{display:flex!important;overflow-x:auto;flex-wrap:nowrap!important;gap:7px;padding-bottom:5px;scrollbar-width:none}.table-toolbar::-webkit-scrollbar,.filter-bar::-webkit-scrollbar,.day-actions::-webkit-scrollbar{display:none}.table-toolbar>* ,.filter-bar>* ,.day-actions>*{flex:0 0 auto}
+  .table-wrap,.estoque-table-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;scroll-snap-type:x proximity}
+  table{font-size:12px!important}th,td{min-height:44px!important}td input,td select{font-size:16px!important;min-height:42px!important}
+  .row-actions{position:sticky;right:0;background:var(--panel);box-shadow:-8px 0 14px rgba(0,0,0,.22)}
+  .dd-summary,.dd-totals{grid-template-columns:1fr 1fr!important;gap:8px!important}.dd-box{padding:11px!important}.dd-chart{overflow-x:auto}
+  .modal{width:calc(100vw - 20px)!important;max-width:none!important;max-height:88vh!important;padding:18px 14px!important;border-radius:6px!important}.modal-actions{position:sticky;bottom:0;background:var(--panel);padding-top:10px}
+  .form-grid,.customer-grid,.estoque-form,.orc-grid{grid-template-columns:1fr!important}.login-screen{min-height:calc(100vh - 28px)}.login-card{padding:24px 18px;border-radius:6px!important}
+  .history-row,.user-row,.customer-row{display:grid!important;grid-template-columns:1fr!important;gap:8px!important;padding:13px!important}
+}
+@media(max-width:430px){
+  .hero-grid,.summary-row,.secondary-row{grid-template-columns:1fr!important}
+  .parts-grid,.seller-grid,.daily-targets{grid-template-columns:1fr 1fr!important}
+  .dash-hero .hero-value,.big-number{font-size:31px!important}
+  .btn{padding-left:10px!important;padding-right:10px!important}
+}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+</style>
+<style id="oficina-novidades">
+  /* ---- skeleton de carregamento inicial ---- */
+  .app-skeleton{max-width:1180px;margin:0 auto;padding:20px 20px 80px;}
+  .sk-row{background:linear-gradient(90deg,var(--panel) 25%,var(--panel-alt) 37%,var(--panel) 63%);
+    background-size:400% 100%;animation:skShimmer 1.4s ease infinite;border-radius:8px;}
+  @keyframes skShimmer{0%{background-position:100% 0}100%{background-position:0 0}}
+  .sk-topbar{height:44px;margin-bottom:24px;}
+  .sk-hero{height:160px;margin-bottom:18px;}
+  .sk-cards{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;}
+  .sk-card{height:70px;}
+  .sk-list{height:44px;margin-bottom:8px;}
+
+  /* ---- indicador de meta do dia (barra fixa no topo) ---- */
+  .today-goal-bar{margin:-4px 2px 18px;background:var(--panel);border:1px solid var(--border-soft);border-radius:8px;
+    padding:10px 14px;display:flex;align-items:center;gap:12px;}
+  .today-goal-bar .tg-label{font-size:12px;color:var(--text-dim);white-space:nowrap;}
+  .today-goal-bar .tg-track{flex:1;height:8px;background:var(--border-soft);border-radius:99px;overflow:hidden;}
+  .today-goal-bar .tg-fill{height:100%;background:var(--yellow);border-radius:99px;transition:width .5s ease;}
+  .today-goal-bar .tg-fill.reached{background:var(--green);}
+  .today-goal-bar .tg-pct{font-size:12px;color:var(--text);font-family:'IBM Plex Mono',monospace;white-space:nowrap;}
+  .today-goal-bar.reached{border-left:3px solid var(--green);}
+  .today-goal-bar:not(.reached){border-left:3px solid var(--yellow);}
+
+  /* ---- badges de aviso na navegação ---- */
+  .nav-badge{background:var(--red);color:#fff;font-size:10px;font-weight:700;border-radius:99px;
+    padding:1px 6px;margin-left:5px;font-family:'IBM Plex Mono',monospace;}
+
+  /* ---- notas e avisos ---- */
+  .nota-row, .aviso-row{background:var(--panel);border:1px solid var(--border-soft);border-radius:8px;
+    padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;}
+  .nota-row .nota-num{font-family:'IBM Plex Mono',monospace;color:var(--yellow);font-size:13px;font-weight:600;}
+  .nota-row .nota-meta{font-size:12px;color:var(--text-dim);margin-top:3px;}
+  .nota-row .nota-valor{font-family:'IBM Plex Mono',monospace;font-size:15px;}
+  .aviso-card{background:var(--panel);border:1px solid var(--border-soft);border-radius:8px;padding:16px 18px;margin-bottom:16px;}
+  .aviso-card h3{font-size:14px;margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+  .aviso-row.matched{border-left:3px solid var(--yellow);background:rgba(245,183,0,.06);}
+  .aviso-row.overdue{border-left:3px solid var(--red);}
+  .aviso-row .aviso-title{font-weight:600;font-size:13.5px;}
+  .aviso-row .aviso-sub{font-size:12px;color:var(--text-dim);margin-top:3px;}
+  .aviso-empty{color:var(--text-faint);font-size:13px;padding:12px 0;}
+  .aviso-form{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;margin-bottom:14px;}
+  @media(max-width:700px){.aviso-form{grid-template-columns:1fr;}}
+  .aviso-form input, .aviso-form select{background:var(--panel-alt);border:1px solid var(--border);color:var(--text);
+    padding:8px 10px;border-radius:4px;font-size:13px;}
+  .est-baixo-badge{background:var(--red);color:#fff;font-size:10px;padding:2px 7px;border-radius:99px;margin-left:6px;}
+
+  /* ---- busca global (Ctrl/Cmd+K) ---- */
+  .gsearch-overlay{position:fixed;inset:0;background:rgba(5,8,10,.7);z-index:11000;display:flex;
+    align-items:flex-start;justify-content:center;padding-top:12vh;}
+  .gsearch-box{background:var(--panel);border:1px solid var(--border);border-radius:8px;width:min(560px,92vw);
+    box-shadow:0 24px 60px rgba(0,0,0,.5);overflow:hidden;}
+  .gsearch-input{width:100%;border:none;background:var(--panel-alt);color:var(--text);padding:16px 18px;
+    font-size:16px;border-bottom:1px solid var(--border-soft);outline:none;}
+  .gsearch-results{max-height:52vh;overflow-y:auto;}
+  .gsearch-item{padding:11px 18px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;
+    border-bottom:1px solid var(--border-soft);}
+  .gsearch-item:hover, .gsearch-item.sel{background:var(--panel-alt);}
+  .gsearch-item .gs-title{font-size:13.5px;color:var(--text);}
+  .gsearch-item .gs-sub{font-size:11.5px;color:var(--text-faint);}
+  .gsearch-item .gs-tag{font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--yellow);
+    border:1px solid var(--yellow-dim);border-radius:3px;padding:2px 6px;}
+  .gsearch-empty{padding:22px 18px;color:var(--text-faint);font-size:13px;text-align:center;}
+  .gsearch-hint{padding:9px 18px;font-size:11px;color:var(--text-faint);border-top:1px solid var(--border-soft);}
+
+  /* ---- botão flutuante de tema ---- */
+  .ui-theme-toggle{position:fixed;right:16px;bottom:66px;z-index:9000;width:42px;height:42px;border-radius:50%;
+    border:1px solid var(--border);background:var(--panel);color:var(--yellow);font-size:16px;cursor:pointer;
+    box-shadow:0 8px 22px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;}
+  @media(max-width:700px){.ui-theme-toggle{right:12px;bottom:62px;}}
+</style>
+
 </head>
 <body>
-<div id="app"></div>
+<div id="app"><div class="app-skeleton">
+  <div class="sk-row sk-topbar"></div>
+  <div class="sk-row sk-hero"></div>
+  <div class="sk-cards"><div class="sk-row sk-card"></div><div class="sk-row sk-card"></div></div>
+  <div class="sk-row sk-list"></div><div class="sk-row sk-list"></div><div class="sk-row sk-list"></div>
+</div></div>
 
 <script>
 (function(){
@@ -496,7 +741,7 @@
     ["qtdBalanceamento","valorBalanceamento"],
     ["qtdRodas","valorRodas"]
   ];
-  var ROWACTIONS_W = "172px"; // largura da coluna de ações da linha (cliente, imprimir, whatsapp, duplicar, apagar)
+  var ROWACTIONS_W = "150px"; // largura da coluna de ações da linha (cliente, imprimir, apagar, arrastar)
 
   // ---------- storage helpers (localStorage — funciona 100% offline, direto no navegador) ----------
   var K_ROWS = "vo_rows:";
@@ -510,6 +755,8 @@
   var K_ESTOQUE_LOG = "vo_estoque_log";
   var K_ORCAMENTO = "vo_orcamento_draft";
   var K_ORC_SEQ = "vo_orcamento_seq";
+  var K_PROCURADOS = "vo_procurados";
+  var K_LEMBRETES = "vo_lembretes";
 
   // ---------- sincronização em nuvem (Supabase) ----------
   // Preencha as duas linhas abaixo com os dados do SEU projeto Supabase
@@ -624,7 +871,7 @@
   }
 
   var EMPRESA = {
-    nome: "BIGUA PNEUS BORRACHARIA E AUTO CENTER",
+    nome: "BIGUA PNEUS AUTO CENTER",
     telefone: "47996919175",
     email: "biguapneus@gmail.com",
     cnpj: "39508037000160",
@@ -810,6 +1057,7 @@
     obj.id = uid();
     obj.quantidade = Math.max(0, parseNum(obj.quantidade));
     obj.preco = Math.max(0, parseNum(obj.preco));
+    obj.minimo = Math.max(0, parseNum(obj.minimo));
     list.push(obj);
     saveEstoque(list);
     return obj;
@@ -821,10 +1069,18 @@
         Object.keys(changes).forEach(function(k){ list[i][k] = changes[k]; });
         list[i].quantidade = Math.max(0, parseNum(list[i].quantidade));
         list[i].preco = Math.max(0, parseNum(list[i].preco));
+        list[i].minimo = Math.max(0, parseNum(list[i].minimo));
         break;
       }
     }
     saveEstoque(list);
+  }
+  // estoque abaixo do mínimo definido (só considera itens com mínimo >0 configurado)
+  function estoqueBaixoList(){
+    return loadEstoque().filter(function(i){
+      var min = Math.max(0, parseNum(i.minimo));
+      return min>0 && Math.max(0, parseNum(i.quantidade)) < min;
+    });
   }
   function deleteEstoqueItem(id){
     saveEstoque(loadEstoque().filter(function(i){ return i.id!==id; }));
@@ -873,6 +1129,104 @@
     var moved = moveEstoque(row.medidaId, -delta);
     row.medidaBaixa = jaBaixado - moved; // moved vem negativo quando saiu do estoque
   }
+  // ---------- avisos: clientes procurando uma medida ----------
+  function loadProcurados(){ return lsGetJSON(K_PROCURADOS, []); }
+  function saveProcurados(list){ return lsSetJSON(K_PROCURADOS, list); }
+  function addProcurado(obj){
+    var list = loadProcurados();
+    obj.id = uid();
+    obj.createdAt = Date.now();
+    obj.resolved = false;
+    obj.matched = false;
+    list.push(obj);
+    saveProcurados(list);
+    return obj;
+  }
+  function deleteProcuradoWithUndo(id, onDone){
+    var list = loadProcurados();
+    var idx=-1, item=null;
+    for (var i=0;i<list.length;i++){ if (list[i].id===id){ idx=i; item=list[i]; break; } }
+    if (idx===-1) return;
+    list.splice(idx,1);
+    saveProcurados(list);
+    onDone();
+    showUndoToast("Aviso apagado", function(){
+      var list2 = loadProcurados();
+      list2.splice(Math.min(idx,list2.length), 0, item);
+      saveProcurados(list2);
+      onDone();
+    });
+  }
+  function resolveProcurado(id){
+    var list = loadProcurados();
+    list.forEach(function(p){ if (p.id===id) p.resolved = true; });
+    saveProcurados(list);
+  }
+  // chamado toda vez que entra estoque de uma medida — avisa quem estava esperando essa medida
+  function checkProcuradosOnEntrada(medidaLabel){
+    var alvo = (medidaLabel||"").toLowerCase();
+    if (!alvo) return;
+    var list = loadProcurados();
+    var mudou = false;
+    list.forEach(function(p){
+      if (p.resolved || p.matched) return;
+      var termo = (p.medida||"").toLowerCase().trim();
+      if (termo && alvo.indexOf(termo)>-1){
+        p.matched = true;
+        mudou = true;
+        if (window.uiToast) window.uiToast("🔔 "+(p.cliente||"Cliente")+" está esperando "+p.medida+" — acabou de chegar em estoque!", "ok", 9000);
+      }
+    });
+    if (mudou) saveProcurados(list);
+  }
+
+  // ---------- avisos: lembretes recorrentes (ex.: checar garantia do cliente) ----------
+  function loadLembretes(){ return lsGetJSON(K_LEMBRETES, []); }
+  function saveLembretes(list){ return lsSetJSON(K_LEMBRETES, list); }
+  function addLembrete(obj){
+    var list = loadLembretes();
+    obj.id = uid();
+    obj.createdAt = Date.now();
+    list.push(obj);
+    saveLembretes(list);
+    return obj;
+  }
+  function deleteLembreteWithUndo(id, onDone){
+    var list = loadLembretes();
+    var idx=-1, item=null;
+    for (var i=0;i<list.length;i++){ if (list[i].id===id){ idx=i; item=list[i]; break; } }
+    if (idx===-1) return;
+    list.splice(idx,1);
+    saveLembretes(list);
+    onDone();
+    showUndoToast("Lembrete apagado", function(){
+      var list2 = loadLembretes();
+      list2.splice(Math.min(idx,list2.length), 0, item);
+      saveLembretes(list2);
+      onDone();
+    });
+  }
+  // marca como conferido hoje; se tiver repetição, agenda o próximo lembrete daqui a X dias
+  function completeLembrete(id){
+    var list = loadLembretes();
+    list.forEach(function(l){
+      if (l.id!==id) return;
+      var rep = parseInt(l.repetirDias||0, 10);
+      if (rep>0){ l.proximo = addDays(today, rep); }
+      else { l.proximo = null; l.feito = true; }
+    });
+    saveLembretes(list);
+  }
+  function lembretesVencidos(){
+    return loadLembretes().filter(function(l){ return !l.feito && l.proximo && l.proximo<=today; });
+  }
+  function avisosPendentesCount(){
+    var procurados = loadProcurados().filter(function(p){ return !p.resolved && p.matched; }).length;
+    var lembretes = lembretesVencidos().length;
+    var baixo = estoqueBaixoList().length;
+    return procurados + lembretes + baixo;
+  }
+
   // devolve pro estoque tudo que essa linha já havia baixado
   function releaseRowEstoque(row){
     var jaBaixado = Math.max(0, parseNum(row.medidaBaixa));
@@ -1181,61 +1535,6 @@
     return pdf.output("blob");
   }
 
-  // ---------- enviar o PDF da nota por WhatsApp ----------
-  function sendNotaPdfWhatsapp(row, customer){
-    if (!window.html2canvas || !window.jspdf){
-      alert("As bibliotecas de PDF ainda estão carregando (ou não carregaram por falta de internet). Tente novamente em alguns segundos.");
-      return;
-    }
-    var vendaNum = nextVendaNumber();
-    var nota = {
-      id: uid(), vendaNum: vendaNum, date: state.date, rowId: row.id, customerId: customer.id,
-      customer: {
-        nome: customer.nome||"", tipoDocumento: (customer.tipoDocumento||"cpf"), documento: (customer.documento||customer.cpf||""), email: customer.email||"",
-        telefone: customer.telefone||"", endereco: customer.endereco||""
-      },
-      items: buildNotaItems(row),
-      totalProdutos: computeValor(row),
-      formaPagamento: row.formaPagamento||"",
-      pagamentosMultiplos: Array.isArray(row.pagamentosMultiplos) ? row.pagamentosMultiplos : null,
-      splitValor: (row.splitValor!==undefined ? row.splitValor : null),
-      pago: row.pago||"",
-      createdAt: Date.now()
-    };
-    addNota(nota);
-
-    renderNotaToCanvas(nota, function(canvas){
-      if (!canvas){ alert("Não foi possível gerar o PDF da nota."); return; }
-      var blob = canvasToPdfBlob(canvas);
-      var fileName = "nota-venda-"+nota.vendaNum+".pdf";
-      var caption = "Olá"+(customer.nome?" "+customer.nome:"")+"! Segue em anexo a nota da sua compra na "+EMPRESA.nome+".";
-      var phoneDigits = String(customer.telefone||"").replace(/\D/g,"");
-      var phone = phoneDigits ? (phoneDigits.length<=11 ? "55"+phoneDigits : phoneDigits) : "";
-
-      var file;
-      try{ file = new File([blob], fileName, {type:"application/pdf"}); }catch(e){ file = null; }
-
-      if (file && navigator.canShare && navigator.canShare({files:[file]})){
-        // celular/navegador com suporte: abre a folha de compartilhar nativa,
-        // já com o PDF anexado — o usuário só escolhe o WhatsApp na lista.
-        navigator.share({files:[file], title:fileName, text:caption}).catch(function(){ /* usuário cancelou — sem problema */ });
-      } else {
-        // fallback (principalmente desktop): baixa o PDF e abre o WhatsApp
-        // com a mensagem, pedindo pra anexar o arquivo que acabou de baixar.
-        var url = URL.createObjectURL(blob);
-        var a = document.createElement("a");
-        a.href = url; a.download = fileName;
-        document.body.appendChild(a); a.click(); document.body.removeChild(a);
-        setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
-        var waMsg = caption + " (o PDF foi baixado agora — é só anexar aqui no chat)";
-        var waUrl = phone
-          ? "https://wa.me/"+phone+"?text="+encodeURIComponent(waMsg)
-          : "https://wa.me/?text="+encodeURIComponent(waMsg);
-        window.open(waUrl, "_blank");
-      }
-    });
-  }
-
   // ---------- backup / restauração ----------
   function exportBackup(auto){
     var data = {};
@@ -1378,7 +1677,7 @@
       qtdBalanceamento:"0", valorBalanceamento:"", qtdRodas:"0", valorRodas:"",
       outros:"", valorPecas:"", maoDeObra:"", valorPneus:"",
       formaPagamento:"Nenhum", pago:"❌", carro:"Carro 1", vendedor:VENDEDORES[0], detalhes:"",
-      clienteId:""
+      clienteId:"", criadoEm: new Date().toISOString()
     };
   }
 
@@ -1406,7 +1705,11 @@
     usuariosLoading: false,
     onlyPending: false,
     orcamento: null,
-    showAdvancedCols: (function(){ try{ return localStorage.getItem("vo_show_advanced")==="1"; }catch(e){ return false; } })()
+    cmpMode: "day", // "day" (comparativo por dia) ou "month" (comparativo por mês)
+    showAdvancedCols: (function(){ try{ return localStorage.getItem("vo_show_advanced")==="1"; }catch(e){ return false; } })(),
+    notasQuery: "",
+    avisosTab: "procurados",
+    vendedorFiltro: ""
   };
 
   var root = document.getElementById("app");
@@ -1421,6 +1724,8 @@
     if (estoquista) renderEstoque();
     else if (state.view==="estoque") renderEstoque();
     else if (state.view==="clientes") renderClientes();
+    else if (state.view==="notas") renderNotas();
+    else if (state.view==="avisos") renderAvisos();
     else if (state.view==="orcamento") renderOrcamento();
     else if (state.view==="historico" && isMaster) renderHistorico();
     else if (state.view==="usuarios" && isMaster) renderUsuarios();
@@ -1559,29 +1864,55 @@
 
       function dailyTargetCardHtml(label, goal){
         var remaining = goal - monthTotal;
+        var percent = Math.min(100, (monthTotal/goal)*100);
+        var percentDisplay = state.hideValues ? '••%' : percent.toFixed(0)+'%';
+        var top = '<div class="dt-top"><span class="dt-label">'+escHtml(label)+'</span><span class="dt-percent">'+percentDisplay+' alcançado</span></div>';
         if (remaining<=0){
-          return '<div class="dt-card dt-done"><div class="dt-label">'+escHtml(label)+'</div>'+
+          return '<div class="dt-card dt-done">'+top+
             '<div class="dt-value">Meta batida ✓</div>'+
             '<div class="dt-sub">'+(state.hideValues?'••••':fmtCurrency(-remaining))+' acima da meta</div></div>';
         }
         if (daysLeft<=0){
-          return '<div class="dt-card dt-closed"><div class="dt-label">'+escHtml(label)+'</div>'+
+          return '<div class="dt-card dt-closed">'+top+
             '<div class="dt-value">'+(state.hideValues?'••••':fmtCurrency(remaining))+'</div>'+
             '<div class="dt-sub">faltaram — mês encerrado ou sem dias úteis restantes</div></div>';
         }
         var perDay = remaining/daysLeft;
-        return '<div class="dt-card"><div class="dt-label">'+escHtml(label)+'</div>'+
+        return '<div class="dt-card">'+top+
           '<div class="dt-value">'+(state.hideValues?'••••':fmtCurrency(perDay))+'<span class="dt-unit">/ dia</span></div>'+
           '<div class="dt-sub">faltam '+(state.hideValues?'••••':fmtCurrency(remaining))+' em '+daysLeft+' dia(s) útil(eis)</div></div>';
       }
 
       var totalParts = fmtCurrency(monthTotal).split(",");
 
+      // dia selecionado nos detalhes: hoje (se o mês exibido é o atual) ou o último dia do mês exibido
+      var selDay = state.dashDay;
+      if (!selDay || selDay.slice(0,7)!==state.dashMonth){
+        selDay = (state.dashMonth===curMonthKey) ? today : state.dashMonth+"-"+pad(nd);
+      }
+      var det = dayDetails(selDay);
+
+      // barra de progresso da meta do dia (só faz sentido olhando o mês atual)
+      var todayGoalBarHtml = "";
+      if (state.dashMonth===curMonthKey){
+        var remainingHoje = GOAL_1 - monthTotal + sumRows(rowsOfDay(today));
+        var metaHoje = daysLeft>0 ? remainingHoje/daysLeft : 0;
+        var hojeTotal = sumRows(rowsOfDay(today));
+        var hojePct = metaHoje>0 ? Math.min(100, (hojeTotal/metaHoje)*100) : 100;
+        var hojeReached = metaHoje<=0 || hojeTotal>=metaHoje;
+        todayGoalBarHtml = '<div class="today-goal-bar'+(hojeReached?' reached':'')+'">'+
+          '<span class="tg-label">'+(hojeReached?'✅ Meta do dia batida':'Meta do dia')+'</span>'+
+          '<div class="tg-track"><div class="tg-fill'+(hojeReached?' reached':'')+'" style="width:'+(state.hideValues?0:hojePct)+'%"></div></div>'+
+          '<span class="tg-pct">'+(state.hideValues?'••':(hojeReached?fmtCurrency(hojeTotal):fmtCurrency(hojeTotal)+' / '+fmtCurrency(metaHoje)))+'</span>'+
+        '</div>';
+      }
+
       root.innerHTML =
         '<div class="topbar">'+
           '<div class="brand"><span class="mark"></span><h1>Painel de Vendas</h1><span class="tag">OFICINA · CONTROLE DIÁRIO</span>'+syncBadgeHtml()+'</div>'+
           authZoneHtml()+
         '</div>'+
+        todayGoalBarHtml+
 
         '<div class="hero">'+
           '<div class="hero-left">'+
@@ -1603,31 +1934,17 @@
             '</div>'+
           '</div>'+
           '<div class="hero-right">'+
-            '<h2>Evolução diária</h2>'+
-            '<div class="chart-wrap">'+buildChartSvg(points)+'</div>'+
+            '<h2>Evolução diária <span style="color:var(--text-faint);font-size:11.5px;">· toque em um dia do gráfico para ver os detalhes</span></h2>'+
+            '<div class="chart-wrap">'+buildChartSvg(points, selDay)+'</div>'+
           '</div>'+
         '</div>'+
+
+        buildDayDetailHtml(selDay, det)+
 
         '<div class="daily-target-head">Quanto falta vender por dia para bater a meta <span style="color:var(--text-faint);">(sem contar domingos e feriados)</span></div>'+
         '<div class="daily-target">'+
           dailyTargetCardHtml("Meta 350 mil", GOAL_1)+
           dailyTargetCardHtml("Meta 450 mil", GOAL_2)+
-        '</div>'+
-
-        '<div class="parts-visor-head">Peças vendidas no mês</div>'+
-        '<div class="parts-visor">'+
-          partCardHtml("Bicos", "teal", parts.qtdBicos, parts.valorBicos)+
-          partCardHtml("Cambagens", "yellow", parts.qtdCambagem, parts.valorCambagem)+
-          partCardHtml("Rodas", "green", parts.qtdRodas, parts.valorRodas)+
-        '</div>'+
-
-        '<div class="parts-visor-head">Vendas por vendedor no mês</div>'+
-        '<div class="parts-visor">'+
-          VENDEDORES.filter(function(v){ return v!=="Nenhum"; }).map(function(v, i){
-            var vd = parts.porVendedor[v] || {count:0, total:0};
-            var colors = ["teal","yellow","green"];
-            return sellerCardHtml(v, vd.count, vd.total, colors[i % colors.length]);
-          }).join("")+
         '</div>'+
 
         '<div class="row2">'+
@@ -1656,6 +1973,7 @@
         '</div>';
 
       attachDashboardEvents();
+      bindDayDetailEvents();
       bindBackupControls();
       setupClientesSection();
       loadArchiveIndex(function(dates){ renderArchiveList(dates); });
@@ -1780,7 +2098,7 @@
     });
   }
 
-  function buildChartSvg(points){
+  function buildChartSvg(points, selectedIso){
     if (points.every(function(p){return p.v===0;})){
       return '<div class="chart-empty">Sem lançamentos neste mês ainda.</div>';
     }
@@ -1794,9 +2112,10 @@
     var linePts = points.map(function(p,i){ return xFor(i).toFixed(1)+","+yFor(p.v).toFixed(1); }).join(" ");
     var circles = points.map(function(p,i){
       var x=xFor(i).toFixed(1), y=yFor(p.v).toFixed(1);
-      var r = p.v>0 ? 3.4 : 2;
-      var fill = p.v>0 ? "var(--teal)" : "var(--border)";
-      return '<circle cx="'+x+'" cy="'+y+'" r="'+r+'" fill="'+fill+'"><title>Dia '+p.day+': '+fmtCurrency(p.v)+'</title></circle>';
+      var sel = p.iso===selectedIso;
+      var r = sel ? 5 : (p.v>0 ? 3.4 : 2);
+      var fill = sel ? "var(--yellow)" : (p.v>0 ? "var(--teal)" : "var(--border)");
+      return '<circle cx="'+x+'" cy="'+y+'" r="'+r+'" fill="'+fill+'" data-iso="'+p.iso+'"'+(sel?' stroke="var(--yellow)" stroke-opacity=".35" stroke-width="6"':'')+'><title>Dia '+p.day+': '+fmtCurrency(p.v)+' — clique para ver detalhes</title></circle>';
     }).join("");
     var labelEvery = points.length>20 ? 5 : (points.length>10?2:1);
     var labels = points.map(function(p,i){
@@ -1810,6 +2129,274 @@
       circles + labels +
       '</svg>';
   }
+
+  // ---------- detalhes de um dia (comparativos, vendedores, pagamentos, produtos, horários) ----------
+  function rowsOfDay(iso){ return lsGetJSON(K_ROWS+iso, []); }
+  function sumRows(rows){ var t=0; rows.forEach(function(r){ t += computeValor(r); }); return t; }
+  // soma um mês inteiro a partir das datas salvas localmente
+  function sumMonth(monthStr){
+    var dates = listAllDates().filter(function(d){ return d.slice(0,7)===monthStr; });
+    var total=0, count=0, days=0;
+    dates.forEach(function(d){ var rr = rowsOfDay(d); if (rr.length){ days++; total += sumRows(rr); count += rr.length; } });
+    return {total:total, count:count, days:days};
+  }
+  function dayDetails(iso){
+    var rows = rowsOfDay(iso);
+    var total = sumRows(rows);
+    var count = rows.length;
+    var pend = rows.filter(function(r){ return r.pago!=="✅" && computeValor(r)>0; });
+    var pendTotal = sumRows(pend);
+
+    // comparativos (dia)
+    var prev = addDays(iso, -1);
+    var prevRows = rowsOfDay(prev);
+    var lastWeek = addDays(iso, -7);
+    var lwRows = rowsOfDay(lastWeek);
+    var month = iso.slice(0,7);
+    var monthDates = listAllDates().filter(function(d){ return d.slice(0,7)===month && d!==iso; })
+      .filter(function(d){ return rowsOfDay(d).length>0; });
+    var monthSum = 0, monthCount = 0;
+    monthDates.forEach(function(d){ var rr = rowsOfDay(d); monthSum += sumRows(rr); monthCount += rr.length; });
+    var avgDay = monthDates.length ? monthSum/monthDates.length : 0;
+    var avgCount = monthDates.length ? monthCount/monthDates.length : 0;
+
+    // comparativos (mês)
+    var curM = sumMonth(month);
+    var prevMKey = addMonths(month, -1);
+    var prevM = sumMonth(prevMKey);
+    var sameLYKey = addMonths(month, -12);
+    var sameLY = sumMonth(sameLYKey);
+    // meses do mesmo ano com vendas (exceto o mês atual) → média mensal
+    var yearMonths = [];
+    for (var m=1; m<=12; m++){
+      var mk = month.slice(0,5)+pad(m);
+      if (mk===month) continue;
+      var sm = sumMonth(mk);
+      if (sm.days>0) yearMonths.push({key:mk, total:sm.total, count:sm.count, days:sm.days});
+    }
+    var ySum=0, yCount=0;
+    yearMonths.forEach(function(y){ ySum += y.total; yCount += y.count; });
+    var avgMTotal = yearMonths.length ? ySum/yearMonths.length : 0;
+    var avgMCount = yearMonths.length ? yCount/yearMonths.length : 0;
+
+    var det = {iso:iso, rows:rows, total:total, count:count, ticket: count?total/count:0,
+      pendCount:pend.length, pendTotal:pendTotal,
+      prev:{iso:prev, total:sumRows(prevRows), count:prevRows.length},
+      lastWeek:{iso:lastWeek, total:sumRows(lwRows), count:lwRows.length},
+      avg:{total:avgDay, count:avgCount, days:monthDates.length},
+      month:{key:month, total:curM.total, count:curM.count, days:curM.days,
+        prevMonth:{key:prevMKey, total:prevM.total, count:prevM.count, days:prevM.days},
+        sameLastYear:{key:sameLYKey, total:sameLY.total, count:sameLY.count, days:sameLY.days},
+        avg:{total:avgMTotal, count:avgMCount, months:yearMonths.length}}};
+
+    // agregações (vendedores, pagamentos, produtos, horários) do dia e do mês inteiro
+    det.dayAgg = aggregateRows(rows);
+    det.monthAgg = aggregateRows(rowsOfMonth(month));
+    det.vendedores = det.dayAgg.vendedores;
+    det.pagamentos = det.dayAgg.pagamentos;
+    det.produtos   = det.dayAgg.produtos;
+    det.horas      = det.dayAgg.horas;
+    det.semHora    = det.dayAgg.semHora;
+    return det;
+  }
+
+  // todas as vendas de um mês (todos os dias com lançamento)
+  function rowsOfMonth(monthStr){
+    var out = [];
+    listAllDates().filter(function(d){ return d.slice(0,7)===monthStr; })
+      .forEach(function(d){ out = out.concat(rowsOfDay(d)); });
+    return out;
+  }
+
+  // calcula os quadros (vendedores / pagamentos / produtos / horas) de qualquer conjunto de vendas
+  function aggregateRows(rows){
+    var total = sumRows(rows);
+    var count = rows.length;
+    var pend = rows.filter(function(r){ return r.pago!=="✅" && computeValor(r)>0; });
+
+    // vendedores
+    var vend = {};
+    rows.forEach(function(r){
+      var v = r.vendedor && r.vendedor!=="Nenhum" ? r.vendedor : "Sem vendedor";
+      if (!vend[v]) vend[v] = {nome:v, count:0, total:0};
+      vend[v].count += 1; vend[v].total += computeValor(r);
+    });
+    var vendList = Object.keys(vend).map(function(k){ return vend[k]; }).sort(function(a,b){ return b.total-a.total; });
+
+    // formas de pagamento
+    var pag = {"Dinheiro":0, "Pix":0, "Débito":0, "Crédito":0};
+    var semForma = 0;
+    rows.forEach(function(r){
+      var b = paymentBreakdown(r);
+      var soma = 0;
+      Object.keys(b).forEach(function(k){ pag[k] += b[k]; soma += b[k]; });
+      var v = computeValor(r);
+      if (v>0 && soma<v-0.005) semForma += (v-soma);
+    });
+    var pagList = Object.keys(pag).map(function(k){ return {nome:k, total:pag[k]}; });
+    if (semForma>0) pagList.push({nome:"Sem forma definida", total:semForma});
+    pagList = pagList.filter(function(p){ return p.total>0; }).sort(function(a,b){ return b.total-a.total; });
+
+    // produtos e serviços
+    function sumF(f){ var t=0; rows.forEach(function(r){ t+=parseNum(r[f]); }); return t; }
+    var prod = [
+      {nome:"Pneus",         total:sumF("valorPneus"),        qtd:sumF("quantidade")},
+      {nome:"Alinhamento",   total:sumF("alinhamento"),       qtd:rows.filter(function(r){return parseNum(r.alinhamento)>0;}).length},
+      {nome:"Balanceamento", total:sumF("valorBalanceamento"),qtd:sumF("qtdBalanceamento")},
+      {nome:"Bicos",         total:sumF("valorBicos"),        qtd:sumF("qtdBicos")},
+      {nome:"Cambagem",      total:sumF("valorCambagem"),     qtd:sumF("qtdCambagem")},
+      {nome:"Rodas",         total:sumF("valorRodas"),        qtd:sumF("qtdRodas")},
+      {nome:"Peças",         total:sumF("valorPecas"),        qtd:0},
+      {nome:"Mão de obra",   total:sumF("maoDeObra"),         qtd:0},
+      {nome:"Outros",        total:sumF("outros"),            qtd:0}
+    ].filter(function(p){ return p.total>0; }).sort(function(a,b){ return b.total-a.total; });
+
+    // horários
+    var horas = []; for (var h=0; h<24; h++) horas.push({h:h, count:0, total:0});
+    var semHora = 0;
+    rows.forEach(function(r){
+      var d = r.criadoEm ? new Date(r.criadoEm) : null;
+      if (!d || isNaN(d.getTime())){ semHora++; return; }
+      horas[d.getHours()].count += 1; horas[d.getHours()].total += computeValor(r);
+    });
+
+    return {total:total, count:count, ticket: count?total/count:0,
+      pendCount:pend.length, pendTotal:sumRows(pend),
+      vendedores:vendList, pagamentos:pagList, produtos:prod, horas:horas, semHora:semHora};
+  }
+
+  function deltaBadge(cur, ref){
+    if (state.hideValues) return '<span class="dd-delta">••</span>';
+    if (!ref) return '<span class="dd-delta">—</span>';
+    var pct = ((cur-ref)/ref)*100;
+    var cls = pct>0.5 ? "up" : (pct<-0.5 ? "down" : "");
+    return '<span class="dd-delta '+cls+'">'+(pct>0?"+":"")+pct.toFixed(0)+'%</span>';
+  }
+
+  function buildDayDetailHtml(iso, det){
+    function hv(v){ return state.hideValues ? '••••' : fmtCurrency(v); }
+    function hq(v){ return state.hideValues ? '••' : v; }
+    var isToday = iso===today;
+    var isMonth = state.cmpMode==="month";
+    // no modo "Por mês" todos os quadros passam a somar o mês inteiro
+    var A = isMonth ? det.monthAgg : det.dayAgg;
+    var periodo = isMonth ? "do mês" : "do dia";
+
+    function barRows(list, keyLabel, colorCls, withRank){
+      if (!list.length) return '<div class="dd-empty">Nada lançado neste '+(isMonth?'mês':'dia')+'.</div>';
+      var max = Math.max.apply(null, list.map(function(x){return x.total;})) || 1;
+      var sum = list.reduce(function(a,x){return a+x.total;},0) || 1;
+      return list.map(function(x, i){
+        var w = state.hideValues ? 0 : (x.total/max*100);
+        return '<div class="dd-row">'+
+          (withRank ? '<span class="dd-rank">'+(i+1)+'º</span>' : '')+
+          '<span class="lbl">'+escHtml(x.nome)+(keyLabel ? '<small>'+keyLabel(x)+'</small>' : '')+'</span>'+
+          '<span class="track"><span class="fill '+colorCls+'" style="width:'+w.toFixed(1)+'%;display:block;"></span></span>'+
+          '<span class="val">'+hv(x.total)+'</span>'+
+          '<span class="pct">'+(state.hideValues?'••%':(x.total/sum*100).toFixed(0)+'%')+'</span>'+
+        '</div>';
+      }).join("");
+    }
+
+    var cmpToggle = '<div class="dd-cmp-toggle">'+
+        '<button class="seg'+(isMonth?'':' on')+'" data-act="cmpday">Por dia</button>'+
+        '<button class="seg'+(isMonth?' on':'')+'" data-act="cmpmonth">Por mês</button>'+
+      '</div>';
+
+    var cmpHtml;
+    if (!isMonth){
+      cmpHtml =
+        '<div class="dd-cmp"><span class="who">Dia anterior<small>'+escHtml(weekdayLabel(det.prev.iso))+' · '+hq(det.prev.count)+' venda(s)</small></span>'+
+          '<span><span class="amt">'+hv(det.prev.total)+'</span>'+deltaBadge(det.total, det.prev.total)+'</span></div>'+
+        '<div class="dd-cmp"><span class="who">Mesmo dia da semana passada<small>'+escHtml(weekdayLabel(det.lastWeek.iso))+' · '+hq(det.lastWeek.count)+' venda(s)</small></span>'+
+          '<span><span class="amt">'+hv(det.lastWeek.total)+'</span>'+deltaBadge(det.total, det.lastWeek.total)+'</span></div>'+
+        '<div class="dd-cmp"><span class="who">Média diária do mês<small>'+det.avg.days+' dia(s) com vendas · média de '+hq(det.avg.count.toFixed(1))+' venda(s)/dia</small></span>'+
+          '<span><span class="amt">'+hv(det.avg.total)+'</span>'+deltaBadge(det.total, det.avg.total)+'</span></div>';
+    } else {
+      var m = det.month;
+      cmpHtml =
+        '<div class="dd-cmp"><span class="who">Mês selecionado<small>'+escHtml(monthLabel(m.key))+' · '+hq(m.days)+' dia(s) com vendas · '+hq(m.count)+' venda(s)</small></span>'+
+          '<span><span class="amt">'+hv(m.total)+'</span><span class="dd-delta">atual</span></span></div>'+
+        '<div class="dd-cmp"><span class="who">Mês anterior<small>'+escHtml(monthLabel(m.prevMonth.key))+' · '+hq(m.prevMonth.days)+' dia(s) com vendas · '+hq(m.prevMonth.count)+' venda(s)</small></span>'+
+          '<span><span class="amt">'+hv(m.prevMonth.total)+'</span>'+deltaBadge(m.total, m.prevMonth.total)+'</span></div>'+
+        '<div class="dd-cmp"><span class="who">Mesmo mês do ano passado<small>'+escHtml(monthLabel(m.sameLastYear.key))+' · '+hq(m.sameLastYear.days)+' dia(s) com vendas · '+hq(m.sameLastYear.count)+' venda(s)</small></span>'+
+          '<span><span class="amt">'+hv(m.sameLastYear.total)+'</span>'+deltaBadge(m.total, m.sameLastYear.total)+'</span></div>'+
+        '<div class="dd-cmp"><span class="who">Média mensal do ano<small>'+m.avg.months+' mês(es) com vendas · média de '+hq(m.avg.count.toFixed(0))+' venda(s)/mês</small></span>'+
+          '<span><span class="amt">'+hv(m.avg.total)+'</span>'+deltaBadge(m.total, m.avg.total)+'</span></div>';
+    }
+
+    // gráfico por hora: mostra da primeira à última hora com venda (mínimo 8h–18h)
+    var hoursHtml;
+    var withData = A.horas.filter(function(x){return x.count>0;});
+    if (!withData.length){
+      hoursHtml = '<div class="dd-empty">'+(A.count ? 'As vendas deste período foram lançadas antes do registro de horário. A partir de agora cada venda nova guarda a hora em que foi lançada.' : 'Nenhuma venda neste período.')+'</div>';
+    } else {
+      var h0 = Math.min(8, withData[0].h), h1 = Math.max(18, withData[withData.length-1].h);
+      var slice = A.horas.slice(h0, h1+1);
+      var W = 720, H = 150, padT = 22, padB = 20, padL = 4, padR = 4;
+      var n = slice.length, gap = 6, bw = (W-padL-padR - gap*(n-1))/n;
+      var maxT = Math.max.apply(null, slice.map(function(x){return x.total;})) || 1;
+      var bars = slice.map(function(x, i){
+        var x0 = padL + i*(bw+gap);
+        var hgt = state.hideValues ? 0 : (x.total/maxT)*(H-padT-padB);
+        var y0 = H-padB-hgt;
+        var best = x.total===maxT && x.total>0;
+        return (x.count>0 ? '<rect x="'+x0.toFixed(1)+'" y="'+y0.toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+hgt.toFixed(1)+'" rx="3" fill="'+(best?'var(--yellow)':'var(--teal)')+'" opacity=".9"><title>'+pad(x.h)+'h: '+x.count+' venda(s) · '+fmtCurrency(x.total)+'</title></rect>' : '')+
+          (x.count>0 && !state.hideValues ? '<text x="'+(x0+bw/2).toFixed(1)+'" y="'+(y0-5).toFixed(1)+'" font-size="9" fill="var(--text-dim)" text-anchor="middle" font-family="IBM Plex Mono, monospace">'+x.count+'</text>' : '')+
+          '<text x="'+(x0+bw/2).toFixed(1)+'" y="'+(H-5)+'" font-size="9" fill="var(--text-faint)" text-anchor="middle" font-family="IBM Plex Mono, monospace">'+pad(x.h)+'h</text>';
+      }).join("");
+      var pico = withData.slice().sort(function(a,b){return b.total-a.total;})[0];
+      hoursHtml = '<div class="dd-hours"><svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none">'+
+        '<line x1="'+padL+'" y1="'+(H-padB)+'" x2="'+(W-padR)+'" y2="'+(H-padB)+'" stroke="var(--border-soft)"/>'+bars+'</svg></div>'+
+        '<div class="dd-note">Pico às <b style="color:var(--yellow);">'+pad(pico.h)+'h</b> com '+hq(pico.count)+' venda(s) · '+hv(pico.total)+
+        (A.semHora ? ' · '+A.semHora+' venda(s) sem horário registrado' : '')+'. O número em cima da barra é a quantidade de vendas.</div>';
+    }
+
+    return '<div class="dd-head">'+
+        '<h2>'+(isMonth ? 'Detalhes do mês' : 'Detalhes do dia')+'</h2>'+
+        cmpToggle+
+        '<div class="dd-nav">'+
+          '<button class="nav" data-dd="prev" title="Dia anterior">‹</button>'+
+          '<span class="dd-date">'+(isMonth ? escHtml(monthLabel(det.month.key)) : escHtml(weekdayLabel(iso))+(isToday?' <span style="color:var(--yellow);">· hoje</span>':''))+'</span>'+
+          '<button class="nav" data-dd="next" title="Próximo dia">›</button>'+
+          (isToday ? '' : '<button class="btn ghost small" data-dd="today">Hoje</button>')+
+          '<button class="btn ghost small" data-act="opendate" data-date="'+iso+'">Abrir tabela →</button>'+
+        '</div>'+
+      '</div>'+
+      '<div class="dd-kpis">'+
+        '<div class="dd-kpi big"><div class="k">Faturamento '+periodo+'</div><div class="v">'+hv(A.total)+'</div></div>'+
+        '<div class="dd-kpi"><div class="k">Vendas</div><div class="v">'+hq(A.count)+'</div></div>'+
+        '<div class="dd-kpi"><div class="k">Ticket médio</div><div class="v">'+hv(A.ticket)+'</div></div>'+
+        '<div class="dd-kpi'+(A.pendCount?' warn':'')+'"><div class="k">Pendente de pagamento</div><div class="v">'+hv(A.pendTotal)+'</div><div class="k" style="margin:4px 0 0;">'+hq(A.pendCount)+' venda(s)</div></div>'+
+      '</div>'+
+      '<div class="dd-grid">'+
+        '<div class="dd-card"><div class="dd-card-head"><h3>Comparativo</h3></div>'+cmpHtml+'</div>'+
+        '<div class="dd-card"><h3>Faturamento por vendedor</h3>'+
+          barRows(A.vendedores, function(x){ return hq(x.count)+' venda(s) · ticket '+hv(x.count?x.total/x.count:0); }, "y", true)+'</div>'+
+        '<div class="dd-card"><h3>Formas de pagamento</h3>'+barRows(A.pagamentos, null, "g", false)+'</div>'+
+        '<div class="dd-card"><h3>Produtos e serviços mais vendidos</h3>'+
+          barRows(A.produtos, function(x){ return x.qtd ? hq(x.qtd)+' un.' : ''; }, "", true)+'</div>'+
+        '<div class="dd-card span2"><h3>Vendas por hora '+periodo+'</h3>'+hoursHtml+'</div>'+
+      '</div>';
+  }
+
+  function bindDayDetailEvents(){
+    function setDay(iso){ state.dashDay = iso; state.dashMonth = iso.slice(0,7); render(); }
+    root.querySelectorAll("[data-dd]").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        var w = btn.getAttribute("data-dd");
+        var cur = state.dashDay && state.dashDay.slice(0,7)===state.dashMonth ? state.dashDay
+          : (state.dashMonth===today.slice(0,7) ? today : state.dashMonth+"-"+pad(daysInMonth(state.dashMonth)));
+        if (w==="prev") setDay(addDays(cur,-1));
+        else if (w==="next") setDay(addDays(cur,1));
+        else setDay(today);
+      });
+    });
+    root.querySelectorAll(".chart-wrap circle[data-iso]").forEach(function(c){
+      c.addEventListener("click", function(){ setDay(c.getAttribute("data-iso")); });
+    });
+  }
+
   // ---------- histórico: logins e movimentações de estoque ----------
   function renderHistorico(){
     var tab = state.historicoTab || "logins";
@@ -2020,12 +2607,16 @@
     var acctLogout = sb ? '<button class="btn ghost small" data-act="accountlogout" title="Sair da sua conta do sistema">Sair da conta</button>' : '';
     var estoqueBtn = '<button class="btn ghost small" data-act="openestoque" title="Abrir o controle de estoque">📦 Estoque</button>';
     var clientesBtn = '<button class="btn ghost small" data-act="openclientes" title="Cadastrar e editar clientes">👥 Clientes</button>';
+    var notasBtn = '<button class="btn ghost small" data-act="opennotas" title="Ver todas as notas emitidas, em ordem de emissão">🧾 Notas</button>';
+    var avisosCount = avisosPendentesCount();
+    var avisosBtn = '<button class="btn ghost small" data-act="openavisos" title="Clientes esperando medida, lembretes e estoque baixo">🔔 Avisos'+
+      (avisosCount>0 ? '<span class="nav-badge">'+avisosCount+'</span>' : '')+'</button>';
     var historicoBtn = isMaster ? '<button class="btn ghost small" data-act="openhistorico" title="Ver logins e movimentações de estoque">🕘 Histórico</button>' : '';
     var usuariosBtn = isMaster ? '<button class="btn ghost small" data-act="openusuarios" title="Criar logins e alterar cargos">👤 Usuários</button>' : '';
     if (state.authed){
-      return '<div class="auth-zone"><span class="pill on">✓ edição de dias anteriores liberada</span>'+estoqueBtn+clientesBtn+historicoBtn+usuariosBtn+backupBtns+'<button class="btn ghost small" data-act="logout">Sair</button>'+acctLogout+'</div>';
+      return '<div class="auth-zone"><span class="pill on">✓ edição de dias anteriores liberada</span>'+estoqueBtn+clientesBtn+notasBtn+avisosBtn+historicoBtn+usuariosBtn+backupBtns+'<button class="btn ghost small" data-act="logout">Sair</button>'+acctLogout+'</div>';
     }
-    return '<div class="auth-zone">'+estoqueBtn+clientesBtn+historicoBtn+usuariosBtn+backupBtns+'<button class="btn small" data-act="login">Entrar com senha</button>'+acctLogout+'</div>';
+    return '<div class="auth-zone">'+estoqueBtn+clientesBtn+notasBtn+avisosBtn+historicoBtn+usuariosBtn+backupBtns+'<button class="btn small" data-act="login">Entrar com senha</button>'+acctLogout+'</div>';
   }
 
   function bindBackupControls(){
@@ -2045,7 +2636,9 @@
       node.addEventListener("click", function(){ handleAction(act, node); });
     });
     // hero-level opendate buttons (yesterday card) need explicit binding too since selector above skips 'opendate'
-    root.querySelectorAll(".card [data-act=opendate]").forEach(function(node){
+    root.querySelectorAll("[data-act=opendate][data-date]").forEach(function(node){
+      if (node.getAttribute("data-bound")==="1") return;
+      node.setAttribute("data-bound","1");
       node.addEventListener("click", function(){ openDate(node.getAttribute("data-date")); });
     });
   }
@@ -2056,11 +2649,14 @@
     else if (act==="opentoday"){ openDate(today); }
     else if (act==="login"){ state.modal = {type:"auth", error:""}; render(); }
     else if (act==="logout"){ state.authed=false; sessionStorage.removeItem("vf_auth"); render(); }
+    else if (act==="cmpday"){ state.cmpMode="day"; render(); }
+    else if (act==="cmpmonth"){ state.cmpMode="month"; render(); }
     else if (act==="back"){ state.view="dashboard"; render(); }
     else if (act==="addrow"){ addRow(); }
     else if (act==="prevday"){ openDate(addDays(state.date,-1)); }
     else if (act==="nextday"){ openDate(addDays(state.date,1)); }
     else if (act==="exportbackup"){ exportBackup(); }
+    else if (act==="exportdiacsv"){ exportDiaCSV(); }
     else if (act==="pushcloud"){
       var n = pushAllLocalToCloud();
       alert(n>0 ? "Enviando "+n+" registro(s) deste navegador para a nuvem…" : "Não há dados salvos neste navegador para enviar.");
@@ -2077,12 +2673,11 @@
       state.modal = {type:"selectCustomer", rowId: node.getAttribute("data-id"), purpose:"print"};
       render();
     }
-    else if (act==="sendwhatsapp"){
-      state.modal = {type:"selectCustomer", rowId: node.getAttribute("data-id"), purpose:"whatsapp"};
-      render();
-    }
     else if (act==="openestoque"){ state.view="estoque"; render(); }
     else if (act==="openclientes"){ state.clientesDetailId = null; state.view="clientes"; render(); }
+    else if (act==="opennotas"){ state.view="notas"; render(); }
+    else if (act==="openavisos"){ state.view="avisos"; render(); }
+    else if (act==="avisostab"){ state.avisosTab = node.getAttribute("data-tab"); render(); }
     else if (act==="clientenew"){ state.modal = {type:"customerForm", error:""}; renderModal(); }
     else if (act==="clientedit"){ state.modal = {type:"customerForm", customerId: node.getAttribute("data-id"), error:""}; renderModal(); }
     else if (act==="openhistorico"){ if (state.role==="master"){ state.view="historico"; state.historicoTab = state.historicoTab || "logins"; render(); } }
@@ -2121,9 +2716,6 @@
     }
     else if (act==="openorcamento"){ state.view="orcamento"; render(); }
     else if (act==="orcback"){ state.view="table"; render(); }
-    else if (act==="duplicaterow"){
-      duplicateRow(node.getAttribute("data-id"));
-    }
     else if (act==="garantia"){
       state.modal = {type:"garantiaForm", medidaId:"", qtd:"", error:""};
       render();
@@ -2145,6 +2737,18 @@
     return dateIso === today || state.authed;
   }
 
+  function exportDiaCSV(){
+    var header = ["Quantidade","Medida","Valor","Forma de pagamento","Pago","Carro","Vendedor"];
+    var lines = [header.map(csvEscape).join(";")];
+    state.rows.forEach(function(r){
+      lines.push([
+        r.quantidade||0, r.medida||"", computeValor(r).toFixed(2).replace(".",","),
+        r.formaPagamento||"", (r.pago==="✅"?"Pago":"Pendente"), r.carro||"", r.vendedor||""
+      ].map(csvEscape).join(";"));
+    });
+    downloadTextFile("vendas-"+state.date+".csv", lines.join("\r\n"));
+  }
+
   function renderTable(){
     var editable = isEditable(state.date);
     var isToday = state.date === today;
@@ -2155,6 +2759,7 @@
 
     var pendentesCount = state.rows.filter(function(r){ return r.pago!=="✅"; }).length;
     var displayRows = state.onlyPending ? state.rows.filter(function(r){ return r.pago!=="✅"; }) : state.rows;
+    if (state.vendedorFiltro) displayRows = displayRows.filter(function(r){ return (r.vendedor||"Nenhum")===state.vendedorFiltro; });
     var hiddenColsCount = COLUMNS.filter(function(c){return c.advanced;}).length;
 
     root.innerHTML =
@@ -2191,6 +2796,13 @@
             '<button class="btn small ghost" data-act="togglemorefields" title="'+(state.showAdvancedCols?'Esconder os campos usados com menos frequência':'Mostrar todos os campos, incluindo os usados com menos frequência')+'">'+
               (state.showAdvancedCols ? "▲ Mostrar menos campos" : "▼ Mostrar mais campos ("+hiddenColsCount+")")+
             '</button>'+
+            '<select id="vendFiltro" class="btn small ghost" style="padding:5px 8px;">'+
+              '<option value="">Todos os vendedores</option>'+
+              VENDEDORES.filter(function(v){return v!=="Nenhum";}).map(function(v){
+                return '<option value="'+escAttr(v)+'"'+(state.vendedorFiltro===v?' selected':'')+'>'+escHtml(v)+'</option>';
+              }).join("")+
+            '</select>'+
+            '<button class="btn small ghost" data-act="exportdiacsv" title="Baixar as vendas deste dia em planilha (CSV)">⇩ CSV</button>'+
           '</div>'
         )+
 
@@ -2233,6 +2845,7 @@
       '</div>';
 
     attachTableEvents();
+    bindRowDrag();
     bindBackupControls();
     scheduleFitGrid();
     syncHeadScroll();
@@ -2281,9 +2894,8 @@
     cells += '<div class="cell rowactions">'+
       '<button class="icon-btn cli-btn'+(custName?' has':'')+'" data-act="linkcustomer" data-id="'+row.id+'" title="'+(custName?('Cliente: '+escAttr(custName)+' — clique para ver os dados'):'Vincular cliente a esta linha')+'">👤</button>'+
       '<button class="icon-btn print-btn" data-act="printnote" data-id="'+row.id+'" title="Imprimir nota">🖨</button>'+
-      '<button class="icon-btn wa-btn" data-act="sendwhatsapp" data-id="'+row.id+'" title="Enviar por WhatsApp">💬</button>'+
-      (editable ? '<button class="icon-btn dup-btn" data-act="duplicaterow" data-id="'+row.id+'" title="Duplicar linha (repete os dados, menos a medida do pneu)">⧉</button>' : '')+
       (editable ? '<button class="icon-btn" data-act="delrow" data-id="'+row.id+'" title="Remover linha">✕</button>' : '')+
+      (editable ? '<button class="icon-btn drag-btn" data-drag="'+row.id+'" title="Segure e arraste para mover a venda para cima ou para baixo">⣿</button>' : '')+
       '</div>';
     var open = !!state.openDetails[row.id];
     var mainRow = '<div class="grid-row data" style="grid-template-columns:'+colTemplate+'" data-row="'+row.id+'">'+cells+'</div>';
@@ -2297,7 +2909,9 @@
         '<textarea data-field="detalhes" data-id="'+row.id+'" '+(editable?"":"disabled")+' placeholder="'+(editable?'Ex: cliente pediu retorno em 30 dias, garantia, observações...':'')+'">'+escHtml(row.detalhes||"")+'</textarea>'+
         '</div></div>';
     }
-    return mainRow + toggleRow + detailRow;
+    // a linha + o toggle de detalhes + o detalhe aberto formam um único bloco
+    // (data-row-group) pra arrastar tudo junto sem "descolar" visualmente
+    return '<div class="row-group" data-row-group="'+row.id+'">'+mainRow + toggleRow + detailRow+'</div>';
   }
 
   function cellHtml(row, col, editable, computedValor){
@@ -2378,20 +2992,6 @@
     }
     return false;
   }
-  // duplica uma linha (mesmo serviço, carro, forma de pagamento etc.) — a medida do pneu
-  // não é copiada, pra não confundir o controle de estoque com uma baixa que nunca aconteceu
-  function duplicateRow(id){
-    var row = state.rows.filter(function(r){ return r.id===id; })[0];
-    if (!row) return;
-    var copy = {};
-    Object.keys(row).forEach(function(k){ copy[k] = row[k]; });
-    copy.id = uid();
-    copy.medida = ""; copy.medidaId = ""; copy.medidaBaixa = 0;
-    var idx = state.rows.indexOf(row);
-    state.rows.splice(idx+1, 0, copy);
-    renderTable();
-    scheduleSave();
-  }
   // ---------- toast de "desfazer" (usado ao apagar uma linha) ----------
   var undoState = null; // {timer, node}
   function dismissUndoToast(){
@@ -2414,12 +3014,265 @@
     });
   }
 
+  // ---------- arrastar linha para cima/baixo ----------
+  // a unidade de arraste é o ".row-group" inteiro (linha + toggle "detalhes da
+  // venda" + o detalhe aberto, se houver) — isso evita o bug visual de a linha
+  // se mover sozinha enquanto o toggle/detalhe dela fica "para trás"
+  var dragState = null;
+  var dragScrollRAF = null;
+
+  function groupSibling(el, dir){
+    var n = dir>0 ? el.nextElementSibling : el.previousElementSibling;
+    while (n && !n.classList.contains("row-group")) n = dir>0 ? n.nextElementSibling : n.previousElementSibling;
+    return n;
+  }
+
+  // os eventos de mover/soltar ficam no documento (e não no botãozinho de
+  // arrastar): quando a linha troca de lugar no DOM, o navegador pode soltar o
+  // "pointer capture" do botão — se dependêssemos dele, o arraste terminaria
+  // sozinho a cada linha pulada. Assim o bloco fica preso ao mouse/dedo e dá
+  // pra subir ou descer várias linhas de uma vez só.
+  function onDragPointerMove(e){
+    if (!dragState || e.pointerId !== dragState.pointerId) return;
+    e.preventDefault();
+    dragState.pointerY = e.clientY;
+    dragState.moved = true;
+    positionDraggedRow();
+    reflowRowsDuringDrag();
+  }
+
+  function onDragPointerUp(e){
+    if (!dragState || e.pointerId !== dragState.pointerId) return;
+    endRowDrag();
+  }
+
+  function addDragListeners(){
+    document.addEventListener("pointermove", onDragPointerMove, {passive:false});
+    document.addEventListener("pointerup", onDragPointerUp);
+    document.addEventListener("pointercancel", onDragPointerUp);
+  }
+
+  function removeDragListeners(){
+    document.removeEventListener("pointermove", onDragPointerMove, {passive:false});
+    document.removeEventListener("pointerup", onDragPointerUp);
+    document.removeEventListener("pointercancel", onDragPointerUp);
+  }
+
+  function bindRowDrag(){
+    root.querySelectorAll("[data-drag]").forEach(function(handle){
+      handle.addEventListener("pointerdown", function(e){
+        if (dragState) return;
+        e.preventDefault();
+        var id = handle.getAttribute("data-drag");
+        var srcEl = root.querySelector('.row-group[data-row-group="'+id+'"]');
+        if (!srcEl || !srcEl.parentNode) return;
+        var prev = groupSibling(srcEl, -1);
+        dragState = {
+          id:id, srcEl:srcEl, handle:handle, pointerId:e.pointerId,
+          scale: currentGridScale() || 1,
+          startPageY: e.clientY + window.scrollY,
+          baseTop: srcEl.getBoundingClientRect().top + window.scrollY,
+          startPrevId: prev ? prev.getAttribute("data-row-group") : null,
+          offset: 0,
+          pointerY: e.clientY,
+          moved: false
+        };
+        srcEl.classList.remove("row-shifting");
+        srcEl.classList.add("row-dragging");
+        srcEl.style.transition = "none";
+        srcEl.style.transform = "translateY(0px)";
+        document.body.classList.add("grid-dragging");
+        addDragListeners();
+        startDragAutoScroll();
+      });
+    });
+  }
+
+  // mantém o bloco exatamente debaixo do cursor/dedo, mesmo depois que as
+  // linhas vizinhas trocam de lugar (a posição "natural" dele muda a cada troca)
+  function positionDraggedRow(){
+    var st = dragState;
+    if (!st) return;
+    var rect = st.srcEl.getBoundingClientRect();
+    var natural = rect.top + window.scrollY - st.offset * st.scale;
+    var desired = st.baseTop + (st.pointerY + window.scrollY - st.startPageY);
+    // não deixa o bloco sair da área da tabela (senão ele seria cortado)
+    var box = st.srcEl.parentNode.getBoundingClientRect();
+    var minTop = box.top + window.scrollY;
+    var maxTop = box.bottom + window.scrollY - rect.height;
+    if (maxTop > minTop) desired = Math.max(minTop, Math.min(maxTop, desired));
+    st.offset = (desired - natural) / st.scale;
+    st.srcEl.style.transform = "translateY("+st.offset+"px)";
+  }
+
+  // FLIP: move o vizinho no DOM e deixa ele deslizar da posição antiga pra nova
+  function slideGroup(el, doMove){
+    var scale = dragState ? dragState.scale : (currentGridScale() || 1);
+    var before = el.getBoundingClientRect().top;
+    doMove();
+    el.classList.remove("row-shifting");
+    el.style.transition = "none";
+    el.style.transform = "";
+    var after = el.getBoundingClientRect().top;
+    var delta = (before - after) / scale;
+    if (Math.abs(delta) < 0.5){ el.style.transition = ""; return; }
+    el.style.transform = "translateY("+delta+"px)";
+    el.getBoundingClientRect(); // força o navegador a aplicar antes de animar
+    requestAnimationFrame(function(){
+      el.style.transition = "";
+      el.classList.add("row-shifting");
+      el.style.transform = "";
+    });
+  }
+
+  // enquanto arrasta: assim que o bloco passa do meio de um vizinho, os dois
+  // trocam de lugar na hora (a reordenação acontece ao vivo, não só ao soltar)
+  function reflowRowsDuringDrag(){
+    var st = dragState;
+    if (!st) return;
+    var parent = st.srcEl.parentNode;
+    if (!parent) return;
+    var guard = 0;
+    while (guard++ < 60){
+      var rect = st.srcEl.getBoundingClientRect();
+      var center = rect.top + rect.height/2;
+      var moved = false;
+      var next = groupSibling(st.srcEl, 1);
+      if (next){
+        var nr = next.getBoundingClientRect();
+        if (center > nr.top + nr.height/2){
+          slideGroup(next, function(){ parent.insertBefore(st.srcEl, next.nextSibling); });
+          moved = true;
+        }
+      }
+      if (!moved){
+        var prev = groupSibling(st.srcEl, -1);
+        if (prev){
+          var pr = prev.getBoundingClientRect();
+          if (center < pr.top + pr.height/2){
+            slideGroup(prev, function(){ parent.insertBefore(st.srcEl, prev); });
+            moved = true;
+          }
+        }
+      }
+      if (!moved) break;
+      positionDraggedRow();
+    }
+  }
+
+  // rola a tela sozinho quando o bloco chega perto da borda de cima/de baixo
+  function startDragAutoScroll(){
+    if (dragScrollRAF) return;
+    var step = function(){
+      if (!dragState){ dragScrollRAF = null; return; }
+      var y = dragState.pointerY, sp = 0;
+      if (y < 90) sp = -Math.min(20, (90 - y)/3);
+      else if (y > window.innerHeight - 80) sp = Math.min(20, (y - (window.innerHeight - 80))/3);
+      // só rola se ainda existir tabela pra fora da tela naquele sentido —
+      // assim a tela não fica se mexendo à toa quando a lista já está toda visível
+      var box = dragState.srcEl.parentNode ? dragState.srcEl.parentNode.getBoundingClientRect() : null;
+      if (box){
+        if (sp < 0 && box.top >= 0) sp = 0;
+        if (sp > 0 && box.bottom <= window.innerHeight) sp = 0;
+      }
+      if (sp){
+        window.scrollBy(0, sp);
+        positionDraggedRow();
+        reflowRowsDuringDrag();
+      }
+      dragScrollRAF = requestAnimationFrame(step);
+    };
+    dragScrollRAF = requestAnimationFrame(step);
+  }
+
+  function clearDragStyles(el){
+    if (!el) return;
+    el.classList.remove("row-shifting","row-dragging");
+    el.style.transition = "";
+    el.style.transform = "";
+  }
+
+  // ao soltar: o bloco "encaixa" no espaço aberto e só então o estado é salvo
+  function endRowDrag(){
+    var st = dragState;
+    dragState = null;
+    if (dragScrollRAF){ cancelAnimationFrame(dragScrollRAF); dragScrollRAF = null; }
+    document.body.classList.remove("grid-dragging");
+    removeDragListeners();
+    var el = st.srcEl;
+
+    var commit = function(){
+      clearDragStyles(el);
+      commitDragOrder(st);
+    };
+
+    if (!st.moved || Math.abs(st.offset) < 1){ commit(); return; }
+    el.style.transition = "transform .17s cubic-bezier(.2,.8,.2,1)";
+    el.style.transform = "translateY(0px)";
+    var done = false;
+    var fin = function(){
+      if (done) return;
+      done = true;
+      el.removeEventListener("transitionend", fin);
+      commit();
+    };
+    el.addEventListener("transitionend", fin);
+    setTimeout(fin, 280);
+  }
+
+  // o DOM já está na ordem final; aqui só espelhamos isso no estado/salvamento
+  function commitDragOrder(st){
+    var el = root.querySelector('.row-group[data-row-group="'+st.id+'"]');
+    if (!el) return;
+    var prev = groupSibling(el, -1);
+    var prevId = prev ? prev.getAttribute("data-row-group") : null;
+    if (prevId === st.startPrevId) return; // não mudou de lugar: nada a salvar
+    var next = groupSibling(el, 1);
+    if (prevId) applyRowOrder(st.id, prevId, "after");
+    else if (next) applyRowOrder(st.id, next.getAttribute("data-row-group"), "before");
+  }
+
+  function applyRowOrder(srcId, targetId, where){
+    var from = -1, i;
+    for (i=0;i<state.rows.length;i++){ if (state.rows[i].id===srcId){ from=i; break; } }
+    if (from===-1) return;
+    var row = state.rows.splice(from,1)[0];
+    var to = -1;
+    for (i=0;i<state.rows.length;i++){ if (state.rows[i].id===targetId){ to=i; break; } }
+    if (to===-1){ state.rows.splice(from,0,row); return; }
+    state.rows.splice(where==="after" ? to+1 : to, 0, row);
+    // o DOM já está na ordem certa (foi reordenado ao vivo durante o arraste),
+    // então NÃO redesenha a tabela aqui — redesenhar faria a área piscar e
+    // atrapalharia quem está olhando; só salva a nova ordem
+    scheduleSave();
+  }
+
+  // quando a tabela é reduzida automaticamente pra caber na largura da tela
+  // (fitGridToWidth), o próprio #gridInner já tem um scale aplicado; sem
+  // compensar esse fator aqui, o bloco arrastado andaria mais (ou menos) que o
+  // cursor
+  function currentGridScale(){
+    var inner = document.getElementById("gridInner");
+    if (!inner) return 1;
+    var t = getComputedStyle(inner).transform;
+    if (!t || t === "none") return 1;
+    var m = t.match(/^matrix\(([^,]+),/);
+    return m ? (parseFloat(m[1]) || 1) : 1;
+  }
+
   function attachTableEvents(){
     root.querySelectorAll("[data-act]").forEach(function(node){
       var act = node.getAttribute("data-act");
       if (act==="delrow" || act==="toggledetail" || act==="splitpag" || act==="multipag") return;
       node.addEventListener("click", function(){ handleAction(act, node); });
     });
+    var vendFiltro = document.getElementById("vendFiltro");
+    if (vendFiltro){
+      vendFiltro.addEventListener("change", function(){
+        state.vendedorFiltro = vendFiltro.value;
+        renderTable();
+      });
+    }
     root.querySelectorAll("[data-act=delrow]").forEach(function(node){
       node.addEventListener("click", function(){ delRow(node.getAttribute("data-id")); });
     });
@@ -2528,8 +3381,23 @@
     });
   }
 
+  // o "Carro N" da nova linha continua a contagem da linha anterior (Carro 7 -> Carro 8),
+  // mas segue sendo um select normal, então dá pra trocar na mão quando precisar
+  function nextCarroLabel(){
+    var col = COLUMNS.filter(function(c){ return c.key==="carro"; })[0];
+    var opts = (col && col.options) || [];
+    if (!state.rows.length) return opts[0] || "Carro 1";
+    var last = state.rows[state.rows.length-1].carro || "";
+    var m = /(\d+)\s*$/.exec(last);
+    if (!m) return last || opts[0] || "Carro 1";
+    var cand = last.replace(/(\d+)\s*$/, String(parseInt(m[1],10)+1));
+    return opts.indexOf(cand) > -1 ? cand : last; // chegou no último carro da lista: repete o atual
+  }
+
   function addRow(){
-    state.rows.push(newRow());
+    var r = newRow();
+    r.carro = nextCarroLabel();
+    state.rows.push(r);
     renderTable();
     scheduleSave();
   }
@@ -2593,7 +3461,66 @@
     else if (state.modal.type==="estoqueForm") renderEstoqueFormModal();
     else if (state.modal.type==="garantiaForm") renderGarantiaFormModal();
     else if (state.modal.type==="multiPag") renderMultiPagModal();
+    else if (state.modal.type==="globalSearch") renderGlobalSearchModal();
     else renderAuthModal();
+  }
+
+  // ---------- busca global (Ctrl/Cmd+K): clientes, estoque e notas de uma vez ----------
+  function globalSearchResults(query){
+    var q = (query||"").trim().toLowerCase();
+    if (!q) return [];
+    var out = [];
+    loadCustomers().forEach(function(c){
+      var hay = ((c.nome||"")+" "+(customerDocInfo(c).documento||"")+" "+(c.telefone||"")).toLowerCase();
+      if (hay.indexOf(q)>-1) out.push({tag:"Cliente", title:c.nome||"(sem nome)", sub:[customerDocLabel(c), c.telefone].filter(Boolean).join(" · "), action:function(){
+        state.modal=null; state.view="clientes"; state.clientesDetailId=c.id; render();
+      }});
+    });
+    loadEstoque().forEach(function(i){
+      var hay = ((i.medida||"")+" "+(i.marca||"")).toLowerCase();
+      if (hay.indexOf(q)>-1) out.push({tag:"Estoque", title:(i.medida||"—")+(i.marca?" · "+i.marca:""), sub:Math.max(0,parseNum(i.quantidade))+" un. em estoque", action:function(){
+        state.modal=null; state.view="estoque"; state.estoqueQuery=i.medida; render();
+      }});
+    });
+    loadNotas().forEach(function(n){
+      var hay = (String(n.vendaNum)+" "+((n.customer&&n.customer.nome)||"")).toLowerCase();
+      if (hay.indexOf(q)>-1) out.push({tag:"Nota", title:"Nota #"+n.vendaNum+" — "+((n.customer&&n.customer.nome)||"sem cliente"), sub:fmtCurrency(n.totalProdutos)+" · "+fmtDateBR(n.date), action:function(){
+        state.modal=null; state.view="notas"; state.notasQuery=String(n.vendaNum); render();
+      }});
+    });
+    return out.slice(0,30);
+  }
+  function renderGlobalSearchModal(){
+    var div = document.createElement("div");
+    div.className = "overlay gsearch-overlay";
+    var query = state.modal.query || "";
+    function draw(){
+      var results = globalSearchResults(query);
+      div.innerHTML =
+        '<div class="gsearch-box">'+
+          '<input type="text" class="gsearch-input" id="gsInput" placeholder="Buscar cliente, medida do pneu ou número da nota..." value="'+escAttr(query)+'">'+
+          '<div class="gsearch-results">'+
+            (query.trim()==="" ? '<div class="gsearch-empty">Digite para buscar em clientes, estoque e notas.</div>'
+              : (results.length ? results.map(function(r,i){
+                  return '<div class="gsearch-item" data-gsidx="'+i+'">'+
+                    '<div><div class="gs-title">'+escHtml(r.title)+'</div><div class="gs-sub">'+escHtml(r.sub||"")+'</div></div>'+
+                    '<span class="gs-tag">'+escHtml(r.tag)+'</span>'+
+                  '</div>';
+                }).join("") : '<div class="gsearch-empty">Nada encontrado para "'+escHtml(query)+'".</div>'))+
+          '</div>'+
+          '<div class="gsearch-hint">Esc para fechar</div>'+
+        '</div>';
+      var input = document.getElementById("gsInput");
+      input.focus();
+      input.setSelectionRange(query.length, query.length);
+      input.addEventListener("input", function(){ query = input.value; state.modal.query = query; draw(); });
+      div.querySelectorAll("[data-gsidx]").forEach(function(el){
+        el.addEventListener("click", function(){ results[parseInt(el.getAttribute("data-gsidx"),10)].action(); });
+      });
+    }
+    div.addEventListener("click", function(e){ if (e.target===div){ state.modal=null; renderModal(); } });
+    document.body.appendChild(div);
+    draw();
   }
 
   function renderAuthModal(){
@@ -2713,12 +3640,10 @@
       : '<div class="cust-empty">Nenhum cliente cadastrado ainda.</div>';
     div.innerHTML =
       '<div class="modal wide">'+
-        '<h3>'+(purpose==="whatsapp" ? "Enviar nota por WhatsApp" : (purpose==="link" ? "Vincular cliente \u00e0 linha" : "Selecionar cliente"))+'</h3>'+
-        '<p>'+(purpose==="whatsapp"
-          ? "Escolha o cliente para enviar o PDF da nota por WhatsApp. Se ele ainda n\u00e3o estiver cadastrado, use o bot\u00e3o abaixo."
-          : (purpose==="link"
+        '<h3>'+(purpose==="link" ? "Vincular cliente \u00e0 linha" : "Selecionar cliente")+'</h3>'+
+        '<p>'+(purpose==="link"
             ? "Escolha quem comprou nesta linha. Isso fica salvo mesmo sem imprimir \u2014 d\u00e1 pra ver depois quem levou e religar uma nota a qualquer momento."
-            : "Escolha quem comprou para gerar a nota. Se o cliente ainda n\u00e3o estiver cadastrado, use o bot\u00e3o abaixo."))+'</p>'+
+            : "Escolha quem comprou para gerar a nota. Se o cliente ainda n\u00e3o estiver cadastrado, use o bot\u00e3o abaixo.")+'</p>'+
         (customers.length ? '<input type="text" id="custSearch" class="search-input" placeholder="Buscar por nome, CPF ou telefone...">' : '')+
         '<div class="cust-list" id="custList">'+listHtml+'</div>'+
         '<div class="modal-actions" style="justify-content:space-between;margin-top:14px;">'+
@@ -2740,8 +3665,7 @@
         }
         render();
         if (row && customer && purpose!=="link"){
-          if (purpose==="whatsapp") sendNotaPdfWhatsapp(row, customer);
-          else printNota(row, customer);
+          printNota(row, customer);
         }
       });
     });
@@ -2801,7 +3725,7 @@
       '<div class="modal wide">'+
         '<h3>'+(customer ? "Editar cliente" : "Cadastrar cliente")+'</h3>'+
         '<div class="field-group">'+
-          '<label>Nome</label><input type="text" id="cfNome" placeholder="Nome completo" value="'+escAttr(customer?customer.nome:"")+'">'+
+          '<label>Nome</label><input type="text" id="cfNome" placeholder="Nome completo" value="'+escAttr(customer?customer.nome:(state.modal.prefillNome||""))+'">'+
           '<label>Tipo de documento</label>'+
           '<div style="display:flex;gap:8px;margin-bottom:10px;">'+
             '<button type="button" class="btn small'+(tipoAtual==="cpf"?" primary":" ghost")+'" id="cfTipoCpf" style="flex:1;">Pessoa física (CPF)</button>'+
@@ -2832,6 +3756,8 @@
     function goBack(){
       if (state.modal.returnTo==="selectCustomer"){
         state.modal = {type:"selectCustomer", rowId: state.modal.rowId, purpose: state.modal.purpose};
+      } else if (state.modal.returnTo==="orcamento"){
+        state.modal = null; render(); return;
       } else {
         state.modal = null;
       }
@@ -2865,7 +3791,13 @@
       var returnTo = state.modal.returnTo;
       var purpose = state.modal.purpose||"print";
       state.modal = null;
-      if (returnTo==="selectCustomer" && rowId){
+      if (returnTo==="orcamento"){
+        if (!state.orcamento) state.orcamento = loadOrcamentoDraft();
+        state.orcamento.clienteId = saved.id;
+        state.orcamento.clienteNome = ""; state.orcamento.clienteTelefone = "";
+        saveOrcamentoDraft();
+        render();
+      } else if (returnTo==="selectCustomer" && rowId){
         var row = state.rows.filter(function(r){return r.id===rowId;})[0];
         if (row){
           row.clienteId = saved.id; // já liga o cliente recém-cadastrado a esta linha
@@ -2873,8 +3805,7 @@
         }
         render();
         if (row && purpose!=="link"){
-          if (purpose==="whatsapp") sendNotaPdfWhatsapp(row, saved);
-          else printNota(row, saved);
+          printNota(row, saved);
         }
       } else {
         render();
@@ -2891,8 +3822,11 @@
 
   function estoqueRowHtml(i){
     var qtd = Math.max(0, parseNum(i.quantidade));
+    var min = Math.max(0, parseNum(i.minimo));
+    var baixo = min>0 && qtd<min;
     return '<div class="arow">'+
-      '<span class="d">'+escHtml(i.medida||"—")+(i.marca?' <span style="color:var(--text-faint);">· '+escHtml(i.marca)+'</span>':'')+'</span>'+
+      '<span class="d">'+escHtml(i.medida||"—")+(i.marca?' <span style="color:var(--text-faint);">· '+escHtml(i.marca)+'</span>':'')+
+        (baixo?' <span class="est-baixo-badge" title="Abaixo do mínimo configurado ('+min+' un.)">⚠ estoque baixo</span>':'')+'</span>'+
       '<span class="stats">'+
         '<span><b'+(qtd<=0?' class="est-zero"':'')+'>'+qtd+' un.</b></span>'+
         '<span>'+fmtCurrency(parseNum(i.preco))+'</span>'+
@@ -2987,7 +3921,10 @@
         var n = askQtd("Quantas unidades ENTRARAM de "+estoqueLabel(item)+"?");
         if (n>0){
           var moved = moveEstoque(id, n);
-          if (moved>0) addEstoqueLog("entrada", estoqueLabel(item), moved);
+          if (moved>0){
+            addEstoqueLog("entrada", estoqueLabel(item), moved);
+            checkProcuradosOnEntrada(item.medida);
+          }
           renderEstoque();
         }
       });
@@ -3056,6 +3993,9 @@
     var o = state.orcamento;
     var customers = loadCustomers();
     var t = orcTotals(o);
+    var cliSel = o.clienteId ? customers.filter(function(c){return c.id===o.clienteId;})[0] : null;
+    if (o.clienteId && !cliSel){ o.clienteId = ""; saveOrcamentoDraft(); } // cliente foi apagado do cadastro
+    var cliSub = cliSel ? [customerDocLabel(cliSel), cliSel.telefone, cliSel.endereco].filter(Boolean).join(" · ") : "";
 
     var itemsHtml = o.items.map(function(it){
       return '<div class="orc-item" data-oid="'+escAttr(it.id)+'">'+
@@ -3085,14 +4025,16 @@
 
       '<div class="card" style="padding:18px 20px;">'+
         '<div class="orc-grid">'+
-          '<div class="orc-field">'+
-            '<label>Cliente cadastrado</label>'+
-            '<select id="orcCliente">'+
-              '<option value="">— Sem cadastro (digitar nome) —</option>'+
-              customers.map(function(c){
-                return '<option value="'+escAttr(c.id)+'"'+(c.id===o.clienteId?' selected':'')+'>'+escHtml(c.nome||"(sem nome)")+'</option>';
-              }).join("")+
-            '</select>'+
+          '<div class="orc-field" style="grid-column:1 / -1;">'+
+            '<label>Cliente</label>'+
+            (cliSel
+              ? '<div class="orc-cli-chip"><div><b>'+escHtml(cliSel.nome||"(sem nome)")+'</b><span>'+escHtml(cliSub||"sem mais dados")+'</span></div>'+
+                  '<div class="orc-cli-actions"><button class="btn ghost small" id="orcCliEdit">✎ Editar</button><button class="btn ghost small" id="orcCliClear">Trocar</button></div></div>'
+              : '<div class="orc-cli-search">'+
+                  '<input type="text" id="orcCliBusca" autocomplete="off" placeholder="Buscar cliente por nome, CPF/CNPJ ou telefone...">'+
+                  '<button class="btn primary small" id="orcCliNovo" title="Cadastrar um cliente novo">+ Cadastrar</button>'+
+                '</div>'+
+                '<div class="cust-list orc-cli-results" id="orcCliResults" style="display:none;"></div>')+
           '</div>'+
           '<div class="orc-field">'+
             '<label>Validade do orçamento (dias)</label>'+
@@ -3200,14 +4142,54 @@
       renderOrcamento();
     });
 
-    var selCli = document.getElementById("orcCliente");
-    if (selCli){
-      selCli.addEventListener("change", function(){
-        state.orcamento.clienteId = selCli.value;
-        saveOrcamentoDraft();
-        renderOrcamento();
+    // ---- cliente: busca, seleção e cadastro rápido ----
+    var busca = document.getElementById("orcCliBusca");
+    var results = document.getElementById("orcCliResults");
+    function abrirCadastro(nomeInicial){
+      state.modal = {type:"customerForm", returnTo:"orcamento", prefillNome: nomeInicial||"", error:""};
+      renderModal();
+    }
+    if (busca && results){
+      busca.addEventListener("input", function(){
+        var q = busca.value.trim().toLowerCase();
+        if (!q){ results.style.display = "none"; results.innerHTML = ""; return; }
+        var found = customers.filter(function(c){
+          return (c.nome||"").toLowerCase().indexOf(q)>-1 ||
+                 (customerDocInfo(c).documento||"").toLowerCase().indexOf(q)>-1 ||
+                 (c.telefone||"").toLowerCase().replace(/\D/g,"").indexOf(q.replace(/\D/g,"")||"§")>-1;
+        }).slice(0, 8);
+        results.innerHTML = found.map(function(c){
+          var sub = [customerDocLabel(c), c.telefone].filter(Boolean).join(" · ");
+          return '<button class="cust-item" data-cid="'+escAttr(c.id)+'"><span class="cust-name">'+escHtml(c.nome||"(sem nome)")+'</span>'+
+            (sub ? '<span class="cust-sub">'+escHtml(sub)+'</span>' : '')+'</button>';
+        }).join("")+
+        '<button class="cust-item cust-create" id="orcCliCreateFrom"><span class="cust-name">+ Cadastrar "'+escHtml(busca.value.trim())+'" como cliente novo</span></button>';
+        results.style.display = "";
+        results.querySelectorAll(".cust-item[data-cid]").forEach(function(b){
+          b.addEventListener("click", function(){
+            state.orcamento.clienteId = b.getAttribute("data-cid");
+            state.orcamento.clienteNome = ""; state.orcamento.clienteTelefone = "";
+            saveOrcamentoDraft();
+            renderOrcamento();
+          });
+        });
+        document.getElementById("orcCliCreateFrom").addEventListener("click", function(){ abrirCadastro(busca.value.trim()); });
+      });
+      busca.addEventListener("keydown", function(e){
+        if (e.key==="Enter"){ var first = results.querySelector(".cust-item[data-cid]"); if (first) first.click(); }
       });
     }
+    var btnNovo = document.getElementById("orcCliNovo");
+    if (btnNovo) btnNovo.addEventListener("click", function(){ abrirCadastro(busca ? busca.value.trim() : ""); });
+    var btnClear = document.getElementById("orcCliClear");
+    if (btnClear) btnClear.addEventListener("click", function(){
+      state.orcamento.clienteId = ""; saveOrcamentoDraft(); renderOrcamento();
+    });
+    var btnEdit = document.getElementById("orcCliEdit");
+    if (btnEdit) btnEdit.addEventListener("click", function(){
+      state.modal = {type:"customerForm", customerId: state.orcamento.clienteId, returnTo:"orcamento", error:""};
+      renderModal();
+    });
 
     document.getElementById("orcLimpar").addEventListener("click", function(){
       if (!confirm("Limpar este orçamento e começar um novo?")) return;
@@ -3343,11 +4325,15 @@
 
   function clientesTopbarHtml(titulo, tag){
     var estoquista = state.role==="estoquista";
+    var avisosCount = avisosPendentesCount();
     return '<div class="topbar">'+
       '<div class="brand"><span class="mark"></span><h1>'+titulo+'</h1><span class="tag">'+tag+'</span>'+syncBadgeHtml()+'</div>'+
       '<div class="auth-zone">'+
         (estoquista ? '' : '<button class="btn ghost small" data-act="back">‹ Painel de vendas</button>')+
         '<button class="btn ghost small" data-act="openestoque">📦 Estoque</button>'+
+        '<button class="btn ghost small" data-act="openclientes">👥 Clientes</button>'+
+        '<button class="btn ghost small" data-act="opennotas">🧾 Notas</button>'+
+        '<button class="btn ghost small" data-act="openavisos">🔔 Avisos'+(avisosCount>0?'<span class="nav-badge">'+avisosCount+'</span>':'')+'</button>'+
         (state.role==="master" ? '<button class="btn ghost small" data-act="openhistorico">🕘 Histórico</button>' : '')+
         (state.role==="master" ? '<button class="btn ghost small" data-act="openusuarios">👤 Usuários</button>' : '')+
         (sb ? '<button class="btn ghost small" data-act="accountlogout">Sair da conta</button>' : '')+
@@ -3488,6 +4474,235 @@
     });
   }
 
+  // ---------- tela: notas emitidas (todas, em ordem de emissão) ----------
+  function csvEscape(v){
+    var s = String(v===undefined||v===null?"":v);
+    if (/[";\n]/.test(s)) s = '"'+s.replace(/"/g,'""')+'"';
+    return s;
+  }
+  function downloadTextFile(filename, content, mime){
+    var blob = new Blob(["\uFEFF"+content], {type:(mime||"text/csv")+";charset=utf-8;"});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+  function exportNotasCSV(list){
+    var header = ["Número","Data","Hora","Cliente","Documento","Valor","Forma de pagamento","Status"];
+    var lines = [header.map(csvEscape).join(";")];
+    list.forEach(function(n){
+      var d = new Date(n.createdAt);
+      var hora = isNaN(d.getTime()) ? "" : pad(d.getHours())+":"+pad(d.getMinutes());
+      lines.push([
+        n.vendaNum, fmtDateBR(n.date), hora, (n.customer&&n.customer.nome)||"",
+        customerDocLabel(n.customer||{}), parseNum(n.totalProdutos).toFixed(2).replace(".",","),
+        n.formaPagamento||"", (n.pago==="✅"?"Pago":"Pendente")
+      ].map(csvEscape).join(";"));
+    });
+    downloadTextFile("notas-"+today+".csv", lines.join("\r\n"));
+  }
+  function renderNotas(){
+    var all = loadNotas().slice().sort(function(a,b){ return (b.createdAt||0)-(a.createdAt||0); });
+    var q = (state.notasQuery||"").trim().toLowerCase();
+    var filtered = q ? all.filter(function(n){
+      return String(n.vendaNum).indexOf(q)>-1 ||
+             ((n.customer&&n.customer.nome)||"").toLowerCase().indexOf(q)>-1;
+    }) : all;
+    var totalValor = filtered.reduce(function(a,n){ return a+parseNum(n.totalProdutos); }, 0);
+    var pendentes = filtered.filter(function(n){ return n.pago!=="✅"; }).length;
+
+    var rowsHtml = filtered.length ? filtered.map(function(n){
+      var d = new Date(n.createdAt);
+      var quando = isNaN(d.getTime()) ? fmtDateBR(n.date) : fmtDateTimeBR(n.createdAt);
+      var itensResumo = (n.items||[]).map(function(it){ return it.desc; }).join(", ") || "—";
+      var custNome = (n.customer&&n.customer.nome) || "(sem cliente vinculado)";
+      return '<div class="nota-row">'+
+          '<div>'+
+            '<span class="nota-num">NOTA #'+n.vendaNum+'</span> · <span>'+escHtml(custNome)+'</span>'+
+            '<div class="nota-meta">'+escHtml(quando)+' · '+escHtml(itensResumo)+
+              (n.formaPagamento ? ' · '+escHtml(n.formaPagamento) : '')+
+              ' · '+(n.pago==="✅" ? '<span style="color:var(--green);">pago</span>' : '<span style="color:var(--yellow);">pendente</span>')+
+            '</div>'+
+          '</div>'+
+          '<div style="display:flex;align-items:center;gap:10px;">'+
+            '<span class="nota-valor">'+fmtCurrency(n.totalProdutos)+'</span>'+
+            '<button class="icon-btn" data-notareimp="'+escAttr(n.id)+'" title="Reimprimir nota">🖨</button>'+
+            '<button class="icon-btn" data-notadel="'+escAttr(n.id)+'" title="Apagar nota">✕</button>'+
+          '</div>'+
+        '</div>';
+    }).join("") : '<div class="aviso-empty">Nenhuma nota emitida ainda'+(q?' para "'+escHtml(state.notasQuery)+'"':'')+'. Notas são geradas ao clicar em 🖨 numa venda.</div>';
+
+    root.innerHTML =
+      clientesTopbarHtml("Notas", "TODAS AS NOTAS EMITIDAS · EM ORDEM DE EMISSÃO") +
+      '<div class="totals-bar">'+
+        tstat("Notas emitidas", filtered.length, true)+
+        tstat("Valor total", fmtCurrency(totalValor))+
+        tstat("Pendentes de pagamento", pendentes)+
+      '</div>'+
+      '<div class="tbl-head">'+
+        '<div class="tbl-head-left"><h2>Notas emitidas</h2></div>'+
+        '<button class="btn ghost small" data-act="exportnotascsv" title="Baixar essas notas em planilha (CSV)">⇩ Exportar CSV</button>'+
+      '</div>'+
+      '<div class="card" style="padding:14px 16px;">'+
+        '<input type="text" id="notasSearch" class="dash-cust-search" placeholder="Buscar por número da nota ou nome do cliente..." value="'+escAttr(state.notasQuery||"")+'">'+
+        '<div class="archive-list">'+rowsHtml+'</div>'+
+      '</div>';
+
+    root.querySelectorAll("[data-act]").forEach(function(node){
+      node.addEventListener("click", function(){
+        var act = node.getAttribute("data-act");
+        if (act==="exportnotascsv") exportNotasCSV(filtered);
+        else handleAction(act, node);
+      });
+    });
+    var search = document.getElementById("notasSearch");
+    if (search){
+      search.addEventListener("input", function(){
+        state.notasQuery = search.value;
+        var pos = search.selectionStart;
+        renderNotas();
+        var again = document.getElementById("notasSearch");
+        if (again){ again.focus(); try{ again.setSelectionRange(pos,pos); }catch(e){} }
+      });
+    }
+    root.querySelectorAll("[data-notareimp]").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        var nota = loadNotas().filter(function(n){return n.id===btn.getAttribute("data-notareimp");})[0];
+        if (nota) reprintNota(nota);
+      });
+    });
+    root.querySelectorAll("[data-notadel]").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        deleteNotaWithUndo(btn.getAttribute("data-notadel"), function(){ renderNotas(); });
+      });
+    });
+  }
+
+  // ---------- tela: avisos (clientes esperando medida, lembretes recorrentes, estoque baixo) ----------
+  function renderAvisos(){
+    var tab = state.avisosTab || "procurados";
+    var procurados = loadProcurados().slice().sort(function(a,b){ return (b.createdAt||0)-(a.createdAt||0); });
+    var lembretes = loadLembretes().slice().sort(function(a,b){
+      var av=a.proximo||"9999", bv=b.proximo||"9999"; return av<bv?-1:(av>bv?1:0);
+    });
+    var baixos = estoqueBaixoList();
+
+    function tabBtn(key, label, count){
+      return '<button class="seg'+(tab===key?' on':'')+'" data-act="avisostab" data-tab="'+key+'">'+label+(count?' ('+count+')':'')+'</button>';
+    }
+
+    var procuradosHtml = procurados.length ? procurados.map(function(p){
+      var cls = p.resolved ? '' : (p.matched ? ' matched' : '');
+      return '<div class="aviso-row'+cls+'">'+
+          '<div><div class="aviso-title">'+escHtml(p.cliente||"Cliente")+' — procurando '+escHtml(p.medida||"")+'</div>'+
+          '<div class="aviso-sub">'+(p.telefone?escHtml(p.telefone)+' · ':'')+(p.obs?escHtml(p.obs)+' · ':'')+
+            (p.resolved ? 'resolvido' : (p.matched ? '🔔 chegou em estoque!' : 'aguardando entrada em estoque'))+'</div></div>'+
+          '<div style="display:flex;gap:6px;">'+
+            (p.resolved ? '' : '<button class="btn ghost small" data-procres="'+escAttr(p.id)+'">✓ Marcar resolvido</button>')+
+            '<button class="icon-btn" data-procdel="'+escAttr(p.id)+'" title="Apagar">✕</button>'+
+          '</div>'+
+        '</div>';
+    }).join("") : '<div class="aviso-empty">Nenhum cliente aguardando uma medida no momento.</div>';
+
+    var lembretesHtml = lembretes.length ? lembretes.map(function(l){
+      var vencido = !l.feito && l.proximo && l.proximo<=today;
+      return '<div class="aviso-row'+(vencido?' overdue':'')+'">'+
+          '<div><div class="aviso-title">'+escHtml(l.texto||"")+(l.cliente?' — '+escHtml(l.cliente):'')+'</div>'+
+          '<div class="aviso-sub">'+
+            (l.feito ? 'concluído' : (l.proximo ? (vencido?'venceu em '+fmtDateBR(l.proximo)+' — conferir':'próximo em '+fmtDateBR(l.proximo)) : 'sem repetição'))+
+            (parseInt(l.repetirDias||0,10)>0 ? ' · repete a cada '+l.repetirDias+' dia(s)' : '')+
+          '</div></div>'+
+          '<div style="display:flex;gap:6px;">'+
+            (l.feito ? '' : '<button class="btn ghost small" data-lembdone="'+escAttr(l.id)+'">✓ Conferido hoje</button>')+
+            '<button class="icon-btn" data-lembdel="'+escAttr(l.id)+'" title="Apagar">✕</button>'+
+          '</div>'+
+        '</div>';
+    }).join("") : '<div class="aviso-empty">Nenhum lembrete cadastrado.</div>';
+
+    var baixosHtml = baixos.length ? baixos.map(function(i){
+      return '<div class="aviso-row overdue">'+
+          '<div><div class="aviso-title">'+escHtml(i.medida||"")+(i.marca?' · '+escHtml(i.marca):'')+'</div>'+
+          '<div class="aviso-sub">'+Math.max(0,parseNum(i.quantidade))+' un. em estoque · mínimo configurado: '+parseNum(i.minimo)+' un.</div></div>'+
+          '<button class="btn ghost small" data-act="openestoque">📦 Ver estoque</button>'+
+        '</div>';
+    }).join("") : '<div class="aviso-empty">Nenhum item abaixo do mínimo configurado.</div>';
+
+    root.innerHTML =
+      clientesTopbarHtml("Avisos", "CLIENTES AGUARDANDO MEDIDA · LEMBRETES · ESTOQUE BAIXO") +
+      '<div class="tbl-head"><div class="tbl-head-left"><h2>Central de avisos</h2></div></div>'+
+      '<div class="dd-cmp-toggle" style="margin-bottom:14px;">'+
+        tabBtn("procurados","🔍 Clientes procurando pneu", procurados.filter(function(p){return !p.resolved;}).length)+
+        tabBtn("lembretes","⏰ Lembretes", lembretesVencidos().length)+
+        tabBtn("estoque","📉 Estoque baixo", baixos.length)+
+      '</div>'+
+
+      (tab==="procurados" ?
+        '<div class="aviso-card"><h3>🔍 Clientes procurando uma medida</h3>'+
+          '<div class="aviso-form">'+
+            '<input type="text" id="pfCliente" placeholder="Nome do cliente">'+
+            '<input type="text" id="pfMedida" placeholder="Medida (ex: 175/70 R14)">'+
+            '<input type="text" id="pfObs" placeholder="Telefone / observação (opcional)">'+
+            '<button class="btn primary small" id="pfAdd">+ Adicionar</button>'+
+          '</div>'+
+          '<p style="font-size:12px;color:var(--text-faint);margin:-6px 0 12px;">Quando essa medida entrar no estoque, você recebe um aviso aqui e um alerta na tela.</p>'+
+          procuradosHtml+
+        '</div>'
+      : tab==="lembretes" ?
+        '<div class="aviso-card"><h3>⏰ Lembretes recorrentes</h3>'+
+          '<div class="aviso-form">'+
+            '<input type="text" id="lfTexto" placeholder="Ex: Checar garantia do cliente">'+
+            '<input type="text" id="lfCliente" placeholder="Cliente (opcional)">'+
+            '<select id="lfRep"><option value="0">Não repetir</option><option value="1">Todo dia</option>'+
+              '<option value="7" selected>A cada 7 dias</option><option value="15">A cada 15 dias</option><option value="30">A cada 30 dias</option></select>'+
+            '<button class="btn primary small" id="lfAdd">+ Adicionar</button>'+
+          '</div>'+
+          '<p style="font-size:12px;color:var(--text-faint);margin:-6px 0 12px;">Ex.: lembrar de conferir de tempos em tempos se chegou o pneu da garantia do cliente.</p>'+
+          lembretesHtml+
+        '</div>'
+      :
+        '<div class="aviso-card"><h3>📉 Itens abaixo do estoque mínimo</h3>'+
+          '<p style="font-size:12px;color:var(--text-faint);margin:-2px 0 12px;">Configure o mínimo de cada medida em Estoque → editar (✎).</p>'+
+          baixosHtml+
+        '</div>'
+      );
+
+    root.querySelectorAll("[data-act]").forEach(function(node){
+      node.addEventListener("click", function(){ handleAction(node.getAttribute("data-act"), node); });
+    });
+
+    var pfAdd = document.getElementById("pfAdd");
+    if (pfAdd) pfAdd.addEventListener("click", function(){
+      var cliente = document.getElementById("pfCliente").value.trim();
+      var medida = document.getElementById("pfMedida").value.trim();
+      var obs = document.getElementById("pfObs").value.trim();
+      if (!cliente || !medida){ if (window.uiToast) window.uiToast("Informe ao menos o cliente e a medida.", "err"); return; }
+      addProcurado({cliente:cliente, medida:medida, obs:obs});
+      renderAvisos();
+    });
+    var lfAdd = document.getElementById("lfAdd");
+    if (lfAdd) lfAdd.addEventListener("click", function(){
+      var texto = document.getElementById("lfTexto").value.trim();
+      var cliente = document.getElementById("lfCliente").value.trim();
+      var rep = parseInt(document.getElementById("lfRep").value, 10);
+      if (!texto){ if (window.uiToast) window.uiToast("Descreva o lembrete.", "err"); return; }
+      addLembrete({texto:texto, cliente:cliente, repetirDias:rep, proximo: rep>0 ? today : today, feito:false});
+      renderAvisos();
+    });
+    root.querySelectorAll("[data-procres]").forEach(function(btn){
+      btn.addEventListener("click", function(){ resolveProcurado(btn.getAttribute("data-procres")); renderAvisos(); });
+    });
+    root.querySelectorAll("[data-procdel]").forEach(function(btn){
+      btn.addEventListener("click", function(){ deleteProcuradoWithUndo(btn.getAttribute("data-procdel"), function(){ renderAvisos(); }); });
+    });
+    root.querySelectorAll("[data-lembdone]").forEach(function(btn){
+      btn.addEventListener("click", function(){ completeLembrete(btn.getAttribute("data-lembdone")); renderAvisos(); });
+    });
+    root.querySelectorAll("[data-lembdel]").forEach(function(btn){
+      btn.addEventListener("click", function(){ deleteLembreteWithUndo(btn.getAttribute("data-lembdel"), function(){ renderAvisos(); }); });
+    });
+  }
+
   // ---------- modal: cadastrar / editar medida do estoque ----------
   function renderEstoqueFormModal(){
     var item = state.modal.itemId ? estoqueItem(state.modal.itemId) : null;
@@ -3501,6 +4716,7 @@
           '<label>Marca</label><input type="text" id="efMarca" placeholder="Ex: Pirelli" value="'+escAttr(item?item.marca:"")+'">'+
           '<label>Quantidade em estoque</label><input type="text" inputmode="numeric" id="efQtd" placeholder="0" value="'+escAttr(item?Math.max(0,parseNum(item.quantidade)):"")+'">'+
           '<label>Preço por unidade (R$)</label><input type="text" inputmode="decimal" id="efPreco" placeholder="0,00" value="'+escAttr(item?parseNum(item.preco):"")+'">'+
+          '<label>Estoque mínimo (avisa quando ficar abaixo — deixe 0 pra não avisar)</label><input type="text" inputmode="numeric" id="efMinimo" placeholder="0" value="'+escAttr(item?Math.max(0,parseNum(item.minimo)):"")+'">'+
         '</div>'+
         '<div class="err">'+escHtml(state.modal.error||"")+'</div>'+
         '<div class="modal-actions">'+
@@ -3532,7 +4748,8 @@
         medida: medida,
         marca: document.getElementById("efMarca").value.trim(),
         quantidade: document.getElementById("efQtd").value,
-        preco: document.getElementById("efPreco").value
+        preco: document.getElementById("efPreco").value,
+        minimo: document.getElementById("efMinimo").value
       };
       if (item){
         var antes = Math.max(0, parseNum(item.quantidade));
@@ -3540,8 +4757,10 @@
         updateEstoqueItem(item.id, dados);
         var diff = depois - antes;
         if (diff !== 0) addEstoqueLog("ajuste", estoqueLabel({medida:medida, marca:dados.marca}), diff);
+        if (diff > 0) checkProcuradosOnEntrada(medida);
       } else {
         addEstoqueItem(dados);
+        if (Math.max(0, parseNum(dados.quantidade))>0) checkProcuradosOnEntrada(medida);
       }
       goBack();
     });
@@ -3910,8 +5129,25 @@
         render();
         if (!hadRemoteData) pushAllLocalToCloud(); // primeira ativação: sobe o histórico local pra nuvem
         initCloudSync(handleRemoteChange);
+        avisarPendenciasNoBoot();
       });
     });
+  }
+
+  // avisa uma vez por dia, ao abrir o app, se há lembretes vencidos ou clientes cuja medida chegou
+  function avisarPendenciasNoBoot(){
+    try{
+      var chave = "vo_last_avisos_toast";
+      if (localStorage.getItem(chave) === today) return;
+      localStorage.setItem(chave, today);
+    }catch(e){}
+    var vencidos = lembretesVencidos().length;
+    var matched = loadProcurados().filter(function(p){ return !p.resolved && p.matched; }).length;
+    var baixo = estoqueBaixoList().length;
+    if (!window.uiToast) return;
+    if (vencidos>0) window.uiToast("⏰ Você tem "+vencidos+" lembrete(s) para conferir hoje. Veja em 🔔 Avisos.", "", 8000);
+    if (matched>0) window.uiToast("🔔 "+matched+" cliente(s) aguardando uma medida que já chegou em estoque.", "ok", 8000);
+    if (baixo>0) window.uiToast("📉 "+baixo+" medida(s) abaixo do estoque mínimo.", "err", 8000);
   }
 
   function checkAuthAndBoot(){
@@ -3923,7 +5159,159 @@
     });
   }
 
+  // ---------- pontes para o script de melhorias no rodapé (atalhos de teclado, tema) ----------
+  window.__appOpenSearch = function(){
+    if (!state.authed && state.view!=="table" && !state.modal){ /* segue liberado, busca não exige login */ }
+    state.modal = {type:"globalSearch", query:""};
+    renderModal();
+  };
+  window.__appShortcut = function(key){
+    if (state.modal) return; // não atropela um modal já aberto
+    if (key==="e"){ state.view="estoque"; render(); }
+    else if (key==="c"){ state.clientesDetailId=null; state.view="clientes"; render(); }
+    else if (key==="n"){
+      if (state.view==="table"){ addRow(); }
+      else {
+        state.date = today; state.view = "table"; state.openDetails = {};
+        getRows(today).then(function(rows){ state.rows = rows; addRow(); });
+      }
+    }
+  };
+
   checkAuthAndBoot();
+})();
+</script>
+<style id="oficina-extras">
+  .ui-toast-wrap{position:fixed;left:50%;transform:translateX(-50%);bottom:86px;z-index:10050;display:flex;flex-direction:column;gap:8px;width:min(420px,calc(100vw - 24px));pointer-events:none}
+  .ui-toast{pointer-events:auto;background:#1b2329;border:1px solid var(--border);border-left:3px solid var(--yellow);color:var(--text);
+    padding:11px 14px;border-radius:5px;font-size:13px;line-height:1.4;box-shadow:0 12px 30px rgba(0,0,0,.4);
+    display:flex;gap:10px;align-items:flex-start;animation:uiToastIn .18s ease-out}
+  .ui-toast.err{border-left-color:var(--red)}
+  .ui-toast.ok{border-left-color:var(--green)}
+  .ui-toast b{font-family:inherit}
+  .ui-toast-x{margin-left:auto;background:none;border:none;color:var(--text-faint);font-size:15px;line-height:1;cursor:pointer;padding:0 2px}
+  @keyframes uiToastIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .ui-offline{position:fixed;left:0;right:0;top:4px;z-index:10060;background:var(--red);color:#fff;
+    font-size:12px;letter-spacing:.04em;text-transform:uppercase;text-align:center;padding:5px 10px}
+  .ui-top{position:fixed;right:16px;bottom:18px;z-index:9000;width:42px;height:42px;border-radius:50%;
+    border:1px solid var(--border);background:var(--panel);color:var(--yellow);font-size:17px;cursor:pointer;
+    box-shadow:0 8px 22px rgba(0,0,0,.4);opacity:0;pointer-events:none;transition:opacity .2s ease}
+  .ui-top.show{opacity:1;pointer-events:auto}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-track{background:var(--bg)}
+  ::-webkit-scrollbar-thumb{background:#2c3840;border-radius:6px;border:2px solid var(--bg)}
+  ::-webkit-scrollbar-thumb:hover{background:#3d4d57}
+  :focus-visible{outline:2px solid var(--yellow);outline-offset:2px}
+  .btn:disabled,button:disabled{opacity:.5;cursor:not-allowed}
+  @media(max-width:700px){.ui-top{right:12px;bottom:14px}.ui-toast-wrap{bottom:70px}}
+</style>
+<script>
+(function(){
+  var wrap = document.createElement("div");
+  wrap.className = "ui-toast-wrap";
+  document.body.appendChild(wrap);
+
+  function toast(msg, kind, ms){
+    var t = document.createElement("div");
+    t.className = "ui-toast" + (kind ? " " + kind : "");
+    var span = document.createElement("span");
+    span.textContent = String(msg);
+    var x = document.createElement("button");
+    x.className = "ui-toast-x"; x.type = "button"; x.innerHTML = "&times;";
+    x.setAttribute("aria-label","Fechar aviso");
+    t.appendChild(span); t.appendChild(x);
+    wrap.appendChild(t);
+    var timer = setTimeout(close, ms || 4600);
+    function close(){ clearTimeout(timer); if (t.parentNode) t.parentNode.removeChild(t); }
+    x.addEventListener("click", close);
+    return close;
+  }
+  window.uiToast = toast;
+
+  // avisos do sistema passam a aparecer como toast em vez de caixa do navegador
+  window.alert = function(msg){
+    var s = String(msg == null ? "" : msg);
+    var kind = /não foi poss|erro|inválid|falh/i.test(s) ? "err"
+             : /sucesso|salvo|enviado|conclu/i.test(s) ? "ok" : "";
+    toast(s, kind, 6000);
+  };
+
+  // aviso de conexão
+  var offBar = null;
+  function setOnline(on){
+    if (on){ if (offBar){ offBar.remove(); offBar = null; toast("Conexão restabelecida — sincronizando.", "ok"); } }
+    else if (!offBar){
+      offBar = document.createElement("div");
+      offBar.className = "ui-offline";
+      offBar.textContent = "Sem internet — as vendas continuam sendo salvas neste aparelho";
+      document.body.appendChild(offBar);
+    }
+  }
+  window.addEventListener("online", function(){ setOnline(true); });
+  window.addEventListener("offline", function(){ setOnline(false); });
+  if (navigator.onLine === false) setOnline(false);
+
+  // botão voltar ao topo
+  var top = document.createElement("button");
+  top.className = "ui-top"; top.type = "button"; top.innerHTML = "&#8593;";
+  top.setAttribute("aria-label","Voltar ao topo");
+  top.addEventListener("click", function(){ window.scrollTo({ top:0, behavior:"smooth" }); });
+  document.body.appendChild(top);
+  var ticking = false;
+  window.addEventListener("scroll", function(){
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(function(){
+      top.classList.toggle("show", window.scrollY > 420);
+      ticking = false;
+    });
+  }, { passive:true });
+
+  // atalhos: Esc fecha o que estiver aberto, "/" vai direto para a busca,
+  // Ctrl/Cmd+K abre a busca global, N/E/C abrem nova venda/estoque/clientes
+  document.addEventListener("keydown", function(e){
+    if (e.key === "Escape"){
+      var ov = document.querySelectorAll(".modal-overlay, .overlay");
+      var last = ov[ov.length-1];
+      if (last){
+        var cancel = last.querySelector('[data-close], .btn.ghost, .modal-actions .btn:not(.primary)');
+        if (cancel) cancel.click(); else last.remove();
+      }
+      return;
+    }
+    if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K")){
+      e.preventDefault();
+      if (window.__appOpenSearch) window.__appOpenSearch();
+      return;
+    }
+    if (e.key === "/" ){
+      var tag = (e.target && e.target.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select") return;
+      var s = document.querySelector(".search-input, .dash-cust-search, #custSearch");
+      if (s){ e.preventDefault(); s.focus(); s.select && s.select(); }
+      return;
+    }
+    var tagN = (e.target && e.target.tagName || "").toLowerCase();
+    if (tagN === "input" || tagN === "textarea" || tagN === "select" || e.metaKey || e.ctrlKey || e.altKey) return;
+    var k = (e.key||"").toLowerCase();
+    if ((k==="n" || k==="e" || k==="c") && window.__appShortcut){
+      window.__appShortcut(k);
+    }
+  });
+
+  // botão flutuante: alternar tema claro/escuro
+  var themeBtn = document.createElement("button");
+  themeBtn.className = "ui-theme-toggle"; themeBtn.type = "button";
+  themeBtn.setAttribute("aria-label","Alternar tema claro/escuro");
+  function currentTheme(){ try{ return localStorage.getItem("vo_theme") || "dark"; }catch(e){ return "dark"; } }
+  function applyTheme(t){
+    document.documentElement.setAttribute("data-theme", t);
+    themeBtn.innerHTML = t==="light" ? "&#9789;" : "&#9788;";
+    try{ localStorage.setItem("vo_theme", t); }catch(e){}
+  }
+  applyTheme(currentTheme());
+  themeBtn.addEventListener("click", function(){ applyTheme(currentTheme()==="light" ? "dark" : "light"); });
+  document.body.appendChild(themeBtn);
 })();
 </script>
 </body>
