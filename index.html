@@ -1272,7 +1272,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       var unit = total/qty;
       items.push({desc:desc, qty:qty, unit:unit, total:total});
     }
-    addItem("Pneus", row.quantidade, row.valorPneus);
+    addItem(row.medida ? "Pneus — "+row.medida : "Pneus", row.quantidade, row.valorPneus);
     addItem("Bico/Válvulas", row.qtdBicos, row.valorBicos);
     addItem("Alinhamento", 1, row.alinhamento);
     addItem("Cambagem", row.qtdCambagem, row.valorCambagem);
@@ -1368,6 +1368,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
 
         '<div class="garantia-box">'+
           '<h3>TERMO DE GARANTIA - PNEUS SEMINOVOS</h3>'+
+          (nota.medida ? '<p style="text-align:center;font-size:12.5px;"><b>Pneu(s) coberto(s) por esta garantia:</b> '+(nota.quantidadePneus>0 ? nota.quantidadePneus+'x ' : '')+escHtml(nota.medida)+'</p>' : '')+
           '<p><b>Cobertura:</b> A garantia para pneus seminovos é de 3 anos a partir da data da compra ou até o desgaste total da banda de rodagem (atingir o indicador TWI/pneu alisar), o que ocorrer primeiro.</p>'+
           '<p><b>Exclusões da Garantia (Avarias Acidentais):</b> A garantia cobre exclusivamente defeitos de estrutura/fabricação. <b>*GARANTIA NÃO É SEGURO*</b>.<br>Não possuem cobertura danos decorrentes de uso, acidentes ou fatores externos, tais como:</p>'+
           '<ul>'+
@@ -1478,6 +1479,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         telefone: customer.telefone||"", endereco: customer.endereco||""
       },
       items: buildNotaItems(row),
+      medida: row.medida || "",
+      quantidadePneus: parseNum(row.quantidade)||0,
       totalProdutos: computeValor(row),
       formaPagamento: row.formaPagamento||"",
       pagamentosMultiplos: Array.isArray(row.pagamentosMultiplos) ? row.pagamentosMultiplos : null,
