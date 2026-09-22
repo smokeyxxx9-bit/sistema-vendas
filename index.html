@@ -1127,6 +1127,11 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     var delta = desejada - jaBaixado;
     if (delta === 0) return;
     var moved = moveEstoque(row.medidaId, -delta);
+    // saiu estoque de verdade por causa da venda: registra no histórico como "venda" (nunca como "ajuste")
+    if (moved < 0){
+      var item = estoqueItem(row.medidaId);
+      addEstoqueLog("venda", estoqueLabel(item) || row.medida || "", Math.abs(moved));
+    }
     row.medidaBaixa = jaBaixado - moved; // moved vem negativo quando saiu do estoque
   }
   // ---------- avisos: clientes procurando uma medida ----------
@@ -1711,6 +1716,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     cmpMode: "day", // "day" (comparativo por dia) ou "month" (comparativo por mês)
     showAdvancedCols: (function(){ try{ return localStorage.getItem("vo_show_advanced")==="1"; }catch(e){ return false; } })(),
     notasQuery: "",
+    historicoQuery: "",
     avisosTab: "procurados",
     vendedorFiltro: ""
   };
@@ -2404,7 +2410,9 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   function renderHistorico(){
     var tab = state.historicoTab || "logins";
     var logins = loadLoginLog().slice().reverse();
-    var movs = loadEstoqueLog().slice().reverse();
+    var movsAll = loadEstoqueLog().slice().reverse();
+    var q = (state.historicoQuery||"").trim().toLowerCase();
+    var movs = q ? movsAll.filter(function(m){ return (m.medida||"").toLowerCase().indexOf(q)>-1; }) : movsAll;
 
     var loginsHtml = logins.length
       ? logins.map(function(l){
@@ -2415,11 +2423,11 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         }).join("")
       : '<div class="arow-empty">Nenhum login registrado ainda.</div>';
 
-    var tipoLabel = {entrada:"Entrada", saida:"Saída", ajuste:"Ajuste"};
-    var tipoColor = {entrada:"var(--green)", saida:"var(--red)", ajuste:"var(--yellow)"};
+    var tipoLabel = {entrada:"Entrada", saida:"Saída", ajuste:"Ajuste", venda:"Venda"};
+    var tipoColor = {entrada:"var(--green)", saida:"var(--red)", ajuste:"var(--yellow)", venda:"var(--red)"};
     var movsHtml = movs.length
       ? movs.map(function(m){
-          var sinal = m.tipo==="saida" ? "-" : (m.tipo==="entrada" ? "+" : (m.qtd>=0?"+":"-"));
+          var sinal = (m.tipo==="saida" || m.tipo==="venda") ? "-" : (m.tipo==="entrada" ? "+" : (m.qtd>=0?"+":"-"));
           return '<div class="arow">'+
             '<span class="d">'+fmtDateTimeBR(m.ts)+'</span>'+
             '<span class="stats">'+
@@ -2430,7 +2438,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
             '</span>'+
           '</div>';
         }).join("")
-      : '<div class="arow-empty">Nenhuma movimentação manual de estoque registrada ainda.</div>';
+      : '<div class="arow-empty">'+(movsAll.length ? 'Nenhuma movimentação encontrada para essa medida.' : 'Nenhuma movimentação de estoque registrada ainda.')+'</div>';
 
     root.innerHTML =
       '<div class="topbar">'+
@@ -2450,11 +2458,26 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         '</div>'+
       '</div>'+
 
+      (tab==="estoque" ? '<div class="card" style="padding:12px 16px;margin-bottom:14px;">'+
+        '<input type="text" id="histSearch" class="dash-cust-search" placeholder="Buscar por medida (ex: 175/70 R14)..." value="'+escAttr(state.historicoQuery||"")+'">'+
+      '</div>' : '')+
+
       '<div class="card" style="padding:14px 16px;">'+
         '<div class="archive-list">'+
           (tab==="logins" ? loginsHtml : movsHtml)+
         '</div>'+
       '</div>';
+
+    var histSearch = document.getElementById("histSearch");
+    if (histSearch){
+      histSearch.addEventListener("input", function(){
+        state.historicoQuery = histSearch.value;
+        var pos = histSearch.selectionStart;
+        renderHistorico();
+        var again = document.getElementById("histSearch");
+        if (again){ again.focus(); try{ again.setSelectionRange(pos,pos); }catch(e){} }
+      });
+    }
 
     root.querySelectorAll("[data-act]").forEach(function(node){
       node.addEventListener("click", function(){ handleAction(node.getAttribute("data-act"), node); });
@@ -3817,8 +3840,32 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   }
 
   // ---------- tela de estoque ----------
+  // extrai os números da medida (ex: "175/70 R14" -> largura 175, perfil 70, aro 14)
+  function medidaNums(medida){
+    var nums = String(medida||"").match(/\d+/g) || [];
+    return {
+      largura: nums[0]!==undefined ? parseInt(nums[0],10) : null,
+      perfil:  nums[1]!==undefined ? parseInt(nums[1],10) : null,
+      aro:     nums[2]!==undefined ? parseInt(nums[2],10) : null
+    };
+  }
+  // compara dois números que podem ser nulos (sem número identificado vai pro final da lista)
+  function cmpNullableNum(x,y){
+    if (x===null && y===null) return 0;
+    if (x===null) return 1;
+    if (y===null) return -1;
+    return x-y;
+  }
+  // ordem: aro (1°), depois perfil (2°), depois largura (3°) — e por fim o texto completo, se empatar
   function estoqueSorted(){
     return loadEstoque().slice().sort(function(a,b){
+      var ma = medidaNums(a.medida), mb = medidaNums(b.medida);
+      var cmp = cmpNullableNum(ma.aro, mb.aro);
+      if (cmp) return cmp;
+      cmp = cmpNullableNum(ma.perfil, mb.perfil);
+      if (cmp) return cmp;
+      cmp = cmpNullableNum(ma.largura, mb.largura);
+      if (cmp) return cmp;
       return String(a.medida||"").localeCompare(String(b.medida||""), "pt-BR", {numeric:true});
     });
   }
