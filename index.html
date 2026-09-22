@@ -1384,6 +1384,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
           '<p class="alerta">VOCÊ COMPROU PNEU USADO, TENHA CONSCIÊNCIA.</p>'+
           '<p>A lei nos obriga a dar garantia em relação a qualquer produto usado de 90 dias corridos, mas por consideração ao nosso cliente e confiança dos nossos produtos fornecemos garantia de 3 anos depois da data de compra.</p>'+
           '<p><b>Políticas de devolução:</b> quaisquer produtos comprados <i>PRESENCIALMENTE EM LOJA FÍSICA</i> com a opção de escolha e análise por conta própria, não se aplica o direto de devolução por insatisfação. Conforme o código de direito do consumidor art.18 nossa empresa tem o dever de resolver o problema em até 30 dias corridos, após esse período, aí sim o cliente tem o seu direito de ter os valores ressarcidos integralmente.</p>'+
+          (nota.detalhes ? '<p><b>Observações desta venda:</b> '+escHtml(nota.detalhes).replace(/\n/g,'<br>')+'</p>' : '')+
           '<div class="assinatura">Assinatura do cliente:</div>'+
         '</div>'+
 
@@ -1491,6 +1492,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       pagamentosMultiplos: Array.isArray(row.pagamentosMultiplos) ? row.pagamentosMultiplos : null,
       splitValor: (row.splitValor!==undefined ? row.splitValor : null),
       pago: row.pago||"",
+      detalhes: row.detalhes || "",
       createdAt: Date.now()
     };
     addNota(nota);
