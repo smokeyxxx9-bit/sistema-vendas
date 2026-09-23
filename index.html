@@ -2831,27 +2831,13 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
               }).join("")+
             '</select>'+
             '<button class="btn small ghost" data-act="exportdiacsv" title="Baixar as vendas deste dia em planilha (CSV)">⇩ CSV</button>'+
+            '<button class="btn small ghost" data-act="togglehide" title="'+(state.hideValues?"Mostrar valores":"Ocultar valores")+'">'+(state.hideValues?"🙈 Mostrar":"👁 Ocultar")+'</button>'+
           '</div>'
         )+
 
-        '<div class="totals-bar">'+
-          tstat("Valor", fmtCurrency(t.valor), true)+
-          tstat("Qtd. bicos", t.qtdBicos)+
-          tstat("Bicos", fmtCurrency(t.valorBicos))+
-          tstat("Qtd. cambagem", t.qtdCambagem)+
-          tstat("Cambagem", fmtCurrency(t.valorCambagem))+
-          tstat("Qtd. rodas", t.qtdRodas)+
-          tstat("Rodas", fmtCurrency(t.valorRodas))+
-          tstat("Valor das peças", fmtCurrency(t.valorPecas))+
-          tstat("Mão de obra", fmtCurrency(t.maoDeObra))+
-        '</div>'+
+        '<div class="totals-bar">'+totalsBarInner(t)+'</div>'+
 
-        '<div class="totals-bar" style="margin-top:8px;">'+
-          tstat("💵 Dinheiro", fmtCurrency(t.porPagamento["Dinheiro"]))+
-          tstat("📲 Pix", fmtCurrency(t.porPagamento["Pix"]))+
-          tstat("💳 Débito", fmtCurrency(t.porPagamento["Débito"]))+
-          tstat("💳 Crédito", fmtCurrency(t.porPagamento["Crédito"]))+
-        '</div>'+
+        '<div class="totals-bar" style="margin-top:8px;">'+payBarInner(t)+'</div>'+
 
         (state.rows.length===0 ? '' : '<div class="grid-scroll-head">'+gridHeadHtml(colTemplate, editable, cols)+'</div>')+
       '</div>'+
@@ -2889,6 +2875,26 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     headWrap.addEventListener("scroll", function(){ rowsWrap.scrollLeft = headWrap.scrollLeft; });
   }
 
+  // resumo do dia (cards de totais e formas de pagamento) — respeita o mesmo "Ocultar" do Dashboard
+  function hvMoney(v){ return state.hideValues ? '••••' : fmtCurrency(v); }
+  function hvQty(v){ return state.hideValues ? '••' : v; }
+  function totalsBarInner(t){
+    return tstat("Valor", hvMoney(t.valor), true)+
+      tstat("Qtd. bicos", hvQty(t.qtdBicos))+
+      tstat("Bicos", hvMoney(t.valorBicos))+
+      tstat("Qtd. cambagem", hvQty(t.qtdCambagem))+
+      tstat("Cambagem", hvMoney(t.valorCambagem))+
+      tstat("Qtd. rodas", hvQty(t.qtdRodas))+
+      tstat("Rodas", hvMoney(t.valorRodas))+
+      tstat("Valor das peças", hvMoney(t.valorPecas))+
+      tstat("Mão de obra", hvMoney(t.maoDeObra));
+  }
+  function payBarInner(t){
+    return tstat("💵 Dinheiro", hvMoney(t.porPagamento["Dinheiro"]))+
+      tstat("📲 Pix", hvMoney(t.porPagamento["Pix"]))+
+      tstat("💳 Débito", hvMoney(t.porPagamento["Débito"]))+
+      tstat("💳 Crédito", hvMoney(t.porPagamento["Crédito"]));
+  }
   function tstat(label, val, accent){
     return '<div class="tstat"><div class="k">'+escHtml(label)+'</div><div class="v'+(accent?' accent':'')+'">'+val+'</div></div>';
   }
@@ -3383,23 +3389,10 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     var bars = document.querySelectorAll(".totals-bar");
     var bar = bars[0], payBar = bars[1];
     if (bar){
-      bar.innerHTML =
-        tstat("Valor", fmtCurrency(t.valor), true)+
-        tstat("Qtd. bicos", t.qtdBicos)+
-        tstat("Bicos", fmtCurrency(t.valorBicos))+
-        tstat("Qtd. cambagem", t.qtdCambagem)+
-        tstat("Cambagem", fmtCurrency(t.valorCambagem))+
-        tstat("Qtd. rodas", t.qtdRodas)+
-        tstat("Rodas", fmtCurrency(t.valorRodas))+
-        tstat("Valor das peças", fmtCurrency(t.valorPecas))+
-        tstat("Mão de obra", fmtCurrency(t.maoDeObra));
+      bar.innerHTML = totalsBarInner(t);
     }
     if (payBar){
-      payBar.innerHTML =
-        tstat("💵 Dinheiro", fmtCurrency(t.porPagamento["Dinheiro"]))+
-        tstat("📲 Pix", fmtCurrency(t.porPagamento["Pix"]))+
-        tstat("💳 Débito", fmtCurrency(t.porPagamento["Débito"]))+
-        tstat("💳 Crédito", fmtCurrency(t.porPagamento["Crédito"]));
+      payBar.innerHTML = payBarInner(t);
     }
     state.rows.forEach(function(r){
       var rowNode = document.querySelector('.grid-row[data-row="'+r.id+'"]');
