@@ -188,6 +188,7 @@
   .parts-card.pc-teal{border-left-color:var(--teal);}
   .parts-card.pc-yellow{border-left-color:var(--yellow);}
   .parts-card.pc-green{border-left-color:var(--green);}
+  .parts-card.pc-red{border-left-color:var(--red);}
   .parts-card .pc-top{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:9px;}
   .parts-card .pc-label{font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.05em;}
   .parts-card .pc-qty{font-size:11.5px;color:var(--text-dim);font-family:'IBM Plex Mono',monospace;}
@@ -195,6 +196,7 @@
   .parts-card.pc-teal .pc-value{color:var(--teal);}
   .parts-card.pc-yellow .pc-value{color:var(--yellow);}
   .parts-card.pc-green .pc-value{color:var(--green);}
+  .parts-card.pc-red .pc-value{color:var(--red);}
 
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;}
   @media(max-width:820px){.row2{grid-template-columns:1fr;}}
@@ -687,6 +689,42 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     border:1px solid var(--border);background:var(--panel);color:var(--yellow);font-size:16px;cursor:pointer;
     box-shadow:0 8px 22px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;}
   @media(max-width:700px){.ui-theme-toggle{right:12px;bottom:62px;}}
+  /* ---- pneus novos (área separada do painel principal) ---- */
+  .nv-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:18px;}
+  .nv-sec{margin:0 2px 8px;font-size:13px;color:var(--text-dim);}
+  .nv-topline{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px;}
+  .nv-cmp{font-size:12px;color:var(--text-dim);margin:-8px 0 16px;font-family:'IBM Plex Mono',monospace;}
+  .nv-cmp.up{color:var(--green);} .nv-cmp.down{color:var(--red);}
+  .nv-goal-btn{margin-top:12px;align-self:flex-start;}
+  .icon-btn.edit-btn:hover{border-color:var(--teal);color:var(--teal);}
+  .modal select{
+    width:100%;background:var(--panel-alt);border:1px solid var(--border);border-radius:3px;color:var(--text);
+    padding:10px 12px;font-size:14px;margin-bottom:12px;
+  }
+  .modal select:focus{outline:none;border-color:var(--yellow);}
+  .modal input[type=date]{color-scheme:dark;}
+  html[data-theme="light"] .modal input[type=date]{color-scheme:light;}
+  .nv-two{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .nv-total-preview{font-family:'IBM Plex Mono',monospace;color:var(--yellow);font-size:15px;margin:-4px 0 12px;}
+  /* pedido: cards de totais da tabela numa linha única, com rolagem lateral em vez de quebrar linha */
+  .totals-strip{display:flex;flex-wrap:nowrap;gap:6px;overflow-x:hidden;}
+  .totals-strip .parts-card{flex:1 1 0;min-width:0;padding:8px 9px;border-radius:5px;}
+  .totals-strip .pc-top{margin-bottom:4px;gap:4px;}
+  .totals-strip .pc-label{font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .totals-strip .pc-qty{font-size:9px;white-space:nowrap;flex:0 0 auto;}
+  .totals-strip .pc-value{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  @media(max-width:700px){
+    .totals-strip{flex-wrap:wrap;overflow-x:visible;}
+    .totals-strip .parts-card{flex:1 1 128px;}
+    .totals-strip .pc-label,.totals-strip .pc-qty,.totals-strip .pc-value{white-space:normal;}
+  }
+  /* pedido: cabeçalho inteiro (barra de navegação + dia + totais) fica fixo e desce junto ao rolar */
+  .sticky-head-block .topbar{margin-bottom:16px;}
+  /* Tarefa 4: o navegador desenha a lista do <select> nativo com as próprias cores;
+     sem isso, no modo escuro os itens ficavam com texto escuro sobre fundo escuro. */
+  select, select option{background:var(--panel-alt);color:var(--text);}
+  .icon-btn.has{border-color:var(--teal);color:var(--teal);}
+
 </style>
 
 </head>
@@ -705,9 +743,25 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   var PASSWORD = "10203016829284";
   var GOAL_1 = 350000;
   var GOAL_2 = 450000;
-  var PAYMENT_OPTIONS = ["Nenhum","Dinheiro","Débito","Crédito","Pix","Dinheiro/Pix","Dinheiro/Crédito","Dinheiro/Débito","Débito/Crédito","Débito/Pix","Pix/Crédito","Múltiplo (até 4 formas)"];
+  var PAYMENT_OPTIONS = ["Nenhum","Dinheiro","Débito","Crédito","Pix","Múltiplo (até 4 formas)"];
   var METODOS_PAGAMENTO = ["Dinheiro","Pix","Débito","Crédito"];
   var VENDEDORES = ["Nenhum","Loja","Bruno","Richard","Benedet","Jonas"];
+  var MAODEOBRA_PESSOAS = ["Renan","João","Wesley"];
+  var DESCONTO_ORIGENS = [
+    {key:"valorPneus",       label:"Valor dos pneus"},
+    {key:"maoDeObra",        label:"Mão de obra"},
+    {key:"valorPecas",       label:"Valor das peças"},
+    {key:"alinhamento",      label:"Alinhamento"},
+    {key:"valorBicos",       label:"Valor dos bicos"},
+    {key:"valorCambagem",    label:"Valor da cambagem"},
+    {key:"valorBalanceamento", label:"Valor do balanceamento"},
+    {key:"valorRodas",       label:"Valor das rodas"},
+    {key:"outros",           label:"Outros"}
+  ];
+  function descontoOrigemLabel(key){
+    var f = DESCONTO_ORIGENS.filter(function(o){return o.key===key;})[0];
+    return f ? f.label : "";
+  }
 
   function range(a,b){ var out=[]; for(var i=a;i<=b;i++) out.push(String(i)); return out; }
 
@@ -726,9 +780,9 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     {key:"valorRodas",  label:"Valor das rodas",         type:"currency", w:"120px"},
     {key:"outros",      label:"Outros",                  type:"currency", w:"100px", advanced:true},
     {key:"valorPecas",  label:"Valor das peças",         type:"currency", w:"115px"},
-    {key:"maoDeObra",   label:"Mão de obra",             type:"currency", w:"110px"},
+    {key:"maoDeObra",   label:"Mão de obra",             type:"maodeobra", w:"140px"},
     {key:"valorPneus",  label:"Valor dos pneus",         type:"currency", w:"115px"},
-    {key:"valor",       label:"Valor",                   type:"computed", w:"115px"},
+    {key:"valor",       label:"Valor",                   type:"computed", w:"132px"},
     {key:"formaPagamento", label:"Forma de pagamento",   type:"select", w:"150px", options:PAYMENT_OPTIONS},
     {key:"pago",        label:"Pago",                    type:"select", w:"64px", options:["❌","✅"]},
     {key:"carro",       label:"Carro",                   type:"select", w:"95px", options:range(1,20).map(function(n){return "Carro "+n;})},
@@ -757,6 +811,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   var K_ORC_SEQ = "vo_orcamento_seq";
   var K_PROCURADOS = "vo_procurados";
   var K_LEMBRETES = "vo_lembretes";
+  var K_NOVOS = "vo_novos:";          // pneus novos: uma chave por mês (vo_novos:AAAA-MM)
+  var K_NOVOS_META = "vo_novos_meta";
 
   // ---------- sincronização em nuvem (Supabase) ----------
   // Preencha as duas linhas abaixo com os dados do SEU projeto Supabase
@@ -899,10 +955,16 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   function getSummary(month){
     return Promise.resolve(lsGetJSON(K_SUMMARY+month, {}));
   }
-  function computeValor(row){
+  function computeSubtotal(row){
     return parseNum(row.alinhamento)+parseNum(row.valorBicos)+parseNum(row.valorCambagem)+
            parseNum(row.valorBalanceamento)+parseNum(row.valorRodas)+parseNum(row.outros)+
            parseNum(row.valorPecas)+parseNum(row.maoDeObra)+parseNum(row.valorPneus);
+  }
+  function descontoValor(row){
+    return (row && row.desconto && row.desconto.valor) ? Math.max(0, parseNum(row.desconto.valor)) : 0;
+  }
+  function computeValor(row){
+    return Math.max(0, computeSubtotal(row) - descontoValor(row));
   }
   // divide o valor da linha entre as formas de pagamento reais (Dinheiro/Pix/Débito/Crédito).
   // quando a forma escolhida é combinada (ex: "Débito/Crédito"), usa o valor manual definido
@@ -1288,6 +1350,22 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     return items;
   }
 
+  // quanto entrou em cada forma de pagamento nesta nota (pra imprimir na garantia/nota)
+  function notaPaymentBreakdown(nota){
+    return paymentBreakdown({
+      formaPagamento: nota.formaPagamento,
+      pagamentosMultiplos: nota.pagamentosMultiplos,
+      splitValor: nota.splitValor,
+      valorPneus: nota.totalProdutos
+    });
+  }
+  function notaPaymentBreakdownHtml(nota){
+    var b = notaPaymentBreakdown(nota);
+    var parts = METODOS_PAGAMENTO.filter(function(m){ return b[m]>0; })
+      .map(function(m){ return escHtml(m)+": "+fmtCurrency(b[m]); });
+    return parts.length ? parts.join(" &middot; ") : "";
+  }
+
   function buildNotaHtml(nota){
     var itemsRows = (nota.items||[]).map(function(it){
       return '<tr>'+
@@ -1360,15 +1438,13 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         '<table><thead><tr><th>Descrição</th><th class="c">Quantidade</th><th class="r">Valor Unitário</th><th class="r">Total</th></tr></thead>'+
         '<tbody>'+itemsRows+'</tbody></table>'+
         '<div class="totals">'+
-          '<div><span>Total Produtos</span><span>'+fmtCurrency(nota.totalProdutos)+'</span></div>'+
-          '<div><span>Desconto</span><span>'+fmtCurrency(0)+'</span></div>'+
+          '<div><span>Total Produtos</span><span>'+fmtCurrency(nota.subtotal!==undefined?nota.subtotal:nota.totalProdutos)+'</span></div>'+
+          '<div><span>Desconto'+(nota.desconto>0 && nota.descontoOrigem ? ' ('+escHtml(descontoOrigemLabel(nota.descontoOrigem))+')' : '')+'</span><span>'+(nota.desconto>0?'-':'')+fmtCurrency(nota.desconto||0)+'</span></div>'+
           '<div><span>Frete</span><span>'+fmtCurrency(0)+'</span></div>'+
           '<div class="grand"><span>TOTAL VENDA</span><span>'+fmtCurrency(nota.totalProdutos)+'</span></div>'+
         '</div>'+
         (nota.formaPagamento ? '<div class="pagamento">Forma de pagamento: <b>'+escHtml(nota.formaPagamento)+'</b>'+(nota.pago?' &middot; '+escHtml(nota.pago==="✅"?"Pago":"Pendente"):'')+
-          (Array.isArray(nota.pagamentosMultiplos) && nota.pagamentosMultiplos.length
-            ? '<br><span style="font-size:11px;">'+nota.pagamentosMultiplos.map(function(p){ return escHtml(p.metodo)+": "+fmtCurrency(parseNum(p.valor)); }).join(" &middot; ")+'</span>'
-            : '')+
+          '<br><span style="font-size:11px;">'+notaPaymentBreakdownHtml(nota)+'</span>'+
         '</div>' : '')+
 
         '<div class="garantia-box">'+
@@ -1487,6 +1563,9 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       items: buildNotaItems(row),
       medida: row.medida || "",
       quantidadePneus: parseNum(row.quantidade)||0,
+      subtotal: computeSubtotal(row),
+      desconto: descontoValor(row),
+      descontoOrigem: (row.desconto && row.desconto.origem) || "",
       totalProdutos: computeValor(row),
       formaPagamento: row.formaPagamento||"",
       pagamentosMultiplos: Array.isArray(row.pagamentosMultiplos) ? row.pagamentosMultiplos : null,
@@ -1550,7 +1629,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     var data = {};
     for (var i=0;i<localStorage.length;i++){
       var k = localStorage.key(i);
-      if (k && (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS)) data[k] = localStorage.getItem(k);
+      if (k && (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS || k.indexOf(K_NOVOS)===0 || k===K_NOVOS_META)) data[k] = localStorage.getItem(k);
     }
     var now = new Date();
     var stamp = today+"-"+pad(now.getHours())+"h"+pad(now.getMinutes());
@@ -1567,7 +1646,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     var data = {};
     for (var i=0;i<localStorage.length;i++){
       var k = localStorage.key(i);
-      if (k && (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS)) data[k] = localStorage.getItem(k);
+      if (k && (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS || k.indexOf(K_NOVOS)===0 || k===K_NOVOS_META)) data[k] = localStorage.getItem(k);
     }
     try{
       localStorage.setItem(K_AUTOBACKUP, JSON.stringify({ts:Date.now(), data:data}));
@@ -1580,7 +1659,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         var data = JSON.parse(reader.result);
         var n = 0;
         Object.keys(data).forEach(function(k){
-          if (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS){ localStorage.setItem(k, data[k]); n++; }
+          if (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS || k.indexOf(K_NOVOS)===0 || k===K_NOVOS_META){ localStorage.setItem(k, data[k]); n++; }
         });
         state.monthSummaryCache = {};
         state.monthPartsCache = {};
@@ -1718,9 +1797,14 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     cmpMode: "day", // "day" (comparativo por dia) ou "month" (comparativo por mês)
     showAdvancedCols: (function(){ try{ return localStorage.getItem("vo_show_advanced")==="1"; }catch(e){ return false; } })(),
     notasQuery: "",
+    novosMonth: today.slice(0,7),
+    novosTab: "dash",
+    novosQuery: "",
+    novosDay: null,
     historicoQuery: "",
     avisosTab: "procurados",
-    vendedorFiltro: ""
+    vendedorFiltro: "",
+    hideTableTotals: sessionStorage.getItem("vf_hide_table")==="1"
   };
 
   var root = document.getElementById("app");
@@ -1737,6 +1821,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     else if (state.view==="clientes") renderClientes();
     else if (state.view==="notas") renderNotas();
     else if (state.view==="avisos") renderAvisos();
+    else if (state.view==="novos") renderNovos();
     else if (state.view==="orcamento") renderOrcamento();
     else if (state.view==="historico" && isMaster) renderHistorico();
     else if (state.view==="usuarios" && isMaster) renderUsuarios();
@@ -2068,7 +2153,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         el.onclick = function(){
           var id = el.getAttribute("data-nota");
           var nota = loadNotas().filter(function(n){return n.id===id;})[0];
-          if (nota) reprintNota(nota);
+          if (nota) openNotaView(nota);
         };
       });
       area.querySelectorAll("[data-delnota]").forEach(function(btn){
@@ -2636,15 +2721,16 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     var estoqueBtn = '<button class="btn ghost small" data-act="openestoque" title="Abrir o controle de estoque">📦 Estoque</button>';
     var clientesBtn = '<button class="btn ghost small" data-act="openclientes" title="Cadastrar e editar clientes">👥 Clientes</button>';
     var notasBtn = '<button class="btn ghost small" data-act="opennotas" title="Ver todas as notas emitidas, em ordem de emissão">🧾 Notas</button>';
+    var novosBtn = '<button class="btn ghost small" data-act="opennovos" title="Vendas de pneus novos (não entram no dashboard principal)">🆕 Pneus novos</button>';
     var avisosCount = avisosPendentesCount();
     var avisosBtn = '<button class="btn ghost small" data-act="openavisos" title="Clientes esperando medida, lembretes e estoque baixo">🔔 Avisos'+
       (avisosCount>0 ? '<span class="nav-badge">'+avisosCount+'</span>' : '')+'</button>';
     var historicoBtn = isMaster ? '<button class="btn ghost small" data-act="openhistorico" title="Ver logins e movimentações de estoque">🕘 Histórico</button>' : '';
     var usuariosBtn = isMaster ? '<button class="btn ghost small" data-act="openusuarios" title="Criar logins e alterar cargos">👤 Usuários</button>' : '';
     if (state.authed){
-      return '<div class="auth-zone"><span class="pill on">✓ edição de dias anteriores liberada</span>'+estoqueBtn+clientesBtn+notasBtn+avisosBtn+historicoBtn+usuariosBtn+backupBtns+'<button class="btn ghost small" data-act="logout">Sair</button>'+acctLogout+'</div>';
+      return '<div class="auth-zone"><span class="pill on">✓ edição de dias anteriores liberada</span>'+estoqueBtn+clientesBtn+notasBtn+novosBtn+avisosBtn+historicoBtn+usuariosBtn+backupBtns+'<button class="btn ghost small" data-act="logout">Sair</button>'+acctLogout+'</div>';
     }
-    return '<div class="auth-zone">'+estoqueBtn+clientesBtn+notasBtn+avisosBtn+historicoBtn+usuariosBtn+backupBtns+'<button class="btn small" data-act="login">Entrar com senha</button>'+acctLogout+'</div>';
+    return '<div class="auth-zone">'+estoqueBtn+clientesBtn+notasBtn+novosBtn+avisosBtn+historicoBtn+usuariosBtn+backupBtns+'<button class="btn small" data-act="login">Entrar com senha</button>'+acctLogout+'</div>';
   }
 
   function bindBackupControls(){
@@ -2697,6 +2783,19 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       sessionStorage.setItem("vf_hide", state.hideValues?"1":"0");
       render();
     }
+    else if (act==="toggletabletotals"){
+      state.hideTableTotals = !state.hideTableTotals;
+      sessionStorage.setItem("vf_hide_table", state.hideTableTotals?"1":"0");
+      render();
+    }
+    else if (act==="maodeobra"){
+      state.modal = {type:"maoDeObraForm", rowId: node.getAttribute("data-id")};
+      render();
+    }
+    else if (act==="desconto"){
+      state.modal = {type:"descontoForm", rowId: node.getAttribute("data-id"), error:""};
+      render();
+    }
     else if (act==="printnote"){
       state.modal = {type:"selectCustomer", rowId: node.getAttribute("data-id"), purpose:"print"};
       render();
@@ -2704,6 +2803,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     else if (act==="openestoque"){ state.view="estoque"; render(); }
     else if (act==="openclientes"){ state.clientesDetailId = null; state.view="clientes"; render(); }
     else if (act==="opennotas"){ state.view="notas"; render(); }
+    else if (act==="opennovos"){ state.view="novos"; render(); }
     else if (act==="openavisos"){ state.view="avisos"; render(); }
     else if (act==="avisostab"){ state.avisosTab = node.getAttribute("data-tab"); render(); }
     else if (act==="clientenew"){ state.modal = {type:"customerForm", error:""}; renderModal(); }
@@ -2791,15 +2891,15 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     var hiddenColsCount = COLUMNS.filter(function(c){return c.advanced;}).length;
 
     root.innerHTML =
-      '<div class="topbar">'+
-        '<button class="backlink" data-act="back">‹ Painel</button>'+
-        syncBadgeHtml()+
-        authZoneHtml()+
-      '</div>'+
-
-      (!isToday && !editable ? '<p style="color:var(--text-faint);font-size:12.5px;margin:-8px 2px 14px;">Esta é uma data anterior — apenas hoje pode ser editado sem senha.</p>' : '')+
-
       '<div class="sticky-head-block">'+
+        '<div class="topbar">'+
+          '<button class="btn ghost small" data-act="back">‹ Painel de vendas</button>'+
+          syncBadgeHtml()+
+          authZoneHtml()+
+        '</div>'+
+
+        (!isToday && !editable ? '<p style="color:var(--text-faint);font-size:12.5px;margin:-8px 2px 14px;">Esta é uma data anterior — apenas hoje pode ser editado sem senha.</p>' : '')+
+
         '<div class="tbl-head">'+
           '<div class="tbl-head-left">'+
             '<div class="day-nav"><button data-act="prevday">‹</button><button data-act="nextday">›</button></div>'+
@@ -2808,7 +2908,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
           '</div>'+
           '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">'+
             (editable
-              ? '<button class="btn primary" data-act="addrow">+ Adicionar linha</button>'
+              ? ''
               : '<span style="display:flex;align-items:center;gap:8px;"><span class="pill">somente leitura</span><button class="btn small" data-act="login">Entrar com senha para editar</button></span>'
             )+
             '<button class="btn ghost small" data-act="openorcamento" title="Montar e imprimir um orçamento para o cliente">🧾 Orçamento</button>'+
@@ -2830,14 +2930,13 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
                 return '<option value="'+escAttr(v)+'"'+(state.vendedorFiltro===v?' selected':'')+'>'+escHtml(v)+'</option>';
               }).join("")+
             '</select>'+
-            '<button class="btn small ghost" data-act="exportdiacsv" title="Baixar as vendas deste dia em planilha (CSV)">⇩ CSV</button>'+
-            '<button class="btn small ghost" data-act="togglehide" title="'+(state.hideValues?"Mostrar valores":"Ocultar valores")+'">'+(state.hideValues?"🙈 Mostrar":"👁 Ocultar")+'</button>'+
+            (state.role==="master" ? '<button class="btn small ghost" data-act="exportdiacsv" title="Baixar as vendas deste dia em planilha (CSV)">⇩ CSV</button>' : '')+
+            '<button class="btn small ghost" data-act="toggletabletotals" title="'+(state.hideTableTotals?"Mostrar o valor total do dia e as somas das formas de pagamento":"Ocultar o valor total do dia e as somas das formas de pagamento")+'">'+(state.hideTableTotals?"🙈 Mostrar totais":"👁 Ocultar totais")+'</button>'+
           '</div>'
         )+
 
-        '<div class="totals-bar">'+totalsBarInner(t)+'</div>'+
-
-        '<div class="totals-bar" style="margin-top:8px;">'+payBarInner(t)+'</div>'+
+        '<div class="nv-sec" style="margin:0 2px 6px;">Totais do dia</div>'+
+        '<div class="totals-strip" data-role="tabletotals">'+tableTotalsHtml(t)+'</div>'+
 
         (state.rows.length===0 ? '' : '<div class="grid-scroll-head">'+gridHeadHtml(colTemplate, editable, cols)+'</div>')+
       '</div>'+
@@ -2875,25 +2974,30 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     headWrap.addEventListener("scroll", function(){ rowsWrap.scrollLeft = headWrap.scrollLeft; });
   }
 
-  // resumo do dia (cards de totais e formas de pagamento) — respeita o mesmo "Ocultar" do Dashboard
-  function hvMoney(v){ return state.hideValues ? '••••' : fmtCurrency(v); }
-  function hvQty(v){ return state.hideValues ? '••' : v; }
-  function totalsBarInner(t){
-    return tstat("Valor", hvMoney(t.valor), true)+
-      tstat("Qtd. bicos", hvQty(t.qtdBicos))+
-      tstat("Bicos", hvMoney(t.valorBicos))+
-      tstat("Qtd. cambagem", hvQty(t.qtdCambagem))+
-      tstat("Cambagem", hvMoney(t.valorCambagem))+
-      tstat("Qtd. rodas", hvQty(t.qtdRodas))+
-      tstat("Rodas", hvMoney(t.valorRodas))+
-      tstat("Valor das peças", hvMoney(t.valorPecas))+
-      tstat("Mão de obra", hvMoney(t.maoDeObra));
+  // resumo do dia (cards de totais e formas de pagamento), tudo numa linha só;
+  // "Ocultar totais" (state.hideTableTotals) esconde só o valor total do dia e as somas das formas de pagamento
+  function pcard(label, color, right, val){
+    return '<div class="parts-card pc-'+color+'"><div class="pc-top"><span class="pc-label">'+escHtml(label)+'</span><span class="pc-qty">'+right+'</span></div><div class="pc-value">'+val+'</div></div>';
   }
-  function payBarInner(t){
-    return tstat("💵 Dinheiro", hvMoney(t.porPagamento["Dinheiro"]))+
-      tstat("📲 Pix", hvMoney(t.porPagamento["Pix"]))+
-      tstat("💳 Débito", hvMoney(t.porPagamento["Débito"]))+
-      tstat("💳 Crédito", hvMoney(t.porPagamento["Crédito"]));
+  function tableTotalsHtml(t){
+    var hv = state.hideTableTotals;
+    var out = "";
+    out += pcard("Valor total do dia", "yellow", "", hv?'••••':fmtCurrency(t.valor));
+    out += pcard("Bicos", "teal", t.qtdBicos+" un.", fmtCurrency(t.valorBicos));
+    out += pcard("Cambagem", "teal", t.qtdCambagem+" un.", fmtCurrency(t.valorCambagem));
+    out += pcard("Rodas", "teal", t.qtdRodas+" un.", fmtCurrency(t.valorRodas));
+    out += pcard("Valor das peças", "teal", "", fmtCurrency(t.valorPecas));
+    out += pcard("Mão de obra", "teal", "", fmtCurrency(t.maoDeObra));
+    MAODEOBRA_PESSOAS.forEach(function(p){
+      var v = (t.porPessoaMaoObra && t.porPessoaMaoObra[p]) || 0;
+      if (v>0) out += pcard("M.O. · "+p, "green", "", fmtCurrency(v));
+    });
+    if (t.descontos>0) out += pcard("Descontos dados", "red", "", "-"+fmtCurrency(t.descontos));
+    out += pcard("💵 Dinheiro", "yellow", "", hv?'••••':fmtCurrency(t.porPagamento["Dinheiro"]));
+    out += pcard("📲 Pix", "yellow", "", hv?'••••':fmtCurrency(t.porPagamento["Pix"]));
+    out += pcard("💳 Débito", "yellow", "", hv?'••••':fmtCurrency(t.porPagamento["Débito"]));
+    out += pcard("💳 Crédito", "yellow", "", hv?'••••':fmtCurrency(t.porPagamento["Crédito"]));
+    return out;
   }
   function tstat(label, val, accent){
     return '<div class="tstat"><div class="k">'+escHtml(label)+'</div><div class="v'+(accent?' accent':'')+'">'+val+'</div></div>';
@@ -2925,8 +3029,10 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     var valor = computeValor(row);
     var cells = (cols||visibleColumns()).map(function(c){ return cellHtml(row, c, editable, valor); }).join("");
     var custName = customerNameById(row.clienteId);
+    var hasDesc = descontoValor(row)>0;
     cells += '<div class="cell rowactions">'+
       '<button class="icon-btn cli-btn'+(custName?' has':'')+'" data-act="linkcustomer" data-id="'+row.id+'" title="'+(custName?('Cliente: '+escAttr(custName)+' — clique para ver os dados'):'Vincular cliente a esta linha')+'">👤</button>'+
+      '<button class="icon-btn'+(hasDesc?' has':'')+'" data-act="desconto" data-id="'+row.id+'" title="'+(hasDesc?('Desconto: -'+escAttr(fmtCurrency(descontoValor(row)))):'Dar desconto nesta venda')+'">🏷</button>'+
       '<button class="icon-btn print-btn" data-act="printnote" data-id="'+row.id+'" title="Imprimir nota">🖨</button>'+
       (editable ? '<button class="icon-btn" data-act="delrow" data-id="'+row.id+'" title="Remover linha">✕</button>' : '')+
       (editable ? '<button class="icon-btn drag-btn" data-drag="'+row.id+'" title="Segure e arraste para mover a venda para cima ou para baixo">⣿</button>' : '')+
@@ -2954,7 +3060,9 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     var cellClass = "cell"+(mismatch?" cell-warn":"");
     var warnTitle = mismatch ? ' title="Confira: a quantidade e o valor deste grupo não batem"' : '';
     if (col.type==="computed"){
-      return '<div class="'+cellClass+'"><input class="cellval computed" value="'+escAttr(fmtCurrency(computedValor))+'" disabled></div>';
+      var descv = descontoValor(row);
+      var descNote = descv>0 ? '<div style="font-size:9px;color:var(--yellow);line-height:1.2;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">-'+fmtCurrency(descv)+' desc.</div>' : '';
+      return '<div class="'+cellClass+'"><div style="display:flex;flex-direction:column;width:100%;min-width:0;"><input class="cellval computed" value="'+escAttr(fmtCurrency(computedValor))+'" disabled>'+descNote+'</div></div>';
     }
     if (col.type==="medida"){
       return '<div class="'+cellClass+'"><button class="medida-btn'+(row.medida?' has':'')+'" data-act="selectmedida" data-id="'+row.id+'" '+(editable?"":"disabled")+' title="Escolher a medida do pneu">'+
@@ -2979,6 +3087,13 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       }
       return '<div class="'+cellClass+'"'+warnTitle+'>'+selectHtml+'</div>';
     }
+    if (col.type==="maodeobra"){
+      var mdInput = '<input class="cellval" type="text" inputmode="decimal" data-field="maoDeObra" data-id="'+row.id+'" value="'+escAttr(val)+'" '+(editable?"":"disabled")+' placeholder="R$ 0,00" style="flex:1;min-width:0;">';
+      var hasSplit = Array.isArray(row.maoDeObraSplit) && row.maoDeObraSplit.length>0;
+      return '<div class="'+cellClass+'" style="display:flex;gap:4px;align-items:center;">'+mdInput+
+        '<button class="icon-btn'+(hasSplit?' has':'')+'" data-act="maodeobra" data-id="'+row.id+'" title="Dividir a mão de obra entre Renan, João e Wesley" '+(editable?"":"disabled")+' style="flex:0 0 auto;">⚙</button>'+
+      '</div>';
+    }
     if (col.type==="number"){
       return '<div class="'+cellClass+'"><input class="cellval" type="text" inputmode="numeric" data-field="'+col.key+'" data-id="'+row.id+'" value="'+escAttr(val)+'" '+(editable?"":"disabled")+' placeholder="0"></div>';
     }
@@ -2987,8 +3102,9 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   }
 
   function computeTotals(){
-    var t = {valor:0, qtdBicos:0, valorBicos:0, qtdCambagem:0, valorCambagem:0, qtdRodas:0, valorRodas:0, valorPecas:0, maoDeObra:0,
-              porPagamento:{"Dinheiro":0, "Pix":0, "Débito":0, "Crédito":0}};
+    var t = {valor:0, qtdBicos:0, valorBicos:0, qtdCambagem:0, valorCambagem:0, qtdRodas:0, valorRodas:0, valorPecas:0, maoDeObra:0, descontos:0,
+              porPagamento:{"Dinheiro":0, "Pix":0, "Débito":0, "Crédito":0}, porPessoaMaoObra:{}};
+    MAODEOBRA_PESSOAS.forEach(function(p){ t.porPessoaMaoObra[p] = 0; });
     state.rows.forEach(function(r){
       t.valor += computeValor(r);
       t.qtdBicos += parseNum(r.qtdBicos);
@@ -2999,6 +3115,12 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       t.valorRodas += parseNum(r.valorRodas);
       t.valorPecas += parseNum(r.valorPecas);
       t.maoDeObra += parseNum(r.maoDeObra);
+      t.descontos += descontoValor(r);
+      if (Array.isArray(r.maoDeObraSplit)){
+        r.maoDeObraSplit.forEach(function(p){
+          if (t.porPessoaMaoObra.hasOwnProperty(p.pessoa)) t.porPessoaMaoObra[p.pessoa] += parseNum(p.valor);
+        });
+      }
       var pb = paymentBreakdown(r);
       t.porPagamento["Dinheiro"] += pb["Dinheiro"];
       t.porPagamento["Pix"] += pb["Pix"];
@@ -3386,13 +3508,9 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
 
   function updateLiveDisplays(){
     var t = computeTotals();
-    var bars = document.querySelectorAll(".totals-bar");
-    var bar = bars[0], payBar = bars[1];
-    if (bar){
-      bar.innerHTML = totalsBarInner(t);
-    }
-    if (payBar){
-      payBar.innerHTML = payBarInner(t);
+    var grid = document.querySelector(".totals-strip[data-role=tabletotals]");
+    if (grid){
+      grid.innerHTML = tableTotalsHtml(t);
     }
     state.rows.forEach(function(r){
       var rowNode = document.querySelector('.grid-row[data-row="'+r.id+'"]');
@@ -3483,6 +3601,11 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     else if (state.modal.type==="garantiaForm") renderGarantiaFormModal();
     else if (state.modal.type==="multiPag") renderMultiPagModal();
     else if (state.modal.type==="globalSearch") renderGlobalSearchModal();
+    else if (state.modal.type==="novoForm") renderNovoFormModal();
+    else if (state.modal.type==="novosMeta") renderNovosMetaModal();
+    else if (state.modal.type==="maoDeObraForm") renderMaoDeObraFormModal();
+    else if (state.modal.type==="descontoForm") renderDescontoFormModal();
+    else if (state.modal.type==="notaView") renderNotaViewModal();
     else renderAuthModal();
   }
 
@@ -4378,6 +4501,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         '<button class="btn ghost small" data-act="openestoque">📦 Estoque</button>'+
         '<button class="btn ghost small" data-act="openclientes">👥 Clientes</button>'+
         '<button class="btn ghost small" data-act="opennotas">🧾 Notas</button>'+
+        '<button class="btn ghost small" data-act="opennovos">🆕 Pneus novos</button>'+
         '<button class="btn ghost small" data-act="openavisos">🔔 Avisos'+(avisosCount>0?'<span class="nav-badge">'+avisosCount+'</span>':'')+'</button>'+
         (state.role==="master" ? '<button class="btn ghost small" data-act="openhistorico">🕘 Histórico</button>' : '')+
         (state.role==="master" ? '<button class="btn ghost small" data-act="openusuarios">👤 Usuários</button>' : '')+
@@ -4507,7 +4631,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       el.addEventListener("click", function(){
         var id = el.getAttribute("data-nota");
         var nota = loadNotas().filter(function(n){return n.id===id;})[0];
-        if (nota) reprintNota(nota);
+        if (nota) openNotaView(nota);
       });
     });
     root.querySelectorAll("[data-delnota]").forEach(function(btn){
@@ -4562,7 +4686,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       var quando = isNaN(d.getTime()) ? fmtDateBR(n.date) : fmtDateTimeBR(n.createdAt);
       var itensResumo = (n.items||[]).map(function(it){ return it.desc; }).join(", ") || "—";
       var custNome = (n.customer&&n.customer.nome) || "(sem cliente vinculado)";
-      return '<div class="nota-row">'+
+      return '<div class="nota-row" data-notaopen="'+escAttr(n.id)+'" role="button" tabindex="0" style="cursor:pointer;">'+
           '<div>'+
             '<span class="nota-num">NOTA #'+n.vendaNum+'</span> · <span>'+escHtml(custNome)+'</span>'+
             '<div class="nota-meta">'+escHtml(quando)+' · '+escHtml(itensResumo)+
@@ -4587,7 +4711,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       '</div>'+
       '<div class="tbl-head">'+
         '<div class="tbl-head-left"><h2>Notas emitidas</h2></div>'+
-        '<button class="btn ghost small" data-act="exportnotascsv" title="Baixar essas notas em planilha (CSV)">⇩ Exportar CSV</button>'+
+        (state.role==="master" ? '<button class="btn ghost small" data-act="exportnotascsv" title="Baixar essas notas em planilha (CSV)">⇩ Exportar CSV</button>' : '')+
       '</div>'+
       '<div class="card" style="padding:14px 16px;">'+
         '<input type="text" id="notasSearch" class="dash-cust-search" placeholder="Buscar por número da nota ou nome do cliente..." value="'+escAttr(state.notasQuery||"")+'">'+
@@ -4611,14 +4735,22 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         if (again){ again.focus(); try{ again.setSelectionRange(pos,pos); }catch(e){} }
       });
     }
+    root.querySelectorAll("[data-notaopen]").forEach(function(row){
+      row.addEventListener("click", function(){
+        var nota = loadNotas().filter(function(n){return n.id===row.getAttribute("data-notaopen");})[0];
+        if (nota) openNotaView(nota);
+      });
+    });
     root.querySelectorAll("[data-notareimp]").forEach(function(btn){
-      btn.addEventListener("click", function(){
+      btn.addEventListener("click", function(e){
+        e.stopPropagation();
         var nota = loadNotas().filter(function(n){return n.id===btn.getAttribute("data-notareimp");})[0];
         if (nota) reprintNota(nota);
       });
     });
     root.querySelectorAll("[data-notadel]").forEach(function(btn){
-      btn.addEventListener("click", function(){
+      btn.addEventListener("click", function(e){
+        e.stopPropagation();
         deleteNotaWithUndo(btn.getAttribute("data-notadel"), function(){ renderNotas(); });
       });
     });
@@ -5008,6 +5140,180 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     });
   }
 
+  // ---------- modal: dividir a mão de obra entre Renan / João / Wesley ----------
+  function renderMaoDeObraFormModal(){
+    var rowId = state.modal.rowId;
+    var row = state.rows.filter(function(r){ return r.id===rowId; })[0];
+    if (!row){ state.modal = null; render(); return; }
+    var total = parseNum(row.maoDeObra);
+    var existentes = {};
+    MAODEOBRA_PESSOAS.forEach(function(p){ existentes[p] = ""; });
+    if (Array.isArray(row.maoDeObraSplit)){
+      row.maoDeObraSplit.forEach(function(p){ if (existentes.hasOwnProperty(p.pessoa)) existentes[p.pessoa] = parseNum(p.valor); });
+    }
+
+    var div = document.createElement("div");
+    div.className = "overlay";
+    var linhasHtml = MAODEOBRA_PESSOAS.map(function(p, i){
+      return '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">'+
+        '<span style="flex:1.2;font-size:13px;">'+escHtml(p)+'</span>'+
+        '<input type="text" inputmode="decimal" class="mdValor" data-idx="'+i+'" data-pessoa="'+escAttr(p)+'" placeholder="0,00" value="'+escAttr(existentes[p]!==""?existentes[p]:"")+'" style="flex:1;">'+
+      '</div>';
+    }).join("");
+
+    div.innerHTML =
+      '<div class="modal wide">'+
+        '<h3>Dividir mão de obra</h3>'+
+        '<p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;">Total de mão de obra desta venda: <b style="color:var(--text);">'+fmtCurrency(total)+'</b></p>'+
+        '<div id="mdLinhas">'+linhasHtml+'</div>'+
+        '<div id="mdResumo" style="font-size:12.5px;color:var(--text-dim);margin:6px 2px 12px;"></div>'+
+        '<div class="err"></div>'+
+        '<div class="modal-actions">'+
+          '<button class="btn ghost small" id="mdCancel">Voltar</button>'+
+          '<button class="btn primary small" id="mdSave">Salvar</button>'+
+        '</div>'+
+      '</div>';
+    document.body.appendChild(div);
+
+    function lerValores(){
+      var inputs = div.querySelectorAll(".mdValor");
+      var lista = [];
+      inputs.forEach(function(inp){
+        var v = parseNum(inp.value);
+        if (v>0) lista.push({pessoa: inp.getAttribute("data-pessoa"), valor: v});
+      });
+      return lista;
+    }
+    function atualizarResumo(){
+      var lista = lerValores();
+      var soma = lista.reduce(function(s,p){ return s+p.valor; }, 0);
+      var resumo = document.getElementById("mdResumo");
+      var diff = total - soma;
+      if (!resumo) return;
+      if (Math.abs(diff) < 0.005){
+        resumo.innerHTML = '<span style="color:var(--green);">Soma bate certinho com o total (' + fmtCurrency(soma) + ').</span>';
+      } else if (diff > 0){
+        resumo.innerHTML = 'Soma atual: '+fmtCurrency(soma)+' — <span style="color:var(--yellow);">ainda falta '+fmtCurrency(diff)+'</span>';
+      } else {
+        resumo.innerHTML = 'Soma atual: '+fmtCurrency(soma)+' — <span style="color:var(--red);">passou '+fmtCurrency(-diff)+' do total</span>';
+      }
+    }
+    atualizarResumo();
+    div.querySelectorAll(".mdValor").forEach(function(el){ el.addEventListener("input", atualizarResumo); });
+
+    function goBack(){ state.modal = null; render(); }
+    document.getElementById("mdCancel").addEventListener("click", goBack);
+    div.addEventListener("click", function(e){ if (e.target===div) goBack(); });
+    document.getElementById("mdSave").addEventListener("click", function(){
+      var lista = lerValores();
+      row.maoDeObraSplit = lista.length ? lista : null;
+      state.modal = null;
+      render();
+      scheduleSave();
+    });
+  }
+
+  // ---------- modal: dar desconto numa venda, escolhendo de qual campo ele sai ----------
+  function renderDescontoFormModal(){
+    var rowId = state.modal.rowId;
+    var row = state.rows.filter(function(r){ return r.id===rowId; })[0];
+    if (!row){ state.modal = null; render(); return; }
+    var subtotal = computeSubtotal(row);
+    var atual = row.desconto || {origem: DESCONTO_ORIGENS[0].key, valor: ""};
+
+    var div = document.createElement("div");
+    div.className = "overlay";
+    var opts = DESCONTO_ORIGENS.map(function(o){
+      return '<option value="'+escAttr(o.key)+'"'+(o.key===atual.origem?' selected':'')+'>'+escHtml(o.label)+'</option>';
+    }).join("");
+    div.innerHTML =
+      '<div class="modal">'+
+        '<h3>Desconto nesta venda</h3>'+
+        '<p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;">Subtotal da venda: <b style="color:var(--text);">'+fmtCurrency(subtotal)+'</b></p>'+
+        '<div class="field-group">'+
+          '<label>Valor do desconto (R$)</label>'+
+          '<input type="text" inputmode="decimal" id="dscValor" placeholder="0,00" value="'+escAttr(atual.valor!==""&&atual.valor!==undefined&&atual.valor!==null?parseNum(atual.valor):"")+'">'+
+          '<label>De qual valor esse desconto vai sair</label>'+
+          '<select id="dscOrigem">'+opts+'</select>'+
+        '</div>'+
+        '<div id="dscResumo" style="font-size:12.5px;color:var(--text-dim);margin:0 2px 12px;"></div>'+
+        '<div class="err"></div>'+
+        '<div class="modal-actions">'+
+          (row.desconto ? '<button class="btn ghost small" id="dscRemove" style="margin-right:auto;">Remover desconto</button>' : '')+
+          '<button class="btn ghost small" id="dscCancel">Cancelar</button>'+
+          '<button class="btn primary small" id="dscSave">Salvar</button>'+
+        '</div>'+
+      '</div>';
+    document.body.appendChild(div);
+    function g(id){ return document.getElementById(id); }
+    function atualizarResumo(){
+      var v = Math.max(0, parseNum(g("dscValor").value));
+      g("dscResumo").innerHTML = "Total final da venda: <b style=\"color:var(--text);\">"+fmtCurrency(Math.max(0, subtotal-v))+"</b>";
+    }
+    atualizarResumo();
+    g("dscValor").addEventListener("input", atualizarResumo);
+    g("dscValor").focus();
+    function close(){ state.modal = null; render(); }
+    g("dscCancel").addEventListener("click", close);
+    div.addEventListener("click", function(e){ if (e.target===div) close(); });
+    if (g("dscRemove")){
+      g("dscRemove").addEventListener("click", function(){
+        delete row.desconto;
+        state.modal = null;
+        render();
+        scheduleSave();
+      });
+    }
+    g("dscSave").addEventListener("click", function(){
+      var v = Math.max(0, parseNum(g("dscValor").value));
+      if (v<=0){ delete row.desconto; }
+      else { row.desconto = {origem: g("dscOrigem").value, valor: v}; }
+      state.modal = null;
+      render();
+      scheduleSave();
+    });
+  }
+
+  // ---------- modal: ver a nota emitida antes de reimprimir ----------
+  function openNotaView(nota){
+    state.modal = {type:"notaView", notaId: nota.id};
+    render();
+  }
+  function renderNotaViewModal(){
+    var nota = loadNotas().filter(function(n){ return n.id===state.modal.notaId; })[0];
+    if (!nota){ state.modal = null; render(); return; }
+    var itensHtml = (nota.items||[]).map(function(it){
+      return '<div class="arow"><span class="d" style="min-width:0;flex:1;">'+escHtml(it.desc)+' ('+it.qty+'x)</span>'+
+        '<span class="stats"><span><b>'+fmtCurrency(it.total)+'</b></span></span></div>';
+    }).join("") || '<div class="arow-empty">Nenhum item lançado nesta venda.</div>';
+    var pagBreak = notaPaymentBreakdownHtml(nota);
+
+    var div = document.createElement("div");
+    div.className = "overlay";
+    div.innerHTML =
+      '<div class="modal wide">'+
+        '<h3>Nota #'+nota.vendaNum+'</h3>'+
+        '<p style="font-size:12.5px;color:var(--text-dim);margin:0 0 10px;">'+escHtml(fmtDateBR(nota.date))+' · Cliente: <b style="color:var(--text);">'+escHtml((nota.customer&&nota.customer.nome)||"—")+'</b></p>'+
+        '<div class="archive-list" style="margin-bottom:12px;">'+itensHtml+'</div>'+
+        '<div style="font-size:12.5px;line-height:1.7;margin-bottom:12px;">'+
+          '<div>Subtotal: <b style="color:var(--text);">'+fmtCurrency(nota.subtotal!==undefined?nota.subtotal:nota.totalProdutos)+'</b></div>'+
+          (nota.desconto>0 ? '<div>Desconto'+(nota.descontoOrigem?' ('+escHtml(descontoOrigemLabel(nota.descontoOrigem))+')':'')+': <b style="color:var(--red);">-'+fmtCurrency(nota.desconto)+'</b></div>' : '')+
+          '<div>Total: <b style="color:var(--yellow);">'+fmtCurrency(nota.totalProdutos)+'</b></div>'+
+          (nota.formaPagamento ? '<div style="margin-top:6px;">Pagamento: <b style="color:var(--text);">'+escHtml(nota.formaPagamento)+'</b>'+(nota.pago?' · '+escHtml(nota.pago==="✅"?"Pago":"Pendente"):'')+
+            (pagBreak ? '<br><span style="color:var(--text-dim);">'+pagBreak+'</span>' : '')+'</div>' : '')+
+        '</div>'+
+        '<div class="modal-actions">'+
+          '<button class="btn ghost small" id="nvClose">Fechar</button>'+
+          '<button class="btn primary small" id="nvReprint">🖨 Reimprimir</button>'+
+        '</div>'+
+      '</div>';
+    document.body.appendChild(div);
+    function close(){ state.modal = null; render(); }
+    document.getElementById("nvClose").addEventListener("click", close);
+    div.addEventListener("click", function(e){ if (e.target===div) close(); });
+    document.getElementById("nvReprint").addEventListener("click", function(){ reprintNota(nota); });
+  }
+
   // ---------- modal: escolher a medida na linha da venda ----------
   function renderSelectMedidaModal(){
     var rowId = state.modal.rowId;
@@ -5090,6 +5396,397 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     });
     document.getElementById("medCancel").addEventListener("click", function(){ state.modal=null; render(); });
     div.addEventListener("click", function(e){ if (e.target===div){ state.modal=null; render(); } });
+  }
+
+  // ---------- pneus novos (área separada: NÃO entra no dashboard principal, nem nos totais/metas dele) ----------
+  var NOVOS_PAYMENTS = PAYMENT_OPTIONS.filter(function(p){ return p.indexOf("Múltiplo")!==0; });
+
+  function novosKey(month){ return K_NOVOS + month; }
+  function loadNovosMonth(month){ return lsGetJSON(novosKey(month), []); }
+  function saveNovosMonth(month, list){ return lsSetJSON(novosKey(month), list); }
+  function loadNovosMeta(){ var m = lsGetJSON(K_NOVOS_META, {}); return parseNum(m && m.meta); }
+  function saveNovosMeta(v){ return lsSetJSON(K_NOVOS_META, {meta: v}); }
+  function novoTotal(n){ return parseNum(n.quantidade) * parseNum(n.valorUnit); }
+  function novosSorted(list){
+    return list.slice().sort(function(a,b){
+      if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+      return (b.criadoEm||"").localeCompare(a.criadoEm||"");
+    });
+  }
+  function novosOfDay(iso){ return loadNovosMonth(iso.slice(0,7)).filter(function(n){ return n.date===iso; }); }
+  function novoEditable(date){ return date===today || state.authed; }
+  function mv(s){ return state.hideValues ? "••••" : s; }
+
+  function novosStats(list){
+    var t = {total:0, qtd:0, count:list.length, pend:0, porVendedor:{}, porPagamento:{"Dinheiro":0,"Pix":0,"Débito":0,"Crédito":0}, porMedida:{}, porDia:{}};
+    list.forEach(function(n){
+      var v = novoTotal(n), q = parseNum(n.quantidade);
+      t.total += v; t.qtd += q;
+      if (n.pago!=="✅" && v>0) t.pend += v;
+      var vend = (n.vendedor && n.vendedor!=="Nenhum") ? n.vendedor : "Sem vendedor";
+      var pv = t.porVendedor[vend] || (t.porVendedor[vend] = {count:0, total:0, qtd:0});
+      pv.count++; pv.total += v; pv.qtd += q;
+      var b = paymentBreakdown({formaPagamento:n.formaPagamento, valorPneus:v});
+      Object.keys(b).forEach(function(k){ t.porPagamento[k] += b[k]; });
+      var mk = (n.medida||"—").trim() + (n.marca ? " · "+n.marca.trim() : "");
+      var pm = t.porMedida[mk] || (t.porMedida[mk] = {qtd:0, total:0});
+      pm.qtd += q; pm.total += v;
+      t.porDia[n.date] = (t.porDia[n.date]||0) + v;
+    });
+    return t;
+  }
+
+  function novoRowHtml(n){
+    var v = novoTotal(n);
+    var q = parseNum(n.quantidade);
+    var meta = [
+      fmtDateBR(n.date),
+      (n.vendedor && n.vendedor!=="Nenhum") ? n.vendedor : "",
+      n.cliente || "",
+      (n.formaPagamento && n.formaPagamento!=="Nenhum") ? n.formaPagamento : ""
+    ].filter(Boolean).map(escHtml).join(" · ");
+    var pago = n.pago==="✅" ? '<span style="color:var(--green);">pago</span>' : '<span style="color:var(--yellow);">pendente</span>';
+    return '<div class="nota-row">'+
+      '<div>'+
+        '<span class="nota-num">'+escHtml(n.medida||"—")+'</span>'+(n.marca ? ' · <span>'+escHtml(n.marca)+'</span>' : '')+
+        ' · <span>'+q+' un.'+(state.hideValues ? '' : ' × '+fmtCurrency(parseNum(n.valorUnit)))+'</span>'+
+        '<div class="nota-meta">'+meta+' · '+pago+(n.detalhes ? ' · '+escHtml(n.detalhes) : '')+'</div>'+
+      '</div>'+
+      '<div style="display:flex;align-items:center;gap:10px;">'+
+        '<span class="nota-valor">'+mv(fmtCurrency(v))+'</span>'+
+        '<button class="icon-btn edit-btn" data-act="novosedit" data-id="'+escAttr(n.id)+'" data-month="'+escAttr(n.date.slice(0,7))+'" title="Editar venda">✎</button>'+
+        '<button class="icon-btn" data-act="novosdel" data-id="'+escAttr(n.id)+'" data-month="'+escAttr(n.date.slice(0,7))+'" title="Apagar venda">✕</button>'+
+      '</div>'+
+    '</div>';
+  }
+
+  function renderNovos(){
+    var month = state.novosMonth || today.slice(0,7);
+    var tab = state.novosTab==="vendas" ? "vendas" : "dash";
+    var list = loadNovosMonth(month);
+    var st = novosStats(list);
+    var curMonthKey = today.slice(0,7);
+    var nd = daysInMonth(month);
+
+    var tabsHtml = '<div class="dd-cmp-toggle">'+
+      '<button class="seg'+(tab==="dash"?' on':'')+'" data-act="novostab" data-tab="dash">Dashboard</button>'+
+      '<button class="seg'+(tab==="vendas"?' on':'')+'" data-act="novostab" data-tab="vendas">Vendas</button>'+
+    '</div>';
+
+    var monthNavHtml = '<div class="month-nav" style="margin-bottom:0;">'+
+      '<button data-act="novosprev">‹</button>'+
+      '<span class="label">'+escHtml(monthLabel(month))+'</span>'+
+      '<button data-act="novosnext">›</button>'+
+      '<button class="btn ghost small hide-vals-btn" data-act="togglehide" title="'+(state.hideValues?"Mostrar valores":"Ocultar valores")+'">'+(state.hideValues?"🙈 Mostrar":"👁 Ocultar")+'</button>'+
+    '</div>';
+
+    var body = "";
+    if (tab==="vendas"){
+      var q = (state.novosQuery||"").trim().toLowerCase();
+      var filtered = novosSorted(list).filter(function(n){
+        if (!q) return true;
+        return ((n.medida||"")+" "+(n.marca||"")+" "+(n.cliente||"")+" "+(n.vendedor||"")+" "+(n.detalhes||"")).toLowerCase().indexOf(q)>-1;
+      });
+      var fst = novosStats(filtered);
+      var rowsHtml = filtered.length ? filtered.map(novoRowHtml).join("") :
+        '<div class="aviso-empty">Nenhuma venda de pneu novo em '+escHtml(monthLabel(month))+(q?' para "'+escHtml(state.novosQuery)+'"':'')+'.</div>';
+      body =
+        '<div class="totals-bar">'+
+          tstat("Vendas", fst.count, true)+
+          tstat("Pneus vendidos", mv(fst.qtd))+
+          tstat("Valor total", mv(fmtCurrency(fst.total)))+
+          tstat("A receber (pendentes)", mv(fmtCurrency(fst.pend)))+
+        '</div>'+
+        '<div class="tbl-head">'+
+          '<div class="tbl-head-left"><h2>Vendas de pneus novos</h2></div>'+
+          '<div style="display:flex;gap:8px;flex-wrap:wrap;">'+
+            (state.role==="master" ? '<button class="btn ghost small" data-act="novoscsv" title="Baixar as vendas deste mês em planilha (CSV)">⇩ Exportar CSV</button>' : '')+
+            '<button class="btn primary small" data-act="novosnew">+ Nova venda</button>'+
+          '</div>'+
+        '</div>'+
+        '<div class="card" style="padding:14px 16px;">'+
+          '<input type="text" id="novosSearch" class="dash-cust-search" placeholder="Buscar por medida, marca, cliente ou vendedor..." value="'+escAttr(state.novosQuery||"")+'">'+
+          '<div class="archive-list">'+rowsHtml+'</div>'+
+        '</div>';
+    } else {
+      var points = [];
+      for (var i=1;i<=nd;i++){
+        var iso = month+"-"+pad(i);
+        points.push({day:i, iso:iso, v:st.porDia[iso]||0});
+      }
+      var selDay = state.novosDay;
+      if (!selDay || selDay.slice(0,7)!==month) selDay = (month===curMonthKey) ? today : month+"-"+pad(nd);
+      var selList = novosSorted(list.filter(function(n){ return n.date===selDay; }));
+      var selTotal = novosStats(selList).total;
+
+      var prevTotal = novosStats(loadNovosMonth(addMonths(month,-1))).total;
+      var cmpHtml = "";
+      if (prevTotal>0){
+        var diff = ((st.total-prevTotal)/prevTotal)*100;
+        cmpHtml = '<div class="nv-cmp '+(diff>=0?'up':'down')+'">'+(state.hideValues ? '••%' : (diff>=0?'▲ +':'▼ ')+diff.toFixed(0)+'%')+' vs. '+escHtml(monthLabel(addMonths(month,-1)))+'</div>';
+      }
+
+      var meta = loadNovosMeta();
+      var goalHtml = "";
+      if (meta>0){
+        var pct = Math.min(100, (st.total/meta)*100);
+        goalHtml = '<div class="goal-row">'+
+          '<div class="goal-label"><span>Meta do mês ('+mv(fmtCurrency(meta))+')</span><b>'+(state.hideValues?'••%':pct.toFixed(0)+'%')+'</b></div>'+
+          '<div class="goal-track"><div class="goal-fill'+(pct>=100?' reached':'')+'" style="width:'+(state.hideValues?0:pct)+'%"></div></div>'+
+        '</div>'+
+        '<button class="btn ghost small nv-goal-btn" data-act="novosmeta">Alterar meta</button>';
+      } else {
+        goalHtml = '<button class="btn ghost small nv-goal-btn" data-act="novosmeta">+ Definir meta do mês</button>';
+      }
+
+      function card(label, color, right, val){
+        return '<div class="parts-card pc-'+color+'">'+
+          '<div class="pc-top"><span class="pc-label">'+escHtml(label)+'</span><span class="pc-qty">'+right+'</span></div>'+
+          '<div class="pc-value">'+val+'</div></div>';
+      }
+      var ticket = st.count ? st.total/st.count : 0;
+      var kpis =
+        card("Pneus vendidos","teal","un.",mv(st.qtd))+
+        card("Vendas","yellow","no mês",mv(st.count))+
+        card("Ticket médio","green","por venda",mv(fmtCurrency(ticket)))+
+        card("A receber","yellow","pendentes",mv(fmtCurrency(st.pend)));
+
+      var vendNames = Object.keys(st.porVendedor).sort(function(a,b){ return st.porVendedor[b].total - st.porVendedor[a].total; });
+      var vendHtml = vendNames.length ? vendNames.map(function(nm){
+        var pv = st.porVendedor[nm];
+        return card(nm,"teal",mv(pv.count)+' venda(s) · '+mv(pv.qtd)+' un.',mv(fmtCurrency(pv.total)));
+      }).join("") : '<div class="arow-empty" style="grid-column:1/-1;">Sem vendas neste mês.</div>';
+
+      var payHtml = METODOS_PAGAMENTO.map(function(m){
+        return card(m,"green","",mv(fmtCurrency(st.porPagamento[m])));
+      }).join("");
+
+      var medNames = Object.keys(st.porMedida).sort(function(a,b){ return st.porMedida[b].qtd - st.porMedida[a].qtd; }).slice(0,8);
+      var medHtml = medNames.length ? medNames.map(function(nm){
+        var pm = st.porMedida[nm];
+        return '<div class="arow"><span class="d" style="min-width:0;flex:1;">'+escHtml(nm)+'</span>'+
+          '<span class="stats"><span><b>'+mv(fmtCurrency(pm.total))+'</b></span><span>'+mv(pm.qtd)+' un.</span></span></div>';
+      }).join("") : '<div class="arow-empty">Sem vendas neste mês.</div>';
+
+      var ontem = novosStats(novosOfDay(yesterday));
+      var hoje = novosStats(novosOfDay(today));
+      var totalParts = fmtCurrency(st.total).split(",");
+      var selHtml = selList.length ? selList.map(function(n){
+        return '<div class="arow"><span class="d" style="min-width:0;flex:1;">'+escHtml(n.medida||"—")+(n.marca?' · '+escHtml(n.marca):'')+'</span>'+
+          '<span class="stats"><span><b>'+mv(fmtCurrency(novoTotal(n)))+'</b></span><span>'+mv(parseNum(n.quantidade))+' un.</span></span></div>';
+      }).join("") : '<div class="arow-empty">Nenhuma venda de pneu novo neste dia.</div>';
+
+      body =
+        '<div class="hero">'+
+          '<div class="hero-left">'+
+            monthNavHtml.replace(' style="margin-bottom:0;"','')+
+            '<div class="big-total">'+(state.hideValues?'••••••':(totalParts[0]+(totalParts[1]?','+totalParts[1]:'')))+'</div>'+
+            '<div class="sub">faturamento de pneus novos no mês</div>'+
+            cmpHtml+goalHtml+
+          '</div>'+
+          '<div class="hero-right">'+
+            '<h2>Evolução diária <span style="color:var(--text-faint);font-size:11.5px;">· toque em um dia do gráfico para ver as vendas</span></h2>'+
+            '<div class="chart-wrap">'+(state.hideValues ? '<div class="chart-empty">Valores ocultos.</div>' : buildChartSvg(points, selDay))+'</div>'+
+          '</div>'+
+        '</div>'+
+        '<div class="nv-grid">'+kpis+'</div>'+
+        '<div class="card" style="margin-bottom:18px;">'+
+          '<h3>Vendas de '+escHtml(weekdayLabel(selDay))+' · '+mv(fmtCurrency(selTotal))+'</h3>'+
+          '<div class="archive-list">'+selHtml+'</div>'+
+        '</div>'+
+        '<div class="nv-sec">Por vendedor</div><div class="nv-grid">'+vendHtml+'</div>'+
+        '<div class="nv-sec">Por forma de pagamento</div><div class="nv-grid">'+payHtml+'</div>'+
+        '<div class="nv-sec">Medidas mais vendidas no mês</div>'+
+        '<div class="card" style="padding:6px 8px;margin-bottom:18px;"><div class="archive-list">'+medHtml+'</div></div>'+
+        '<div class="row2">'+
+          '<div class="card">'+
+            '<h3>Resumo de ontem</h3>'+
+            '<div class="yesterday-total">'+mv(fmtCurrency(ontem.total))+'</div>'+
+            '<div class="yesterday-meta">'+escHtml(weekdayLabel(yesterday))+' · '+ontem.count+' venda(s) · '+mv(ontem.qtd)+' un.</div>'+
+          '</div>'+
+          '<div class="card today-card">'+
+            '<div>'+
+              '<h3>Hoje</h3>'+
+              '<div class="date-big">'+mv(fmtCurrency(hoje.total))+'</div>'+
+              '<div class="date-sub">'+hoje.count+' venda(s) · '+mv(hoje.qtd)+' un.</div>'+
+            '</div>'+
+            '<button class="btn primary" data-act="novosnew">+ Lançar venda de pneu novo</button>'+
+          '</div>'+
+        '</div>';
+    }
+
+    root.innerHTML =
+      clientesTopbarHtml("Pneus Novos", "VENDAS DE PNEUS NOVOS · FORA DO DASHBOARD PRINCIPAL") +
+      '<div class="nv-topline">'+tabsHtml+(tab==="vendas" ? monthNavHtml : '')+'</div>'+
+      body;
+
+    root.querySelectorAll("[data-act]").forEach(function(node){
+      node.addEventListener("click", function(){
+        var act = node.getAttribute("data-act");
+        if (act==="novostab"){ state.novosTab = node.getAttribute("data-tab"); render(); }
+        else if (act==="novosprev"){ state.novosMonth = addMonths(month,-1); state.novosDay = null; render(); }
+        else if (act==="novosnext"){ state.novosMonth = addMonths(month,1); state.novosDay = null; render(); }
+        else if (act==="novosnew"){ state.modal = {type:"novoForm", itemId:null, month:month, error:""}; render(); }
+        else if (act==="novosmeta"){ state.modal = {type:"novosMeta", error:""}; render(); }
+        else if (act==="novoscsv"){ exportNovosCSV(novosSorted(list), month); }
+        else if (act==="novosedit"){
+          var m = node.getAttribute("data-month"), id = node.getAttribute("data-id");
+          var it = loadNovosMonth(m).filter(function(n){ return n.id===id; })[0];
+          if (!it) return;
+          if (!novoEditable(it.date)){ state.modal = {type:"auth", error:""}; render(); return; }
+          state.modal = {type:"novoForm", itemId:id, month:m, error:""}; render();
+        }
+        else if (act==="novosdel"){
+          var m2 = node.getAttribute("data-month"), id2 = node.getAttribute("data-id");
+          var it2 = loadNovosMonth(m2).filter(function(n){ return n.id===id2; })[0];
+          if (!it2) return;
+          if (!novoEditable(it2.date)){ state.modal = {type:"auth", error:""}; render(); return; }
+          deleteNovoWithUndo(id2, m2);
+        }
+        else handleAction(act, node);
+      });
+    });
+    root.querySelectorAll(".chart-wrap circle[data-iso]").forEach(function(c){
+      c.addEventListener("click", function(){ state.novosDay = c.getAttribute("data-iso"); render(); });
+    });
+    var search = document.getElementById("novosSearch");
+    if (search){
+      search.addEventListener("input", function(){
+        state.novosQuery = search.value;
+        var pos = search.selectionStart;
+        renderNovos();
+        var again = document.getElementById("novosSearch");
+        if (again){ again.focus(); try{ again.setSelectionRange(pos,pos); }catch(e){} }
+      });
+    }
+  }
+
+  function deleteNovoWithUndo(id, month){
+    var list = loadNovosMonth(month);
+    var idx = -1, item = null;
+    for (var i=0;i<list.length;i++){ if (list[i].id===id){ idx=i; item=list[i]; break; } }
+    if (idx===-1) return;
+    list.splice(idx,1);
+    saveNovosMonth(month, list);
+    render();
+    showUndoToast("Venda de pneu novo apagada", function(){
+      var l2 = loadNovosMonth(month);
+      l2.splice(Math.min(idx,l2.length), 0, item);
+      saveNovosMonth(month, l2);
+      render();
+    });
+  }
+
+  function exportNovosCSV(list, month){
+    var lines = [["Data","Medida","Marca","Quantidade","Valor unitário","Total","Forma de pagamento","Pago","Vendedor","Cliente","Detalhes"].map(csvEscape).join(";")];
+    list.forEach(function(n){
+      lines.push([
+        fmtDateBR(n.date), n.medida||"", n.marca||"", parseNum(n.quantidade),
+        parseNum(n.valorUnit).toFixed(2).replace(".",","), novoTotal(n).toFixed(2).replace(".",","),
+        n.formaPagamento||"", (n.pago==="✅"?"Pago":"Pendente"), n.vendedor||"", n.cliente||"", n.detalhes||""
+      ].map(csvEscape).join(";"));
+    });
+    downloadTextFile("pneus-novos-"+month+".csv", lines.join("\r\n"));
+  }
+
+  function renderNovoFormModal(){
+    var item = state.modal.itemId ? loadNovosMonth(state.modal.month).filter(function(n){ return n.id===state.modal.itemId; })[0] : null;
+    function opts(arr, sel){ return arr.map(function(o){ return '<option value="'+escAttr(o)+'"'+(o===sel?' selected':'')+'>'+escHtml(o)+'</option>'; }).join(""); }
+    var div = document.createElement("div");
+    div.className = "overlay";
+    div.innerHTML =
+      '<div class="modal wide">'+
+        '<h3>'+(item ? "Editar venda de pneu novo" : "Nova venda de pneu novo")+'</h3>'+
+        '<div class="field-group">'+
+          '<div class="nv-two">'+
+            '<div><label>Data</label><input type="date" id="nfData" value="'+escAttr(item?item.date:today)+'"></div>'+
+            '<div><label>Vendedor</label><select id="nfVend">'+opts(VENDEDORES, item?item.vendedor:VENDEDORES[0])+'</select></div>'+
+          '</div>'+
+          '<label>Medida</label><input type="text" id="nfMedida" placeholder="Ex: 175/70 R14" value="'+escAttr(item?item.medida:"")+'">'+
+          '<label>Marca</label><input type="text" id="nfMarca" placeholder="Ex: Pirelli" value="'+escAttr(item?item.marca:"")+'">'+
+          '<div class="nv-two">'+
+            '<div><label>Quantidade</label><input type="text" inputmode="numeric" id="nfQtd" placeholder="1" value="'+escAttr(item?parseNum(item.quantidade):"1")+'"></div>'+
+            '<div><label>Valor por unidade (R$)</label><input type="text" inputmode="decimal" id="nfUnit" placeholder="0,00" value="'+escAttr(item?parseNum(item.valorUnit):"")+'"></div>'+
+          '</div>'+
+          '<div class="nv-total-preview" id="nfTotal"></div>'+
+          '<div class="nv-two">'+
+            '<div><label>Forma de pagamento</label><select id="nfPag">'+opts(NOVOS_PAYMENTS, item?item.formaPagamento:"Nenhum")+'</select></div>'+
+            '<div><label>Pago</label><select id="nfPago">'+opts(["❌","✅"], item?item.pago:"❌")+'</select></div>'+
+          '</div>'+
+          '<label>Cliente (opcional)</label><input type="text" id="nfCliente" list="nfClientes" placeholder="Nome do cliente" value="'+escAttr(item?item.cliente:"")+'">'+
+          '<datalist id="nfClientes">'+loadCustomers().map(function(c){ return '<option value="'+escAttr(c.nome||"")+'"></option>'; }).join("")+'</datalist>'+
+          '<label>Detalhes (opcional)</label><input type="text" id="nfDet" placeholder="Ex: montagem inclusa" value="'+escAttr(item?item.detalhes:"")+'">'+
+        '</div>'+
+        '<div class="err"></div>'+
+        '<div class="modal-actions">'+
+          '<button class="btn ghost small" id="nfCancel">Cancelar</button>'+
+          '<button class="btn primary small" id="nfSave">Salvar</button>'+
+        '</div>'+
+      '</div>';
+    document.body.appendChild(div);
+    function g(id){ return document.getElementById(id); }
+    function upd(){ g("nfTotal").textContent = "Total: "+fmtCurrency(parseNum(g("nfQtd").value)*parseNum(g("nfUnit").value)); }
+    g("nfQtd").addEventListener("input", upd);
+    g("nfUnit").addEventListener("input", upd);
+    upd();
+    g("nfMedida").focus();
+    function close(){ state.modal = null; render(); }
+    g("nfCancel").addEventListener("click", close);
+    div.addEventListener("click", function(e){ if (e.target===div) close(); });
+    g("nfSave").addEventListener("click", function(){
+      function fail(msg){ div.querySelector(".err").textContent = msg; }
+      var date = g("nfData").value;
+      var medida = g("nfMedida").value.trim();
+      var qtd = parseNum(g("nfQtd").value);
+      var unit = parseNum(g("nfUnit").value);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return fail("Informe a data.");
+      if (!medida) return fail("Informe a medida.");
+      if (qtd<=0) return fail("Informe a quantidade.");
+      if (unit<=0) return fail("Informe o valor por unidade.");
+      if (!novoEditable(date) || (item && !novoEditable(item.date))) return fail("Para lançar ou editar dias anteriores, entre com a senha no painel.");
+      var dados = {
+        id: item ? item.id : uid(),
+        date: date, medida: medida, marca: g("nfMarca").value.trim(),
+        quantidade: String(qtd), valorUnit: String(unit),
+        formaPagamento: g("nfPag").value, pago: g("nfPago").value,
+        vendedor: g("nfVend").value, cliente: g("nfCliente").value.trim(), detalhes: g("nfDet").value.trim(),
+        criadoEm: item ? item.criadoEm : new Date().toISOString()
+      };
+      var newMonth = date.slice(0,7);
+      if (item){
+        var oldMonth = item.date.slice(0,7);
+        var oldList = loadNovosMonth(oldMonth).filter(function(n){ return n.id!==item.id; });
+        if (oldMonth===newMonth){ oldList.push(dados); saveNovosMonth(newMonth, oldList); }
+        else { saveNovosMonth(oldMonth, oldList); var nl = loadNovosMonth(newMonth); nl.push(dados); saveNovosMonth(newMonth, nl); }
+      } else {
+        var l = loadNovosMonth(newMonth); l.push(dados); saveNovosMonth(newMonth, l);
+      }
+      state.novosMonth = newMonth;
+      state.modal = null;
+      render();
+    });
+  }
+
+  function renderNovosMetaModal(){
+    var atual = loadNovosMeta();
+    var div = document.createElement("div");
+    div.className = "overlay";
+    div.innerHTML =
+      '<div class="modal">'+
+        '<h3>Meta mensal de pneus novos</h3>'+
+        '<p>Valor em R$ que você quer faturar por mês com pneus novos. Deixe vazio para remover a meta.</p>'+
+        '<div class="field-group"><label>Meta do mês (R$)</label><input type="text" inputmode="decimal" id="nmMeta" placeholder="0,00" value="'+escAttr(atual>0?atual:"")+'"></div>'+
+        '<div class="modal-actions"><button class="btn ghost small" id="nmCancel">Cancelar</button><button class="btn primary small" id="nmSave">Salvar</button></div>'+
+      '</div>';
+    document.body.appendChild(div);
+    document.getElementById("nmMeta").focus();
+    function close(){ state.modal = null; render(); }
+    document.getElementById("nmCancel").addEventListener("click", close);
+    div.addEventListener("click", function(e){ if (e.target===div) close(); });
+    document.getElementById("nmSave").addEventListener("click", function(){
+      saveNovosMeta(Math.max(0, parseNum(document.getElementById("nmMeta").value)));
+      close();
+    });
   }
 
   // ---------- reage a mudanças feitas em outro aparelho ----------
