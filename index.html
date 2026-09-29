@@ -197,6 +197,7 @@
   .parts-card.pc-yellow .pc-value{color:var(--yellow);}
   .parts-card.pc-green .pc-value{color:var(--green);}
   .parts-card.pc-red .pc-value{color:var(--red);}
+  .cellval.lucro-cell{font-weight:700;text-align:right;opacity:1;-webkit-text-fill-color:currentColor;}
 
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;}
   @media(max-width:820px){.row2{grid-template-columns:1fr;}}
@@ -1553,7 +1554,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     var nota = {
       id: uid(),
       vendaNum: vendaNum,
-      date: state.date,
+      date: tblDate(),
       rowId: row.id,
       customerId: customer.id,
       customer: {
@@ -1801,6 +1802,9 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     novosTab: "dash",
     novosQuery: "",
     novosDay: null,
+    novosDate: today,
+    novosOnlyPending: false,
+    novosVend: "",
     historicoQuery: "",
     avisosTab: "procurados",
     vendedorFiltro: "",
@@ -1815,7 +1819,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   function render(){
     var estoquista = state.role === "estoquista";
     var isMaster = state.role === "master";
-    root.classList.toggle("wide", state.view==="table" && !estoquista);
+    if (!(state.view==="novos" && state.novosTab==="vendas")) state.novosRows = null;
+    root.classList.toggle("wide", (state.view==="table" || (state.view==="novos" && state.novosTab==="vendas")) && !estoquista);
     if (estoquista) renderEstoque();
     else if (state.view==="estoque") renderEstoque();
     else if (state.view==="clientes") renderClientes();
@@ -1921,11 +1926,16 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       var nd = daysInMonth(state.dashMonth);
       var points = [];
       var monthTotal = 0;
+      // o LUCRO das vendas de pneus novos (valor − custo) é somado ao total do mês e, com isso, à meta
+      var nvS = novosStats(loadNovosMonth(state.dashMonth));
+      var yMonthKey = yesterday.slice(0,7);
+      var yLucro = ((yMonthKey===state.dashMonth) ? nvS : novosStats(loadNovosMonth(yMonthKey))).lucroDia[yesterday] || 0;
+      var nvIncludeHtml = nvS.lucro!==0 ? '<div class="sub" style="margin-top:2px;">inclui '+(state.hideValues?'••••':fmtCurrency(nvS.lucro))+' de lucro de pneus novos</div>' : '';
       for (var i=1;i<=nd;i++){
         var iso = state.dashMonth+"-"+pad(i);
-        var v = (monthSummary[iso] && monthSummary[iso].total) || 0;
+        var v = ((monthSummary[iso] && monthSummary[iso].total) || 0) + (nvS.lucroDia[iso]||0);
         monthTotal += v;
-        points.push({day:i, iso:iso, v:v});
+        points.push({day:i, iso:iso, v:Math.max(0, v)});
       }
       var pct1 = Math.min(100, (monthTotal/GOAL_1)*100);
       var pct2 = Math.min(100, (monthTotal/GOAL_2)*100);
@@ -1991,9 +2001,9 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       // barra de progresso da meta do dia (só faz sentido olhando o mês atual)
       var todayGoalBarHtml = "";
       if (state.dashMonth===curMonthKey){
-        var remainingHoje = GOAL_1 - monthTotal + sumRows(rowsOfDay(today));
+        var hojeTotal = sumRows(rowsOfDay(today)) + (nvS.lucroDia[today]||0);
+        var remainingHoje = GOAL_1 - monthTotal + hojeTotal;
         var metaHoje = daysLeft>0 ? remainingHoje/daysLeft : 0;
-        var hojeTotal = sumRows(rowsOfDay(today));
         var hojePct = metaHoje>0 ? Math.min(100, (hojeTotal/metaHoje)*100) : 100;
         var hojeReached = metaHoje<=0 || hojeTotal>=metaHoje;
         todayGoalBarHtml = '<div class="today-goal-bar'+(hojeReached?' reached':'')+'">'+
@@ -2019,7 +2029,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
               '<button class="btn ghost small hide-vals-btn" data-act="togglehide" title="'+(state.hideValues?"Mostrar valores":"Ocultar valores")+'">'+(state.hideValues?"🙈 Mostrar":"👁 Ocultar")+'</button>'+
             '</div>'+
             '<div class="big-total">'+(state.hideValues?'••••••':(totalParts[0]+(totalParts[1]?','+totalParts[1]:'')))+'</div>'+
-            '<div class="sub">faturamento total do mês</div>'+
+            '<div class="sub">faturamento total do mês</div>'+nvIncludeHtml+
             '<div class="goal-row">'+
               '<div class="goal-label"><span>Meta 350 mil</span><b>'+(state.hideValues?'••%':pct1.toFixed(0)+'%')+'</b></div>'+
               '<div class="goal-track"><div class="goal-fill'+(pct1>=100?' reached':'')+'" style="width:'+(state.hideValues?0:pct1)+'%"></div></div>'+
@@ -2046,8 +2056,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         '<div class="row2">'+
           '<div class="card">'+
             '<h3>Resumo de ontem</h3>'+
-            '<div class="yesterday-total">'+fmtCurrency(yData.total)+'</div>'+
-            '<div class="yesterday-meta">'+escHtml(weekdayLabel(yesterday))+' · '+yData.count+' venda(s) registrada(s)</div>'+
+            '<div class="yesterday-total">'+fmtCurrency(yData.total + yLucro)+'</div>'+
+            '<div class="yesterday-meta">'+escHtml(weekdayLabel(yesterday))+' · '+yData.count+' venda(s) registrada(s)'+(yLucro!==0 ? ' · inclui '+fmtCurrency(yLucro)+' de lucro de pneus novos' : '')+'</div>'+
             '<button class="btn ghost small" data-act="opendate" data-date="'+yesterday+'">Ver tabela de ontem</button>'+
           '</div>'+
           '<div class="card today-card">'+
@@ -2377,6 +2387,9 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     // no modo "Por mês" todos os quadros passam a somar o mês inteiro
     var A = isMonth ? det.monthAgg : det.dayAgg;
     var periodo = isMonth ? "do mês" : "do dia";
+    var nvDet = novosStats(loadNovosMonth(iso.slice(0,7)));
+    var nvLucroPeriodo = isMonth ? nvDet.lucro : (nvDet.lucroDia[iso]||0);
+    var nvNote = nvLucroPeriodo!==0 ? '<div class="dd-note" style="margin:0 0 12px;">💰 Lucro de pneus novos '+periodo+': <b style="color:'+(nvLucroPeriodo>=0?'var(--green)':'var(--red)')+';">'+hv(nvLucroPeriodo)+'</b> — já somado na meta do mês.</div>' : '';
 
     function barRows(list, keyLabel, colorCls, withRank){
       if (!list.length) return '<div class="dd-empty">Nada lançado neste '+(isMonth?'mês':'dia')+'.</div>';
@@ -2465,6 +2478,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         '<div class="dd-kpi"><div class="k">Ticket médio</div><div class="v">'+hv(A.ticket)+'</div></div>'+
         '<div class="dd-kpi'+(A.pendCount?' warn':'')+'"><div class="k">Pendente de pagamento</div><div class="v">'+hv(A.pendTotal)+'</div><div class="k" style="margin:4px 0 0;">'+hq(A.pendCount)+' venda(s)</div></div>'+
       '</div>'+
+      nvNote+
       '<div class="dd-grid">'+
         '<div class="dd-card"><div class="dd-card-head"><h3>Comparativo</h3></div>'+cmpHtml+'</div>'+
         '<div class="dd-card"><h3>Faturamento por vendedor</h3>'+
@@ -2721,7 +2735,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     var estoqueBtn = '<button class="btn ghost small" data-act="openestoque" title="Abrir o controle de estoque">📦 Estoque</button>';
     var clientesBtn = '<button class="btn ghost small" data-act="openclientes" title="Cadastrar e editar clientes">👥 Clientes</button>';
     var notasBtn = '<button class="btn ghost small" data-act="opennotas" title="Ver todas as notas emitidas, em ordem de emissão">🧾 Notas</button>';
-    var novosBtn = '<button class="btn ghost small" data-act="opennovos" title="Vendas de pneus novos (não entram no dashboard principal)">🆕 Pneus novos</button>';
+    var novosBtn = '<button class="btn ghost small" data-act="opennovos" title="Vendas de pneus novos (o lucro entra na meta do dashboard principal)">🆕 Pneus novos</button>';
     var avisosCount = avisosPendentesCount();
     var avisosBtn = '<button class="btn ghost small" data-act="openavisos" title="Clientes esperando medida, lembretes e estoque baixo">🔔 Avisos'+
       (avisosCount>0 ? '<span class="nav-badge">'+avisosCount+'</span>' : '')+'</button>';
@@ -2767,8 +2781,12 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     else if (act==="cmpmonth"){ state.cmpMode="month"; render(); }
     else if (act==="back"){ state.view="dashboard"; render(); }
     else if (act==="addrow"){ addRow(); }
-    else if (act==="prevday"){ openDate(addDays(state.date,-1)); }
-    else if (act==="nextday"){ openDate(addDays(state.date,1)); }
+    else if (act==="prevday" || act==="nextday"){
+      var dd = act==="prevday" ? -1 : 1;
+      if (isNovosTbl()){ flushNovos(); state.novosDate = addDays(tblDate(),dd); state.novosRows = null; state.openDetails = {}; render(); }
+      else openDate(addDays(state.date,dd));
+    }
+    else if (act==="novostab"){ flushNovos(); state.novosTab = node.getAttribute("data-tab"); state.novosRows = null; render(); }
     else if (act==="exportbackup"){ exportBackup(); }
     else if (act==="exportdiacsv"){ exportDiaCSV(); }
     else if (act==="pushcloud"){
@@ -2823,7 +2841,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       render();
     }
     else if (act==="togglepending"){
-      state.onlyPending = !state.onlyPending;
+      if (isNovosTbl()) state.novosOnlyPending = !state.novosOnlyPending;
+      else state.onlyPending = !state.onlyPending;
       renderTable();
     }
     else if (act==="togglemorefields"){
@@ -2833,7 +2852,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     }
     else if (act==="linkcustomer"){
       var lcId = node.getAttribute("data-id");
-      var lcRow = state.rows.filter(function(r){return r.id===lcId;})[0];
+      var lcRow = findTblRow(lcId);
       // já tem cliente vinculado? mostra a ficha dele em vez da lista de escolha
       if (lcRow && lcRow.clienteId && customerNameById(lcRow.clienteId)){
         state.modal = {type:"customerLinked", rowId: lcId};
@@ -2842,8 +2861,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       }
       render();
     }
-    else if (act==="openorcamento"){ state.view="orcamento"; render(); }
-    else if (act==="orcback"){ state.view="table"; render(); }
+    else if (act==="openorcamento"){ state.orcReturn = state.view; state.view="orcamento"; render(); }
+    else if (act==="orcback"){ state.view = state.orcReturn || "table"; render(); }
     else if (act==="garantia"){
       state.modal = {type:"garantiaForm", medidaId:"", qtd:"", error:""};
       render();
@@ -2865,7 +2884,27 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     return dateIso === today || state.authed;
   }
 
+  // ---------- a mesma tabela serve pros pneus usados (dia) e pros pneus novos (dia dentro do mês) ----------
+  function isNovosTbl(){ return state.view==="novos" && state.novosTab==="vendas"; }
+  function tblDate(){ return isNovosTbl() ? (state.novosDate||today) : state.date; }
+  function tblRows(){ return isNovosTbl() ? (state.novosRows||[]) : state.rows; }
+  function findTblRow(id){ return tblRows().filter(function(r){ return r.id===id; })[0]; }
+  // carrega as vendas de novos do dia aberto (mesmos objetos que serão editados e gravados)
+  function novosLoadDay(){
+    var date = state.novosDate || today;
+    state.novosDate = date;
+    state.novosRows = loadNovosMonth(date.slice(0,7)).filter(function(n){ return n.date===date; });
+    state.novosRowsDate = date;
+  }
+  // grava o dia inteiro dentro da lista do mês (mantém as vendas dos outros dias como estão)
+  function novosCommit(){
+    var date = state.novosDate || today, month = date.slice(0,7);
+    var rest = loadNovosMonth(month).filter(function(n){ return n.date!==date; });
+    novosSaveLater(month, rest.concat(state.novosRows||[]));
+  }
+
   function exportDiaCSV(){
+    if (isNovosTbl()){ exportNovosCSV(tblRows(), tblDate()); return; }
     var header = ["Quantidade","Medida","Valor","Forma de pagamento","Pago","Carro","Vendedor"];
     var lines = [header.map(csvEscape).join(";")];
     state.rows.forEach(function(r){
@@ -2878,16 +2917,25 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   }
 
   function renderTable(){
-    var editable = isEditable(state.date);
-    var isToday = state.date === today;
+    var nv = isNovosTbl();
+    if (nv && (!state.novosRows || state.novosRowsDate!==(state.novosDate||today))) novosLoadDay();
+    var curDate = tblDate();
+    var curRows = tblRows();
+    var editable = nv ? novoEditable(curDate) : isEditable(curDate);
+    var isToday = curDate === today;
+    var onlyPend = nv ? state.novosOnlyPending : state.onlyPending;
+    var vendFilt = nv ? state.novosVend : state.vendedorFiltro;
     var t = computeTotals();
 
     var cols = visibleColumns();
     var colTemplate = cols.map(function(c){return c.w;}).join(" ") + " " + ROWACTIONS_W;
 
-    var pendentesCount = state.rows.filter(function(r){ return r.pago!=="✅"; }).length;
-    var displayRows = state.onlyPending ? state.rows.filter(function(r){ return r.pago!=="✅"; }) : state.rows;
-    if (state.vendedorFiltro) displayRows = displayRows.filter(function(r){ return (r.vendedor||"Nenhum")===state.vendedorFiltro; });
+    var pendentesCount = curRows.filter(function(r){ return r.pago!=="✅"; }).length;
+    var displayRows = onlyPend ? curRows.filter(function(r){ return r.pago!=="✅"; }) : curRows;
+    if (vendFilt) displayRows = displayRows.filter(function(r){ return (r.vendedor||"Nenhum")===vendFilt; });
+    var nvTabsHtml = nv ? '<div class="nv-topline" style="margin:14px 0 12px;"><div class="dd-cmp-toggle">'+
+      '<button class="seg" data-act="novostab" data-tab="dash">Dashboard</button>'+
+      '<button class="seg on" data-act="novostab" data-tab="vendas">Vendas</button></div></div>' : '';
     var hiddenColsCount = COLUMNS.filter(function(c){return c.advanced;}).length;
 
     root.innerHTML =
@@ -2897,13 +2945,14 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
           syncBadgeHtml()+
           authZoneHtml()+
         '</div>'+
+        nvTabsHtml+
 
         (!isToday && !editable ? '<p style="color:var(--text-faint);font-size:12.5px;margin:-8px 2px 14px;">Esta é uma data anterior — apenas hoje pode ser editado sem senha.</p>' : '')+
 
         '<div class="tbl-head">'+
           '<div class="tbl-head-left">'+
             '<div class="day-nav"><button data-act="prevday">‹</button><button data-act="nextday">›</button></div>'+
-            '<h2>'+escHtml(weekdayLabel(state.date))+'</h2>'+
+            '<h2>'+escHtml(weekdayLabel(curDate))+'</h2>'+
             '<span class="save-flag" id="saveFlag">salvo</span>'+
           '</div>'+
           '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">'+
@@ -2915,10 +2964,10 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
           '</div>'+
         '</div>'+
 
-        (state.rows.length===0 ? '' :
+        (curRows.length===0 ? '' :
           '<div class="tbl-toolbar">'+
-            '<button class="btn small'+(state.onlyPending?' primary':' ghost')+'" data-act="togglepending" title="Mostrar só as vendas ainda não pagas">'+
-              (state.onlyPending ? "✕ Mostrando só pendentes" : "🔍 Só pendentes")+
+            '<button class="btn small'+(onlyPend?' primary':' ghost')+'" data-act="togglepending" title="Mostrar só as vendas ainda não pagas">'+
+              (onlyPend ? "✕ Mostrando só pendentes" : "🔍 Só pendentes")+
               (pendentesCount>0 ? ' <span class="count-badge">'+pendentesCount+'</span>' : '')+
             '</button>'+
             '<button class="btn small ghost" data-act="togglemorefields" title="'+(state.showAdvancedCols?'Esconder os campos usados com menos frequência':'Mostrar todos os campos, incluindo os usados com menos frequência')+'">'+
@@ -2927,7 +2976,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
             '<select id="vendFiltro" class="btn small ghost" style="padding:5px 8px;">'+
               '<option value="">Todos os vendedores</option>'+
               VENDEDORES.filter(function(v){return v!=="Nenhum";}).map(function(v){
-                return '<option value="'+escAttr(v)+'"'+(state.vendedorFiltro===v?' selected':'')+'>'+escHtml(v)+'</option>';
+                return '<option value="'+escAttr(v)+'"'+(vendFilt===v?' selected':'')+'>'+escHtml(v)+'</option>';
               }).join("")+
             '</select>'+
             (state.role==="master" ? '<button class="btn small ghost" data-act="exportdiacsv" title="Baixar as vendas deste dia em planilha (CSV)">⇩ CSV</button>' : '')+
@@ -2938,10 +2987,10 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         '<div class="nv-sec" style="margin:0 2px 6px;">Totais do dia</div>'+
         '<div class="totals-strip" data-role="tabletotals">'+tableTotalsHtml(t)+'</div>'+
 
-        (state.rows.length===0 ? '' : '<div class="grid-scroll-head">'+gridHeadHtml(colTemplate, editable, cols)+'</div>')+
+        (curRows.length===0 ? '' : '<div class="grid-scroll-head">'+gridHeadHtml(colTemplate, editable, cols)+'</div>')+
       '</div>'+
 
-      (state.rows.length===0
+      (curRows.length===0
         ? emptyStateHtml(editable)
         : (displayRows.length===0
             ? '<div class="empty-state"><p>Nenhuma venda pendente — tudo pago por aqui. 🎉</p>'+
@@ -2953,7 +3002,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       )+
 
       '<div class="tbl-footer">'+
-        (editable && state.rows.length>0 ? '<button class="btn ghost small" data-act="addrow">+ Adicionar linha</button>' : '<span></span>')+
+        (editable && curRows.length>0 ? '<button class="btn ghost small" data-act="addrow">+ Adicionar linha</button>' : '<span></span>')+
         '<span></span>'+
       '</div>';
 
@@ -2981,17 +3030,15 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   }
   function tableTotalsHtml(t){
     var hv = state.hideTableTotals;
+    var mo = t.porPessoaMaoObra || {};
     var out = "";
     out += pcard("Valor total do dia", "yellow", "", hv?'••••':fmtCurrency(t.valor));
-    out += pcard("Bicos", "teal", t.qtdBicos+" un.", fmtCurrency(t.valorBicos));
-    out += pcard("Cambagem", "teal", t.qtdCambagem+" un.", fmtCurrency(t.valorCambagem));
-    out += pcard("Rodas", "teal", t.qtdRodas+" un.", fmtCurrency(t.valorRodas));
+    if (isNovosTbl()) out += pcard("💰 Lucro do dia", t.lucro>=0?"green":"red", t.semCusto>0 ? t.semCusto+" sem custo" : "", hv?'••••':fmtCurrency(t.lucro));
+    out += pcard("Bicos", "teal", t.qtdBicos+" un.", fmtCurrency(t.valorBicos + (mo["Wesley"]||0)));
+    out += pcard("Cambagem", "teal", t.qtdCambagem+" un.", fmtCurrency(t.valorCambagem + (mo["Renan"]||0)));
+    out += pcard("Rodas", "teal", t.qtdRodas+" un.", fmtCurrency(t.valorRodas + (mo["João"]||0)));
     out += pcard("Valor das peças", "teal", "", fmtCurrency(t.valorPecas));
     out += pcard("Mão de obra", "teal", "", fmtCurrency(t.maoDeObra));
-    MAODEOBRA_PESSOAS.forEach(function(p){
-      var v = (t.porPessoaMaoObra && t.porPessoaMaoObra[p]) || 0;
-      if (v>0) out += pcard("M.O. · "+p, "green", "", fmtCurrency(v));
-    });
     if (t.descontos>0) out += pcard("Descontos dados", "red", "", "-"+fmtCurrency(t.descontos));
     out += pcard("💵 Dinheiro", "yellow", "", hv?'••••':fmtCurrency(t.porPagamento["Dinheiro"]));
     out += pcard("📲 Pix", "yellow", "", hv?'••••':fmtCurrency(t.porPagamento["Pix"]));
@@ -3064,6 +3111,10 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       var descNote = descv>0 ? '<div style="font-size:9px;color:var(--yellow);line-height:1.2;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">-'+fmtCurrency(descv)+' desc.</div>' : '';
       return '<div class="'+cellClass+'"><div style="display:flex;flex-direction:column;width:100%;min-width:0;"><input class="cellval computed" value="'+escAttr(fmtCurrency(computedValor))+'" disabled>'+descNote+'</div></div>';
     }
+    if (col.type==="lucro"){
+      var li = lucroCellInfo(row);
+      return '<div class="'+cellClass+'"><input class="cellval lucro-cell" value="'+escAttr(li.text)+'" disabled style="color:'+li.color+';" title="Lucro = valor dos pneus − desconto nos pneus − custo dos pneus"></div>';
+    }
     if (col.type==="medida"){
       return '<div class="'+cellClass+'"><button class="medida-btn'+(row.medida?' has':'')+'" data-act="selectmedida" data-id="'+row.id+'" '+(editable?"":"disabled")+' title="Escolher a medida do pneu">'+
         escHtml(row.medida || "Escolher medida")+'</button></div>';
@@ -3105,7 +3156,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     var t = {valor:0, qtdBicos:0, valorBicos:0, qtdCambagem:0, valorCambagem:0, qtdRodas:0, valorRodas:0, valorPecas:0, maoDeObra:0, descontos:0,
               porPagamento:{"Dinheiro":0, "Pix":0, "Débito":0, "Crédito":0}, porPessoaMaoObra:{}};
     MAODEOBRA_PESSOAS.forEach(function(p){ t.porPessoaMaoObra[p] = 0; });
-    state.rows.forEach(function(r){
+    tblRows().forEach(function(r){
       t.valor += computeValor(r);
       t.qtdBicos += parseNum(r.qtdBicos);
       t.valorBicos += parseNum(r.valorBicos);
@@ -3127,6 +3178,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       t.porPagamento["Débito"] += pb["Débito"];
       t.porPagamento["Crédito"] += pb["Crédito"];
     });
+    t.lucro = 0; t.semCusto = 0;
+    if (isNovosTbl()) tblRows().forEach(function(r){ if (novoTemCusto(r)) t.lucro += novoLucro(r); else if (parseNum(r.valorPneus)>0) t.semCusto++; });
     t.qtdBicos = t.qtdBicos.toFixed(0);
     t.qtdCambagem = t.qtdCambagem.toFixed(0);
     t.qtdRodas = t.qtdRodas.toFixed(0);
@@ -3135,7 +3188,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
 
   // colunas realmente exibidas na tabela agora (algumas ficam escondidas por padrão)
   function visibleColumns(){
-    return COLUMNS.filter(function(c){ return !c.advanced || state.showAdvancedCols; });
+    return (isNovosTbl() ? NV_COLUMNS : COLUMNS).filter(function(c){ return !c.advanced || state.showAdvancedCols; });
   }
   // detecta quantidade e valor de um mesmo grupo (bicos, cambagem, balanceamento, rodas) que não batem
   function pairMismatch(row, key){
@@ -3389,14 +3442,15 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   }
 
   function applyRowOrder(srcId, targetId, where){
+    var rws = tblRows();
     var from = -1, i;
-    for (i=0;i<state.rows.length;i++){ if (state.rows[i].id===srcId){ from=i; break; } }
+    for (i=0;i<rws.length;i++){ if (rws[i].id===srcId){ from=i; break; } }
     if (from===-1) return;
-    var row = state.rows.splice(from,1)[0];
+    var row = rws.splice(from,1)[0];
     var to = -1;
-    for (i=0;i<state.rows.length;i++){ if (state.rows[i].id===targetId){ to=i; break; } }
-    if (to===-1){ state.rows.splice(from,0,row); return; }
-    state.rows.splice(where==="after" ? to+1 : to, 0, row);
+    for (i=0;i<rws.length;i++){ if (rws[i].id===targetId){ to=i; break; } }
+    if (to===-1){ rws.splice(from,0,row); return; }
+    rws.splice(where==="after" ? to+1 : to, 0, row);
     // o DOM já está na ordem certa (foi reordenado ao vivo durante o arraste),
     // então NÃO redesenha a tabela aqui — redesenhar faria a área piscar e
     // atrapalharia quem está olhando; só salva a nova ordem
@@ -3425,7 +3479,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     var vendFiltro = document.getElementById("vendFiltro");
     if (vendFiltro){
       vendFiltro.addEventListener("change", function(){
-        state.vendedorFiltro = vendFiltro.value;
+        if (isNovosTbl()) state.novosVend = vendFiltro.value; else state.vendedorFiltro = vendFiltro.value;
         renderTable();
       });
     }
@@ -3442,7 +3496,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     root.querySelectorAll("[data-act=splitpag]").forEach(function(node){
       node.addEventListener("click", function(){
         var id = node.getAttribute("data-id");
-        var row = state.rows.filter(function(r){return r.id===id;})[0];
+        var row = findTblRow(id);
         if (!row) return;
         var fp = row.formaPagamento || "";
         var parts = fp.split("/");
@@ -3473,7 +3527,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       var handler = function(){
         var id = node.getAttribute("data-id");
         var field = node.getAttribute("data-field");
-        var row = state.rows.filter(function(r){return r.id===id;})[0];
+        var row = findTblRow(id);
         if (!row) return;
         if (field==="formaPagamento") { delete row.splitValor; delete row.pagamentosMultiplos; } // forma mudou: descarta divisões manuais antigas
         row[field] = node.value;
@@ -3512,11 +3566,13 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     if (grid){
       grid.innerHTML = tableTotalsHtml(t);
     }
-    state.rows.forEach(function(r){
+    tblRows().forEach(function(r){
       var rowNode = document.querySelector('.grid-row[data-row="'+r.id+'"]');
       if (!rowNode) return;
       var computedInput = rowNode.querySelector('input.computed');
       if (computedInput) computedInput.value = fmtCurrency(computeValor(r));
+      var lcInput = rowNode.querySelector('input.lucro-cell');
+      if (lcInput){ var lInfo = lucroCellInfo(r); lcInput.value = lInfo.text; lcInput.style.color = lInfo.color; }
     });
   }
 
@@ -3525,8 +3581,9 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   function nextCarroLabel(){
     var col = COLUMNS.filter(function(c){ return c.key==="carro"; })[0];
     var opts = (col && col.options) || [];
-    if (!state.rows.length) return opts[0] || "Carro 1";
-    var last = state.rows[state.rows.length-1].carro || "";
+    var rws = tblRows();
+    if (!rws.length) return opts[0] || "Carro 1";
+    var last = rws[rws.length-1].carro || "";
     var m = /(\d+)\s*$/.exec(last);
     if (!m) return last || opts[0] || "Carro 1";
     var cand = last.replace(/(\d+)\s*$/, String(parseInt(m[1],10)+1));
@@ -3535,23 +3592,29 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
 
   function addRow(){
     var r = newRow();
+    if (isNovosTbl()){
+      var d = tblDate();
+      if (!novoEditable(d)){ state.modal = {type:"auth", error:""}; render(); return; }
+      if (!state.novosRows) novosLoadDay();
+      r.date = d; r.quantidade = "1"; r.cliente = "";
+    }
     r.carro = nextCarroLabel();
-    state.rows.push(r);
+    tblRows().push(r);
     renderTable();
     scheduleSave();
   }
   function delRow(id){
-    var idx = -1;
-    for (var i=0;i<state.rows.length;i++){ if (state.rows[i].id===id){ idx=i; break; } }
+    var idx = -1, rws = tblRows();
+    for (var i=0;i<rws.length;i++){ if (rws[i].id===id){ idx=i; break; } }
     if (idx===-1) return;
-    var row = state.rows[idx];
+    var row = rws[idx];
     releaseRowEstoque(row); // devolve pro estoque o que essa linha havia baixado
-    state.rows.splice(idx, 1);
+    rws.splice(idx, 1);
     delete state.openDetails[id];
     renderTable();
     scheduleSave();
     showUndoToast("Linha apagada", function(){
-      state.rows.splice(idx, 0, row);
+      tblRows().splice(idx, 0, row);
       syncRowEstoque(row); // baixa de novo o estoque que tinha sido devolvido
       renderTable();
       scheduleSave();
@@ -3559,6 +3622,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   }
 
   function scheduleSave(){
+    if (isNovosTbl()){ novosCommit(); return; }
     state.saving = true;
     clearTimeout(saveTimer);
     clearTimeout(autoBackupTimer);
@@ -3704,7 +3768,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   // ---------- modal: cliente já vinculado (mostra os dados, não a lista) ----------
   function renderCustomerLinkedModal(){
     var rowId = state.modal.rowId;
-    var row = state.rows.filter(function(r){return r.id===rowId;})[0];
+    var row = findTblRow(rowId);
     var customer = row ? loadCustomers().filter(function(c){return c.id===row.clienteId;})[0] : null;
     if (!customer){ // vínculo quebrado: cai de volta na escolha
       state.modal = {type:"selectCustomer", rowId: rowId, purpose:"link"};
@@ -3771,7 +3835,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     var customers = loadCustomers();
     var rowId = state.modal.rowId;
     var purpose = state.modal.purpose||"print";
-    var currentRow = state.rows.filter(function(r){return r.id===rowId;})[0];
+    var currentRow = findTblRow(rowId);
     var listHtml = customers.length
       ? customers.map(function(c){
           var sub = [customerDocLabel(c), c.telefone].filter(Boolean).join(" \u00b7 ");
@@ -3801,7 +3865,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       btn.addEventListener("click", function(){
         var cid = btn.getAttribute("data-cid");
         var customer = customers.filter(function(c){return c.id===cid;})[0];
-        var row = state.rows.filter(function(r){return r.id===rowId;})[0];
+        var row = findTblRow(rowId);
         state.modal = null;
         if (row && customer){
           row.clienteId = customer.id; // fica ligado na linha independente de imprimir ou n\u00e3o
@@ -3847,7 +3911,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     var unlinkBtn = document.getElementById("custUnlink");
     if (unlinkBtn){
       unlinkBtn.addEventListener("click", function(){
-        var row = state.rows.filter(function(r){return r.id===rowId;})[0];
+        var row = findTblRow(rowId);
         if (row) { row.clienteId = ""; scheduleSave(); }
         state.modal = null;
         render();
@@ -3942,7 +4006,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         saveOrcamentoDraft();
         render();
       } else if (returnTo==="selectCustomer" && rowId){
-        var row = state.rows.filter(function(r){return r.id===rowId;})[0];
+        var row = findTblRow(rowId);
         if (row){
           row.clienteId = saved.id; // já liga o cliente recém-cadastrado a esta linha
           scheduleSave();
@@ -5050,7 +5114,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   // ---------- modal: dividir o pagamento entre até 4 formas ----------
   function renderMultiPagModal(){
     var rowId = state.modal.rowId;
-    var row = state.rows.filter(function(r){ return r.id===rowId; })[0];
+    var row = findTblRow(rowId);
     if (!row){ state.modal = null; render(); return; }
     var total = computeValor(row);
     var existentes = Array.isArray(row.pagamentosMultiplos) ? row.pagamentosMultiplos.slice() : [];
@@ -5143,7 +5207,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   // ---------- modal: dividir a mão de obra entre Renan / João / Wesley ----------
   function renderMaoDeObraFormModal(){
     var rowId = state.modal.rowId;
-    var row = state.rows.filter(function(r){ return r.id===rowId; })[0];
+    var row = findTblRow(rowId);
     if (!row){ state.modal = null; render(); return; }
     var total = parseNum(row.maoDeObra);
     var existentes = {};
@@ -5154,9 +5218,10 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
 
     var div = document.createElement("div");
     div.className = "overlay";
+    var destinos = {"Renan":"Cambagem","Wesley":"Bicos","João":"Rodas"};
     var linhasHtml = MAODEOBRA_PESSOAS.map(function(p, i){
       return '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">'+
-        '<span style="flex:1.2;font-size:13px;">'+escHtml(p)+'</span>'+
+        '<span style="flex:1.2;font-size:13px;">'+escHtml(p)+' <span style="color:var(--text-faint);font-size:11px;">→ '+escHtml(destinos[p]||"")+'</span></span>'+
         '<input type="text" inputmode="decimal" class="mdValor" data-idx="'+i+'" data-pessoa="'+escAttr(p)+'" placeholder="0,00" value="'+escAttr(existentes[p]!==""?existentes[p]:"")+'" style="flex:1;">'+
       '</div>';
     }).join("");
@@ -5216,7 +5281,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   // ---------- modal: dar desconto numa venda, escolhendo de qual campo ele sai ----------
   function renderDescontoFormModal(){
     var rowId = state.modal.rowId;
-    var row = state.rows.filter(function(r){ return r.id===rowId; })[0];
+    var row = findTblRow(rowId);
     if (!row){ state.modal = null; render(); return; }
     var subtotal = computeSubtotal(row);
     var atual = row.desconto || {origem: DESCONTO_ORIGENS[0].key, valor: ""};
@@ -5317,7 +5382,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   // ---------- modal: escolher a medida na linha da venda ----------
   function renderSelectMedidaModal(){
     var rowId = state.modal.rowId;
-    var row = state.rows.filter(function(r){ return r.id===rowId; })[0];
+    var row = findTblRow(rowId);
     var list = estoqueSorted();
     var div = document.createElement("div");
     div.className = "overlay";
@@ -5398,15 +5463,98 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     div.addEventListener("click", function(e){ if (e.target===div){ state.modal=null; render(); } });
   }
 
-  // ---------- pneus novos (área separada: NÃO entra no dashboard principal, nem nos totais/metas dele) ----------
+  // ---------- pneus novos (faturamento separado do painel principal; só o LUCRO entra nos totais/metas dele) ----------
   var NOVOS_PAYMENTS = PAYMENT_OPTIONS.filter(function(p){ return p.indexOf("Múltiplo")!==0; });
+  // mesmas colunas da tabela principal (COLUMNS); só a quantidade vai até 12
+  var NV_COLUMNS = COLUMNS.map(function(c){
+    var o = {}; Object.keys(c).forEach(function(k){ o[k] = c[k]; });
+    if (o.key==="quantidade") o.options = range(0,12);
+    return o;
+  });
+  // pneus novos: "Custo dos pneus" (total pago pelos pneus da linha, igual ao "Valor dos pneus") e "Lucro" (calculado)
+  (function(){
+    var iv = -1;
+    NV_COLUMNS.forEach(function(c, idx){ if (c.key==="valorPneus") iv = idx; });
+    NV_COLUMNS.splice(iv+1, 0, {key:"custoPneus", label:"Custo dos pneus", type:"currency", w:"115px"});
+    var iValor = -1;
+    NV_COLUMNS.forEach(function(c, idx){ if (c.key==="valor") iValor = idx; });
+    NV_COLUMNS.splice(iValor+1, 0, {key:"lucro", label:"Lucro", type:"lucro", w:"110px"});
+  })();
 
   function novosKey(month){ return K_NOVOS + month; }
-  function loadNovosMonth(month){ return lsGetJSON(novosKey(month), []); }
-  function saveNovosMonth(month, list){ return lsSetJSON(novosKey(month), list); }
+  // gravação adiada: enquanto a pessoa digita na tabela, a lista do mês fica em memória e é salva ~0,5s depois
+  var novosPend = null, novosTimer = null;
+  // vendas antigas: "valor por unidade" vira "Valor dos pneus" (qtd × unit) e a marca passa a fazer parte da medida;
+  // campos que a tabela principal tem e a venda antiga não tinha entram com o valor padrão
+  function migrateNovos(list){
+    list.forEach(function(n){
+      if (n.valorUnit!==undefined){
+        if (!n.valorPneus){ var t = parseNum(n.quantidade)*parseNum(n.valorUnit); n.valorPneus = t>0 ? String(Math.round(t*100)/100) : ""; }
+        delete n.valorUnit;
+      }
+      if (n.marca){
+        var m = (n.medida||"").trim(), mk = String(n.marca).trim();
+        if (mk && m.toLowerCase().indexOf(mk.toLowerCase())===-1) n.medida = (m ? m+" · " : "")+mk;
+        n.marca = "";
+      }
+      if (n.medidaId===undefined) n.medidaId = "";
+      if (n.medidaBaixa===undefined) n.medidaBaixa = 0;
+      if (n.clienteId===undefined) n.clienteId = "";
+      NV_COLUMNS.forEach(function(c){
+        if (c.type==="computed" || c.type==="lucro" || n[c.key]!==undefined) return;
+        n[c.key] = c.type==="select" ? (c.key==="carro" ? "Carro 1" : (c.key==="pago" ? "❌" : (c.key==="formaPagamento" ? "Nenhum" : (c.key==="vendedor" ? VENDEDORES[0] : "0")))) : "";
+      });
+    });
+    return list;
+  }
+  function loadNovosMonth(month){
+    if (novosPend && novosPend.month===month) return novosPend.list;
+    return migrateNovos(lsGetJSON(novosKey(month), []));
+  }
+  function saveNovosMonth(month, list){
+    if (novosPend && novosPend.month===month){ clearTimeout(novosTimer); novosPend = null; }
+    return lsSetJSON(novosKey(month), list);
+  }
+  function flushNovos(){
+    if (!novosPend) return;
+    var p = novosPend;
+    clearTimeout(novosTimer);
+    novosPend = null;
+    lsSetJSON(novosKey(p.month), p.list);
+  }
+  function novosSaveLater(month, list){
+    if (novosPend && novosPend.month!==month) flushNovos();
+    novosPend = {month:month, list:list};
+    clearTimeout(novosTimer);
+    novosTimer = setTimeout(function(){
+      flushNovos();
+      var flag = document.getElementById("saveFlag");
+      if (flag){
+        flag.textContent = "salvo ✓";
+        flag.classList.add("show");
+        setTimeout(function(){ flag.classList.remove("show"); }, 1400);
+      }
+    }, 550);
+  }
+  window.addEventListener("beforeunload", flushNovos);
+  window.addEventListener("pagehide", flushNovos);
   function loadNovosMeta(){ var m = lsGetJSON(K_NOVOS_META, {}); return parseNum(m && m.meta); }
   function saveNovosMeta(v){ return lsSetJSON(K_NOVOS_META, {meta: v}); }
-  function novoTotal(n){ return parseNum(n.quantidade) * parseNum(n.valorUnit); }
+  function novoTotal(n){ return computeValor(n); }
+  // ---- lucro dos pneus novos: (valor dos pneus − desconto dado nos pneus) − custo de compra ----
+  // só conta quando o custo foi informado (sem custo não dá pra saber o lucro)
+  function novoTemCusto(n){ return parseNum(n.custoPneus) > 0; }
+  function novoReceitaPneus(n){
+    var d = n.desconto;
+    var descPneus = (d && (!d.origem || d.origem==="valorPneus")) ? descontoValor(n) : 0;
+    return parseNum(n.valorPneus) - descPneus;
+  }
+  function novoLucro(n){ return novoTemCusto(n) ? novoReceitaPneus(n) - parseNum(n.custoPneus) : 0; }
+  function lucroCellInfo(n){
+    if (!novoTemCusto(n)) return {text:"—", color:"var(--text-faint)"};
+    var l = novoLucro(n);
+    return {text:fmtCurrency(l), color:(l>=0 ? "var(--green)" : "var(--red)")};
+  }
   function novosSorted(list){
     return list.slice().sort(function(a,b){
       if (a.date !== b.date) return a.date < b.date ? 1 : -1;
@@ -5417,20 +5565,26 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   function novoEditable(date){ return date===today || state.authed; }
   function mv(s){ return state.hideValues ? "••••" : s; }
 
+  function isBlankNovo(n){ return !(n.medida||"").trim() && !(n.marca||"").trim() && !(n.cliente||"").trim() && novoTotal(n)===0; }
+
   function novosStats(list){
-    var t = {total:0, qtd:0, count:list.length, pend:0, porVendedor:{}, porPagamento:{"Dinheiro":0,"Pix":0,"Débito":0,"Crédito":0}, porMedida:{}, porDia:{}};
+    var t = {total:0, qtd:0, count:list.length, pend:0, porVendedor:{}, porPagamento:{"Dinheiro":0,"Pix":0,"Débito":0,"Crédito":0}, porMedida:{}, porDia:{}, lucro:0, semCusto:0, receitaCusto:0, qtdCusto:0, lucroDia:{}};
     list.forEach(function(n){
+      if (isBlankNovo(n)){ t.count--; return; }
       var v = novoTotal(n), q = parseNum(n.quantidade);
       t.total += v; t.qtd += q;
+      var l = novoLucro(n);
+      if (novoTemCusto(n)){ t.lucro += l; t.receitaCusto += novoReceitaPneus(n); t.qtdCusto += q; t.lucroDia[n.date] = (t.lucroDia[n.date]||0) + l; }
+      else if (parseNum(n.valorPneus)>0) t.semCusto++;
       if (n.pago!=="✅" && v>0) t.pend += v;
       var vend = (n.vendedor && n.vendedor!=="Nenhum") ? n.vendedor : "Sem vendedor";
-      var pv = t.porVendedor[vend] || (t.porVendedor[vend] = {count:0, total:0, qtd:0});
-      pv.count++; pv.total += v; pv.qtd += q;
-      var b = paymentBreakdown({formaPagamento:n.formaPagamento, valorPneus:v});
+      var pv = t.porVendedor[vend] || (t.porVendedor[vend] = {count:0, total:0, qtd:0, lucro:0});
+      pv.count++; pv.total += v; pv.qtd += q; pv.lucro += l;
+      var b = paymentBreakdown(n);
       Object.keys(b).forEach(function(k){ t.porPagamento[k] += b[k]; });
       var mk = (n.medida||"—").trim() + (n.marca ? " · "+n.marca.trim() : "");
-      var pm = t.porMedida[mk] || (t.porMedida[mk] = {qtd:0, total:0});
-      pm.qtd += q; pm.total += v;
+      var pm = t.porMedida[mk] || (t.porMedida[mk] = {qtd:0, total:0, lucro:0});
+      pm.qtd += q; pm.total += v; pm.lucro += l;
       t.porDia[n.date] = (t.porDia[n.date]||0) + v;
     });
     return t;
@@ -5449,7 +5603,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     return '<div class="nota-row">'+
       '<div>'+
         '<span class="nota-num">'+escHtml(n.medida||"—")+'</span>'+(n.marca ? ' · <span>'+escHtml(n.marca)+'</span>' : '')+
-        ' · <span>'+q+' un.'+(state.hideValues ? '' : ' × '+fmtCurrency(parseNum(n.valorUnit)))+'</span>'+
+        ' · <span>'+q+' un.</span>'+
         '<div class="nota-meta">'+meta+' · '+pago+(n.detalhes ? ' · '+escHtml(n.detalhes) : '')+'</div>'+
       '</div>'+
       '<div style="display:flex;align-items:center;gap:10px;">'+
@@ -5461,6 +5615,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   }
 
   function renderNovos(){
+    if (state.novosTab==="vendas"){ renderNovosVendas(); return; }
     var month = state.novosMonth || today.slice(0,7);
     var tab = state.novosTab==="vendas" ? "vendas" : "dash";
     var list = loadNovosMonth(month);
@@ -5481,34 +5636,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     '</div>';
 
     var body = "";
-    if (tab==="vendas"){
-      var q = (state.novosQuery||"").trim().toLowerCase();
-      var filtered = novosSorted(list).filter(function(n){
-        if (!q) return true;
-        return ((n.medida||"")+" "+(n.marca||"")+" "+(n.cliente||"")+" "+(n.vendedor||"")+" "+(n.detalhes||"")).toLowerCase().indexOf(q)>-1;
-      });
-      var fst = novosStats(filtered);
-      var rowsHtml = filtered.length ? filtered.map(novoRowHtml).join("") :
-        '<div class="aviso-empty">Nenhuma venda de pneu novo em '+escHtml(monthLabel(month))+(q?' para "'+escHtml(state.novosQuery)+'"':'')+'.</div>';
-      body =
-        '<div class="totals-bar">'+
-          tstat("Vendas", fst.count, true)+
-          tstat("Pneus vendidos", mv(fst.qtd))+
-          tstat("Valor total", mv(fmtCurrency(fst.total)))+
-          tstat("A receber (pendentes)", mv(fmtCurrency(fst.pend)))+
-        '</div>'+
-        '<div class="tbl-head">'+
-          '<div class="tbl-head-left"><h2>Vendas de pneus novos</h2></div>'+
-          '<div style="display:flex;gap:8px;flex-wrap:wrap;">'+
-            (state.role==="master" ? '<button class="btn ghost small" data-act="novoscsv" title="Baixar as vendas deste mês em planilha (CSV)">⇩ Exportar CSV</button>' : '')+
-            '<button class="btn primary small" data-act="novosnew">+ Nova venda</button>'+
-          '</div>'+
-        '</div>'+
-        '<div class="card" style="padding:14px 16px;">'+
-          '<input type="text" id="novosSearch" class="dash-cust-search" placeholder="Buscar por medida, marca, cliente ou vendedor..." value="'+escAttr(state.novosQuery||"")+'">'+
-          '<div class="archive-list">'+rowsHtml+'</div>'+
-        '</div>';
-    } else {
+    {
       var points = [];
       for (var i=1;i<=nd;i++){
         var iso = month+"-"+pad(i);
@@ -5551,12 +5679,27 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         card("Ticket médio","green","por venda",mv(fmtCurrency(ticket)))+
         card("A receber","yellow","pendentes",mv(fmtCurrency(st.pend)));
 
+      var margem = st.receitaCusto>0 ? (st.lucro/st.receitaCusto)*100 : 0;
+      var lucroDiaSel = st.lucroDia[selDay]||0;
+      var lucroPneu = st.qtdCusto>0 ? st.lucro/st.qtdCusto : 0;
+      var lucroHeroHtml = '<div style="margin:8px 0 4px;font-size:14px;font-weight:600;color:'+(st.lucro>=0?'var(--green)':'var(--red)')+';">💰 Lucro no mês: '+mv(fmtCurrency(st.lucro))+
+        (st.receitaCusto>0 ? ' <span style="font-weight:400;color:var(--text-dim);">· margem '+(state.hideValues?'••%':margem.toFixed(0)+'%')+'</span>' : '')+'</div>';
+      var lucroCards =
+        card("Lucro do mês", st.lucro>=0?"green":"red", "pneus novos", mv(fmtCurrency(st.lucro)))+
+        card("Lucro do dia", lucroDiaSel>=0?"green":"red", escHtml(fmtDateBR(selDay).slice(0,5)), mv(fmtCurrency(lucroDiaSel)))+
+        card("Margem", "teal", "sobre os pneus", state.hideValues?"••%":margem.toFixed(0)+"%")+
+        card("Lucro por pneu", "teal", "média", mv(fmtCurrency(lucroPneu)));
+      var semCustoNote = st.semCusto>0 ? '<div class="arow-empty" style="margin:-6px 0 16px;color:var(--yellow);">⚠ '+st.semCusto+' venda(s) sem custo informado — ainda não entram no lucro. Preencha "Custo dos pneus" na aba Vendas.</div>' : '';
       var vendNames = Object.keys(st.porVendedor).sort(function(a,b){ return st.porVendedor[b].total - st.porVendedor[a].total; });
       var vendHtml = vendNames.length ? vendNames.map(function(nm){
         var pv = st.porVendedor[nm];
         return card(nm,"teal",mv(pv.count)+' venda(s) · '+mv(pv.qtd)+' un.',mv(fmtCurrency(pv.total)));
       }).join("") : '<div class="arow-empty" style="grid-column:1/-1;">Sem vendas neste mês.</div>';
 
+      var lucroVendHtml = vendNames.filter(function(nm){ return st.porVendedor[nm].lucro!==0; }).map(function(nm){
+        var lv = st.porVendedor[nm].lucro;
+        return card(nm, lv>=0?"green":"red", "lucro", mv(fmtCurrency(lv)));
+      }).join("");
       var payHtml = METODOS_PAGAMENTO.map(function(m){
         return card(m,"green","",mv(fmtCurrency(st.porPagamento[m])));
       }).join("");
@@ -5565,7 +5708,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       var medHtml = medNames.length ? medNames.map(function(nm){
         var pm = st.porMedida[nm];
         return '<div class="arow"><span class="d" style="min-width:0;flex:1;">'+escHtml(nm)+'</span>'+
-          '<span class="stats"><span><b>'+mv(fmtCurrency(pm.total))+'</b></span><span>'+mv(pm.qtd)+' un.</span></span></div>';
+          '<span class="stats"><span><b>'+mv(fmtCurrency(pm.total))+'</b></span><span>'+mv(pm.qtd)+' un.</span>'+(pm.lucro ? '<span style="color:'+(pm.lucro>=0?'var(--green)':'var(--red)')+';">lucro '+mv(fmtCurrency(pm.lucro))+'</span>' : '')+'</span></div>';
       }).join("") : '<div class="arow-empty">Sem vendas neste mês.</div>';
 
       var ontem = novosStats(novosOfDay(yesterday));
@@ -5573,7 +5716,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       var totalParts = fmtCurrency(st.total).split(",");
       var selHtml = selList.length ? selList.map(function(n){
         return '<div class="arow"><span class="d" style="min-width:0;flex:1;">'+escHtml(n.medida||"—")+(n.marca?' · '+escHtml(n.marca):'')+'</span>'+
-          '<span class="stats"><span><b>'+mv(fmtCurrency(novoTotal(n)))+'</b></span><span>'+mv(parseNum(n.quantidade))+' un.</span></span></div>';
+          '<span class="stats"><span><b>'+mv(fmtCurrency(novoTotal(n)))+'</b></span><span>'+mv(parseNum(n.quantidade))+' un.</span>'+(novoTemCusto(n) ? '<span style="color:'+(novoLucro(n)>=0?'var(--green)':'var(--red)')+';">lucro '+mv(fmtCurrency(novoLucro(n)))+'</span>' : '')+'</span></div>';
       }).join("") : '<div class="arow-empty">Nenhuma venda de pneu novo neste dia.</div>';
 
       body =
@@ -5581,7 +5724,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
           '<div class="hero-left">'+
             monthNavHtml.replace(' style="margin-bottom:0;"','')+
             '<div class="big-total">'+(state.hideValues?'••••••':(totalParts[0]+(totalParts[1]?','+totalParts[1]:'')))+'</div>'+
-            '<div class="sub">faturamento de pneus novos no mês</div>'+
+            '<div class="sub">faturamento de pneus novos no mês</div>'+lucroHeroHtml+
             cmpHtml+goalHtml+
           '</div>'+
           '<div class="hero-right">'+
@@ -5590,11 +5733,13 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
           '</div>'+
         '</div>'+
         '<div class="nv-grid">'+kpis+'</div>'+
+        '<div class="nv-sec">Lucros</div><div class="nv-grid">'+lucroCards+'</div>'+semCustoNote+
         '<div class="card" style="margin-bottom:18px;">'+
           '<h3>Vendas de '+escHtml(weekdayLabel(selDay))+' · '+mv(fmtCurrency(selTotal))+'</h3>'+
           '<div class="archive-list">'+selHtml+'</div>'+
         '</div>'+
         '<div class="nv-sec">Por vendedor</div><div class="nv-grid">'+vendHtml+'</div>'+
+        (lucroVendHtml ? '<div class="nv-sec">Lucro por vendedor</div><div class="nv-grid">'+lucroVendHtml+'</div>' : '')+
         '<div class="nv-sec">Por forma de pagamento</div><div class="nv-grid">'+payHtml+'</div>'+
         '<div class="nv-sec">Medidas mais vendidas no mês</div>'+
         '<div class="card" style="padding:6px 8px;margin-bottom:18px;"><div class="archive-list">'+medHtml+'</div></div>'+
@@ -5616,7 +5761,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     }
 
     root.innerHTML =
-      clientesTopbarHtml("Pneus Novos", "VENDAS DE PNEUS NOVOS · FORA DO DASHBOARD PRINCIPAL") +
+      clientesTopbarHtml("Pneus Novos", "VENDAS DE PNEUS NOVOS · O LUCRO ENTRA NA META DO PAINEL") +
       '<div class="nv-topline">'+tabsHtml+(tab==="vendas" ? monthNavHtml : '')+'</div>'+
       body;
 
@@ -5626,7 +5771,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         if (act==="novostab"){ state.novosTab = node.getAttribute("data-tab"); render(); }
         else if (act==="novosprev"){ state.novosMonth = addMonths(month,-1); state.novosDay = null; render(); }
         else if (act==="novosnext"){ state.novosMonth = addMonths(month,1); state.novosDay = null; render(); }
-        else if (act==="novosnew"){ state.modal = {type:"novoForm", itemId:null, month:month, error:""}; render(); }
+        else if (act==="novosnew"){ novosAddFromDash(); }
         else if (act==="novosmeta"){ state.modal = {type:"novosMeta", error:""}; render(); }
         else if (act==="novoscsv"){ exportNovosCSV(novosSorted(list), month); }
         else if (act==="novosedit"){
@@ -5661,30 +5806,53 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     }
   }
 
+
+  // ---------- pneus novos: aba "Vendas" no mesmo formato da tabela diária dos pneus usados ----------
+  // a aba "Vendas" de pneus novos usa a MESMA tabela dos pneus usados (renderTable): mesmas colunas,
+  // botões (cliente, desconto, nota), divisão de pagamento, orçamento, garantia e baixa no estoque
+  function renderNovosVendas(){ renderTable(); }
+
+  function novosAddFromDash(){
+    state.novosTab = "vendas";
+    state.novosDate = today;
+    state.novosOnlyPending = false;
+    state.novosVend = "";
+    state.openDetails = {};
+    novosLoadDay();
+    addRow();
+  }
+
   function deleteNovoWithUndo(id, month){
     var list = loadNovosMonth(month);
     var idx = -1, item = null;
     for (var i=0;i<list.length;i++){ if (list[i].id===id){ idx=i; item=list[i]; break; } }
     if (idx===-1) return;
+    releaseRowEstoque(item); // devolve pro estoque o que essa venda havia baixado
     list.splice(idx,1);
     saveNovosMonth(month, list);
     render();
     showUndoToast("Venda de pneu novo apagada", function(){
       var l2 = loadNovosMonth(month);
       l2.splice(Math.min(idx,l2.length), 0, item);
+      syncRowEstoque(item);
       saveNovosMonth(month, l2);
       render();
     });
   }
 
   function exportNovosCSV(list, month){
-    var lines = [["Data","Medida","Marca","Quantidade","Valor unitário","Total","Forma de pagamento","Pago","Vendedor","Cliente","Detalhes"].map(csvEscape).join(";")];
+    var cols = NV_COLUMNS;
+    var lines = [["Data"].concat(cols.map(function(c){ return c.label; })).concat(["Detalhes"]).map(csvEscape).join(";")];
     list.forEach(function(n){
-      lines.push([
-        fmtDateBR(n.date), n.medida||"", n.marca||"", parseNum(n.quantidade),
-        parseNum(n.valorUnit).toFixed(2).replace(".",","), novoTotal(n).toFixed(2).replace(".",","),
-        n.formaPagamento||"", (n.pago==="✅"?"Pago":"Pendente"), n.vendedor||"", n.cliente||"", n.detalhes||""
-      ].map(csvEscape).join(";"));
+      var cells = [fmtDateBR(n.date)];
+      cols.forEach(function(c){
+        if (c.type==="computed") cells.push(novoTotal(n).toFixed(2).replace(".",","));
+        else if (c.type==="lucro") cells.push(novoTemCusto(n) ? novoLucro(n).toFixed(2).replace(".",",") : "");
+        else if (c.key==="pago") cells.push(n.pago==="✅" ? "Pago" : "Pendente");
+        else cells.push(n[c.key]===undefined ? "" : n[c.key]);
+      });
+      cells.push(n.detalhes||"");
+      lines.push(cells.map(csvEscape).join(";"));
     });
     downloadTextFile("pneus-novos-"+month+".csv", lines.join("\r\n"));
   }
@@ -5703,14 +5871,13 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
             '<div><label>Vendedor</label><select id="nfVend">'+opts(VENDEDORES, item?item.vendedor:VENDEDORES[0])+'</select></div>'+
           '</div>'+
           '<label>Medida</label><input type="text" id="nfMedida" placeholder="Ex: 175/70 R14" value="'+escAttr(item?item.medida:"")+'">'+
-          '<label>Marca</label><input type="text" id="nfMarca" placeholder="Ex: Pirelli" value="'+escAttr(item?item.marca:"")+'">'+
           '<div class="nv-two">'+
             '<div><label>Quantidade</label><input type="text" inputmode="numeric" id="nfQtd" placeholder="1" value="'+escAttr(item?parseNum(item.quantidade):"1")+'"></div>'+
-            '<div><label>Valor por unidade (R$)</label><input type="text" inputmode="decimal" id="nfUnit" placeholder="0,00" value="'+escAttr(item?parseNum(item.valorUnit):"")+'"></div>'+
+            '<div><label>Valor por unidade (R$)</label><input type="text" inputmode="decimal" id="nfUnit" placeholder="0,00" value="'+escAttr(item?(parseNum(item.quantidade)>0 ? Math.round(parseNum(item.valorPneus)/parseNum(item.quantidade)*100)/100 : 0):"")+'"></div>'+
           '</div>'+
           '<div class="nv-total-preview" id="nfTotal"></div>'+
           '<div class="nv-two">'+
-            '<div><label>Forma de pagamento</label><select id="nfPag">'+opts(NOVOS_PAYMENTS, item?item.formaPagamento:"Nenhum")+'</select></div>'+
+            '<div><label>Forma de pagamento</label><select id="nfPag">'+opts((item && NOVOS_PAYMENTS.indexOf(item.formaPagamento)===-1 && item.formaPagamento) ? NOVOS_PAYMENTS.concat([item.formaPagamento]) : NOVOS_PAYMENTS, item?item.formaPagamento:"Nenhum")+'</select></div>'+
             '<div><label>Pago</label><select id="nfPago">'+opts(["❌","✅"], item?item.pago:"❌")+'</select></div>'+
           '</div>'+
           '<label>Cliente (opcional)</label><input type="text" id="nfCliente" list="nfClientes" placeholder="Nome do cliente" value="'+escAttr(item?item.cliente:"")+'">'+
@@ -5744,14 +5911,16 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       if (qtd<=0) return fail("Informe a quantidade.");
       if (unit<=0) return fail("Informe o valor por unidade.");
       if (!novoEditable(date) || (item && !novoEditable(item.date))) return fail("Para lançar ou editar dias anteriores, entre com a senha no painel.");
-      var dados = {
-        id: item ? item.id : uid(),
-        date: date, medida: medida, marca: g("nfMarca").value.trim(),
-        quantidade: String(qtd), valorUnit: String(unit),
-        formaPagamento: g("nfPag").value, pago: g("nfPago").value,
-        vendedor: g("nfVend").value, cliente: g("nfCliente").value.trim(), detalhes: g("nfDet").value.trim(),
-        criadoEm: item ? item.criadoEm : new Date().toISOString()
-      };
+      var dados = {};
+      var base = item || newRow();
+      Object.keys(base).forEach(function(k){ dados[k] = base[k]; });
+      dados.id = item ? item.id : uid();
+      dados.date = date; dados.medida = medida; dados.marca = "";
+      dados.quantidade = String(qtd); dados.valorPneus = String(Math.round(qtd*unit*100)/100);
+      dados.formaPagamento = g("nfPag").value; dados.pago = g("nfPago").value;
+      dados.vendedor = g("nfVend").value; dados.cliente = g("nfCliente").value.trim(); dados.detalhes = g("nfDet").value.trim();
+      dados.criadoEm = item ? item.criadoEm : new Date().toISOString();
+      if (dados.medidaId) syncRowEstoque(dados); // acerta a baixa no estoque se a quantidade mudou
       var newMonth = date.slice(0,7);
       if (item){
         var oldMonth = item.date.slice(0,7);
