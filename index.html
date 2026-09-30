@@ -779,8 +779,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     {key:"valorBalanceamento", label:"Valor do balanceamento", type:"currency", w:"135px", advanced:true},
     {key:"qtdRodas",    label:"Qtd. rodas",              type:"select", w:"82px", options:range(0,5)},
     {key:"valorRodas",  label:"Valor das rodas",         type:"currency", w:"120px"},
-    {key:"outros",      label:"Outros",                  type:"currency", w:"100px", advanced:true},
-    {key:"valorPecas",  label:"Valor das peças",         type:"currency", w:"115px"},
+    {key:"outros",      label:"Outros",                  type:"outros", w:"130px", advanced:true},
+    {key:"valorPecas",  label:"Valor das peças",         type:"pecas", w:"145px"},
     {key:"maoDeObra",   label:"Mão de obra",             type:"maodeobra", w:"140px"},
     {key:"valorPneus",  label:"Valor dos pneus",         type:"currency", w:"115px"},
     {key:"valor",       label:"Valor",                   type:"computed", w:"132px"},
@@ -796,7 +796,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     ["qtdBalanceamento","valorBalanceamento"],
     ["qtdRodas","valorRodas"]
   ];
-  var ROWACTIONS_W = "150px"; // largura da coluna de ações da linha (cliente, imprimir, apagar, arrastar)
+  var ROWACTIONS_W = "186px"; // largura da coluna de ações da linha (cliente, imprimir, apagar, arrastar)
 
   // ---------- storage helpers (localStorage — funciona 100% offline, direto no navegador) ----------
   var K_ROWS = "vo_rows:";
@@ -961,8 +961,36 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
            parseNum(row.valorBalanceamento)+parseNum(row.valorRodas)+parseNum(row.outros)+
            parseNum(row.valorPecas)+parseNum(row.maoDeObra)+parseNum(row.valorPneus);
   }
+  // lista de descontos da venda: aceita o formato novo (row.descontos = [{origem, valor}, ...])
+  // e o antigo (row.desconto = {origem, valor}) das vendas já salvas
+  function descontosList(row){
+    var out = [];
+    if (!row) return out;
+    if (Array.isArray(row.descontos)){
+      row.descontos.forEach(function(d){
+        if (d && parseNum(d.valor)>0) out.push({origem:d.origem||"", valor:Math.max(0,parseNum(d.valor))});
+      });
+    } else if (row.desconto && parseNum(row.desconto.valor)>0){
+      out.push({origem:row.desconto.origem||"", valor:Math.max(0,parseNum(row.desconto.valor))});
+    }
+    return out;
+  }
   function descontoValor(row){
-    return (row && row.desconto && row.desconto.valor) ? Math.max(0, parseNum(row.desconto.valor)) : 0;
+    var t = 0;
+    descontosList(row).forEach(function(d){ t += d.valor; });
+    return t;
+  }
+  // descontos de uma nota já emitida (notas antigas guardam um só: nota.desconto + nota.descontoOrigem)
+  function notaDescontosList(nota){
+    if (Array.isArray(nota.descontos) && nota.descontos.length) return nota.descontos;
+    if (nota.desconto>0) return [{origem:nota.descontoOrigem||"", valor:nota.desconto}];
+    return [];
+  }
+  function notaDescontoLabel(d, comCarro){
+    var partes = [];
+    if (comCarro && d.carro) partes.push(d.carro);
+    if (d.origem) partes.push(descontoOrigemLabel(d.origem));
+    return 'Desconto' + (partes.length ? ' ('+partes.join(' — ')+')' : '');
   }
   function computeValor(row){
     return Math.max(0, computeSubtotal(row) - descontoValor(row));
@@ -1120,6 +1148,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     obj.id = uid();
     obj.quantidade = Math.max(0, parseNum(obj.quantidade));
     obj.preco = Math.max(0, parseNum(obj.preco));
+    obj.custo = Math.max(0, parseNum(obj.custo));
     obj.minimo = Math.max(0, parseNum(obj.minimo));
     list.push(obj);
     saveEstoque(list);
@@ -1132,6 +1161,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         Object.keys(changes).forEach(function(k){ list[i][k] = changes[k]; });
         list[i].quantidade = Math.max(0, parseNum(list[i].quantidade));
         list[i].preco = Math.max(0, parseNum(list[i].preco));
+        if (list[i].custo!==undefined) list[i].custo = Math.max(0, parseNum(list[i].custo));
         list[i].minimo = Math.max(0, parseNum(list[i].minimo));
         break;
       }
@@ -1347,12 +1377,24 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     addItem("Balanceamento", row.qtdBalanceamento, row.valorBalanceamento);
     addItem("Desempeno de roda", row.qtdRodas, row.valorRodas);
     addItem("Mão de obra", 1, row.maoDeObra);
-    addItem("Outros", 1, row.outros);
+    // peças: uma linha por peça informada (o que sobrar do valor total vai como "Peças")
+    var pecasTotal = parseNum(row.valorPecas);
+    var listaPecas = Array.isArray(row.pecasLista) ? row.pecasLista.filter(function(p){ return parseNum(p.valor)>0; }) : [];
+    var somaPecas = listaPecas.reduce(function(sm,p){ return sm+parseNum(p.valor); }, 0);
+    if (listaPecas.length && somaPecas<=pecasTotal+0.005){
+      listaPecas.forEach(function(p){ addItem(p.nome && String(p.nome).trim() ? "Peça — "+String(p.nome).trim() : "Peça", 1, p.valor); });
+      if (pecasTotal-somaPecas>0.005) addItem("Peças (outras)", 1, pecasTotal-somaPecas);
+    } else {
+      addItem("Peças", 1, row.valorPecas);
+    }
+    var outrosDesc = row.outrosDescricao ? String(row.outrosDescricao).trim() : "";
+    addItem(outrosDesc ? "Outros — "+outrosDesc : "Outros", 1, row.outros);
     return items;
   }
 
   // quanto entrou em cada forma de pagamento nesta nota (pra imprimir na garantia/nota)
   function notaPaymentBreakdown(nota){
+    if (nota.pagamentoBuckets) return nota.pagamentoBuckets;
     return paymentBreakdown({
       formaPagamento: nota.formaPagamento,
       pagamentosMultiplos: nota.pagamentosMultiplos,
@@ -1367,15 +1409,71 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     return parts.length ? parts.join(" &middot; ") : "";
   }
 
+  function carroTitulo(c){
+    return (c.carro||"Carro") + (c.medida ? " — "+(c.quantidadePneus>0?c.quantidadePneus+"x ":"")+c.medida : "");
+  }
+  function notaItemRowHtml(it){
+    return '<tr>'+
+      '<td>'+escHtml(it.desc)+'</td>'+
+      '<td class="c">'+it.qty+'</td>'+
+      '<td class="r">'+fmtCurrency(it.unit)+'</td>'+
+      '<td class="r">'+fmtCurrency(it.total)+'</td>'+
+    '</tr>';
+  }
+  // caixa de garantia: seminovos = 3 anos; novos = 5 anos
+  function garantiaBoxHtml(nota){
+    var novos = nota.tipo==="novos";
+    var cobertura = "";
+    if (nota.carros && nota.carros.length>1){
+      var linhas = nota.carros.filter(function(c){ return c.medida; }).map(function(c){ return escHtml(carroTitulo(c)); });
+      if (linhas.length) cobertura = '<p style="text-align:center;font-size:12.5px;"><b>Pneu(s) coberto(s) por esta garantia:</b><br>'+linhas.join('<br>')+'</p>';
+    } else if (nota.medida){
+      cobertura = '<p style="text-align:center;font-size:12.5px;"><b>Pneu(s) coberto(s) por esta garantia:</b> '+(nota.quantidadePneus>0 ? nota.quantidadePneus+'x ' : '')+escHtml(nota.medida)+'</p>';
+    }
+    var exclusoes =
+      '<p><b>Exclusões da Garantia (Avarias Acidentais):</b> A garantia cobre exclusivamente defeitos de estrutura/fabricação e no conserto. <b>*GARANTIA NÃO É SEGURO*</b>.<br>Não possuem cobertura danos decorrentes de uso, acidentes ou fatores externos, tais como:</p>'+
+      '<ul>'+
+        '<li>Pneus cortados, furados ou rasgados;</li>'+
+        '<li>Bolhas ou deformações causadas por impacto em buracos, meio-fio ou obstáculos;</li>'+
+        '<li>Danos causados por rodar sem pressão de ar, suspensão danificada ou falta de alinhamento.</li>'+
+      '</ul>';
+    var devolucao =
+      '<p><b>Políticas de devolução:</b> quaisquer produtos comprados <i>PRESENCIALMENTE EM LOJA FÍSICA</i> com a opção de escolha e análise por conta própria, não se aplica o direto de devolução por insatisfação. Conforme o código de direito do consumidor art.18 nossa empresa tem o dever de resolver o problema em até 30 dias corridos, após esse período, aí sim o cliente tem o seu direito de ter os valores ressarcidos integralmente.</p>';
+    var obs = nota.detalhes ? '<p><b>Observações desta venda:</b> '+escHtml(nota.detalhes).replace(/\n/g,'<br>')+'</p>' : '';
+    var corpo;
+    if (novos){
+      corpo =
+        '<h3>TERMO DE GARANTIA - PNEUS NOVOS</h3>'+
+        cobertura+
+        '<p><b>Cobertura:</b> A garantia para pneus novos é de <b>5 anos</b> a partir da data da compra ou até o desgaste total da banda de rodagem (atingir o indicador TWI/pneu alisar), o que ocorrer primeiro.</p>'+
+        exclusoes+
+        '<p class="alerta">GARANTIA DE 5 ANOS PARA PNEUS NOVOS.</p>'+
+        '<p>A lei nos obriga a dar garantia legal de 90 dias corridos, mas por consideração ao nosso cliente e confiança dos nossos produtos fornecemos garantia de 5 anos depois da data de compra.</p>'+
+        devolucao+obs;
+    } else {
+      corpo =
+        '<h3>TERMO DE GARANTIA - PNEUS SEMINOVOS</h3>'+
+        cobertura+
+        '<p><b>Cobertura:</b> A garantia para pneus seminovos é de 3 anos a partir da data da compra ou até o desgaste total da banda de rodagem (atingir o indicador TWI/pneu alisar), o que ocorrer primeiro.</p>'+
+        exclusoes+
+        '<p class="alerta">VOCÊ COMPROU PNEU USADO, TENHA CONSCIÊNCIA.</p>'+
+        '<p>A lei nos obriga a dar garantia em relação a qualquer produto usado de 90 dias corridos, mas por consideração ao nosso cliente e confiança dos nossos produtos fornecemos garantia de 3 anos depois da data de compra.</p>'+
+        devolucao+obs;
+    }
+    return '<div class="garantia-box">'+corpo+'<div class="assinatura">Assinatura do cliente:</div></div>';
+  }
+
   function buildNotaHtml(nota){
-    var itemsRows = (nota.items||[]).map(function(it){
-      return '<tr>'+
-        '<td>'+escHtml(it.desc)+'</td>'+
-        '<td class="c">'+it.qty+'</td>'+
-        '<td class="r">'+fmtCurrency(it.unit)+'</td>'+
-        '<td class="r">'+fmtCurrency(it.total)+'</td>'+
-      '</tr>';
-    }).join("") || '<tr><td colspan="4" class="c" style="color:#888;">Nenhum item lançado nesta venda.</td></tr>';
+    var itemsRows;
+    if (nota.carros && nota.carros.length>1){
+      // venda vinculada: os itens saem agrupados por carro/linha, numa nota só
+      itemsRows = nota.carros.map(function(c){
+        return '<tr><td colspan="4" style="background:#eee;font-weight:bold;">'+escHtml(carroTitulo(c))+'</td></tr>'+
+          ((c.items||[]).map(notaItemRowHtml).join("") || '<tr><td colspan="4" class="c" style="color:#888;">Nenhum item lançado.</td></tr>');
+      }).join("");
+    } else {
+      itemsRows = (nota.items||[]).map(notaItemRowHtml).join("") || '<tr><td colspan="4" class="c" style="color:#888;">Nenhum item lançado nesta venda.</td></tr>';
+    }
 
     var d = new Date(nota.createdAt);
     var emitido = pad(d.getDate())+"/"+pad(d.getMonth()+1)+"/"+d.getFullYear()+" "+
@@ -1440,7 +1538,13 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         '<tbody>'+itemsRows+'</tbody></table>'+
         '<div class="totals">'+
           '<div><span>Total Produtos</span><span>'+fmtCurrency(nota.subtotal!==undefined?nota.subtotal:nota.totalProdutos)+'</span></div>'+
-          '<div><span>Desconto'+(nota.desconto>0 && nota.descontoOrigem ? ' ('+escHtml(descontoOrigemLabel(nota.descontoOrigem))+')' : '')+'</span><span>'+(nota.desconto>0?'-':'')+fmtCurrency(nota.desconto||0)+'</span></div>'+
+          (function(){
+            var ds = notaDescontosList(nota);
+            if (!ds.length) return '<div><span>Desconto</span><span>'+fmtCurrency(0)+'</span></div>';
+            return ds.map(function(d){
+              return '<div><span>'+escHtml(notaDescontoLabel(d, !!(nota.carros && nota.carros.length>1)))+'</span><span>-'+fmtCurrency(d.valor)+'</span></div>';
+            }).join("");
+          })()+
           '<div><span>Frete</span><span>'+fmtCurrency(0)+'</span></div>'+
           '<div class="grand"><span>TOTAL VENDA</span><span>'+fmtCurrency(nota.totalProdutos)+'</span></div>'+
         '</div>'+
@@ -1448,22 +1552,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
           '<br><span style="font-size:11px;">'+notaPaymentBreakdownHtml(nota)+'</span>'+
         '</div>' : '')+
 
-        '<div class="garantia-box">'+
-          '<h3>TERMO DE GARANTIA - PNEUS SEMINOVOS</h3>'+
-          (nota.medida ? '<p style="text-align:center;font-size:12.5px;"><b>Pneu(s) coberto(s) por esta garantia:</b> '+(nota.quantidadePneus>0 ? nota.quantidadePneus+'x ' : '')+escHtml(nota.medida)+'</p>' : '')+
-          '<p><b>Cobertura:</b> A garantia para pneus seminovos é de 3 anos a partir da data da compra ou até o desgaste total da banda de rodagem (atingir o indicador TWI/pneu alisar), o que ocorrer primeiro.</p>'+
-          '<p><b>Exclusões da Garantia (Avarias Acidentais):</b> A garantia cobre exclusivamente defeitos de estrutura/fabricação e no conserto. <b>*GARANTIA NÃO É SEGURO*</b>.<br>Não possuem cobertura danos decorrentes de uso, acidentes ou fatores externos, tais como:</p>'+
-          '<ul>'+
-            '<li>Pneus cortados, furados ou rasgados;</li>'+
-            '<li>Bolhas ou deformações causadas por impacto em buracos, meio-fio ou obstáculos;</li>'+
-            '<li>Danos causados por rodar sem pressão de ar, suspensão danificada ou falta de alinhamento.</li>'+
-          '</ul>'+
-          '<p class="alerta">VOCÊ COMPROU PNEU USADO, TENHA CONSCIÊNCIA.</p>'+
-          '<p>A lei nos obriga a dar garantia em relação a qualquer produto usado de 90 dias corridos, mas por consideração ao nosso cliente e confiança dos nossos produtos fornecemos garantia de 3 anos depois da data de compra.</p>'+
-          '<p><b>Políticas de devolução:</b> quaisquer produtos comprados <i>PRESENCIALMENTE EM LOJA FÍSICA</i> com a opção de escolha e análise por conta própria, não se aplica o direto de devolução por insatisfação. Conforme o código de direito do consumidor art.18 nossa empresa tem o dever de resolver o problema em até 30 dias corridos, após esse período, aí sim o cliente tem o seu direito de ter os valores ressarcidos integralmente.</p>'+
-          (nota.detalhes ? '<p><b>Observações desta venda:</b> '+escHtml(nota.detalhes).replace(/\n/g,'<br>')+'</p>' : '')+
-          '<div class="assinatura">Assinatura do cliente:</div>'+
-        '</div>'+
+        garantiaBoxHtml(nota)+
 
         '<div class="footer">Painel de Vendas — Oficina</div>'+
       '</body></html>';
@@ -1549,12 +1638,65 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     setTimeout(function(){ win.print(); }, 300);
   }
 
+  function printNotaGrupo(grp, customer){
+    var vendaNum = nextVendaNumber();
+    var carros = [], items = [], descontos = [], detalhes = [], formas = [];
+    var subtotal = 0, total = 0, totalPneus = 0, todosPagos = true;
+    var buckets = {"Dinheiro":0, "Pix":0, "Débito":0, "Crédito":0};
+    grp.forEach(function(r){
+      var its = buildNotaItems(r);
+      var ds = descontosList(r);
+      carros.push({rowId:r.id, carro:r.carro||"", medida:r.medida||"", quantidadePneus:parseNum(r.quantidade)||0,
+                   items:its, subtotal:computeSubtotal(r), descontos:ds, total:computeValor(r)});
+      its.forEach(function(it){ items.push({desc:(r.carro||"Carro")+" — "+it.desc, qty:it.qty, unit:it.unit, total:it.total}); });
+      ds.forEach(function(d){ descontos.push({origem:d.origem, valor:d.valor, carro:r.carro||""}); });
+      subtotal += computeSubtotal(r); total += computeValor(r); totalPneus += parseNum(r.quantidade)||0;
+      var b = paymentBreakdown(r);
+      Object.keys(b).forEach(function(k){ buckets[k] += b[k]; });
+      if (r.formaPagamento && r.formaPagamento!=="Nenhum" && formas.indexOf(r.formaPagamento)===-1) formas.push(r.formaPagamento);
+      if (r.pago!=="✅") todosPagos = false;
+      if (r.detalhes) detalhes.push((r.carro||"Carro")+": "+r.detalhes);
+    });
+    var descTotal = 0; descontos.forEach(function(d){ descTotal += d.valor; });
+    var nota = {
+      id: uid(),
+      vendaNum: vendaNum,
+      date: tblDate(),
+      tipo: isNovosTbl() ? "novos" : "seminovos",
+      rowId: grp[0].id,
+      rowIds: grp.map(function(r){ return r.id; }),
+      customerId: customer.id,
+      customer: {
+        nome: customer.nome||"", tipoDocumento: (customer.tipoDocumento||"cpf"), documento: (customer.documento||customer.cpf||""), email: customer.email||"",
+        telefone: customer.telefone||"", endereco: customer.endereco||""
+      },
+      carros: carros,
+      items: items,
+      medida: "",
+      quantidadePneus: totalPneus,
+      subtotal: subtotal,
+      desconto: descTotal,
+      descontos: descontos,
+      descontoOrigem: "",
+      totalProdutos: total,
+      formaPagamento: formas.join(" + "),
+      pagamentoBuckets: buckets,
+      pago: todosPagos ? "✅" : "❌",
+      detalhes: detalhes.join("\n"),
+      createdAt: Date.now()
+    };
+    addNota(nota);
+    openPrintWindow(buildNotaHtml(nota));
+  }
+
   function printNota(row, customer){
+    if (groupRows(row).length>1){ return printNotaGrupo(groupRows(row), customer); }
     var vendaNum = nextVendaNumber();
     var nota = {
       id: uid(),
       vendaNum: vendaNum,
       date: tblDate(),
+      tipo: isNovosTbl() ? "novos" : "seminovos",
       rowId: row.id,
       customerId: customer.id,
       customer: {
@@ -1566,7 +1708,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       quantidadePneus: parseNum(row.quantidade)||0,
       subtotal: computeSubtotal(row),
       desconto: descontoValor(row),
-      descontoOrigem: (row.desconto && row.desconto.origem) || "",
+      descontos: descontosList(row),
+      descontoOrigem: (descontosList(row)[0] && descontosList(row)[0].origem) || "",
       totalProdutos: computeValor(row),
       formaPagamento: row.formaPagamento||"",
       pagamentosMultiplos: Array.isArray(row.pagamentosMultiplos) ? row.pagamentosMultiplos : null,
@@ -2806,12 +2949,24 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       sessionStorage.setItem("vf_hide_table", state.hideTableTotals?"1":"0");
       render();
     }
+    else if (act==="pecas"){
+      state.modal = {type:"pecasForm", rowId: node.getAttribute("data-id")};
+      render();
+    }
+    else if (act==="outrosdesc"){
+      state.modal = {type:"outrosForm", rowId: node.getAttribute("data-id")};
+      render();
+    }
     else if (act==="maodeobra"){
       state.modal = {type:"maoDeObraForm", rowId: node.getAttribute("data-id")};
       render();
     }
     else if (act==="desconto"){
       state.modal = {type:"descontoForm", rowId: node.getAttribute("data-id"), error:""};
+      render();
+    }
+    else if (act==="linksales"){
+      state.modal = {type:"linkSales", rowId: node.getAttribute("data-id")};
       render();
     }
     else if (act==="printnote"){
@@ -3066,6 +3221,15 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   }
 
   // nome do cliente vinculado direto à linha (ligado sem precisar imprimir a nota)
+  // vendas vinculadas entre si (mesmo grupoId, mesma tabela/dia): imprimem numa nota única
+  function groupRows(row){
+    if (!row || !row.grupoId) return row ? [row] : [];
+    var g = tblRows().filter(function(r){ return r.grupoId===row.grupoId; });
+    return g.length>1 ? g : [row];
+  }
+  function rowResumo(r){
+    return (r.carro||"Carro") + (r.medida ? " — "+(parseNum(r.quantidade)>0?parseNum(r.quantidade)+"x ":"")+r.medida : "");
+  }
   function customerNameById(id){
     if (!id) return "";
     var c = loadCustomers().filter(function(x){ return x.id===id; })[0];
@@ -3079,7 +3243,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     var hasDesc = descontoValor(row)>0;
     cells += '<div class="cell rowactions">'+
       '<button class="icon-btn cli-btn'+(custName?' has':'')+'" data-act="linkcustomer" data-id="'+row.id+'" title="'+(custName?('Cliente: '+escAttr(custName)+' — clique para ver os dados'):'Vincular cliente a esta linha')+'">👤</button>'+
-      '<button class="icon-btn'+(hasDesc?' has':'')+'" data-act="desconto" data-id="'+row.id+'" title="'+(hasDesc?('Desconto: -'+escAttr(fmtCurrency(descontoValor(row)))):'Dar desconto nesta venda')+'">🏷</button>'+
+      '<button class="icon-btn'+(hasDesc?' has':'')+'" data-act="desconto" data-id="'+row.id+'" title="'+(hasDesc?('Descontos ('+descontosList(row).length+'): -'+escAttr(fmtCurrency(descontoValor(row)))):'Dar desconto nesta venda')+'">🏷</button>'+
+      '<button class="icon-btn'+(groupRows(row).length>1?' has':'')+'" data-act="linksales" data-id="'+row.id+'" title="'+(groupRows(row).length>1?('Vinculada a mais '+(groupRows(row).length-1)+' venda(s) — imprime numa nota só. Clique para alterar'):'Vincular a outra venda do mesmo cliente (nota e garantia únicas)')+'">🔗</button>'+
       '<button class="icon-btn print-btn" data-act="printnote" data-id="'+row.id+'" title="Imprimir nota">🖨</button>'+
       (editable ? '<button class="icon-btn" data-act="delrow" data-id="'+row.id+'" title="Remover linha">✕</button>' : '')+
       (editable ? '<button class="icon-btn drag-btn" data-drag="'+row.id+'" title="Segure e arraste para mover a venda para cima ou para baixo">⣿</button>' : '')+
@@ -3137,6 +3302,20 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         '</div>';
       }
       return '<div class="'+cellClass+'"'+warnTitle+'>'+selectHtml+'</div>';
+    }
+    if (col.type==="pecas"){
+      var pcInput = '<input class="cellval" type="text" inputmode="decimal" data-field="valorPecas" data-id="'+row.id+'" value="'+escAttr(val)+'" '+(editable?"":"disabled")+' placeholder="R$ 0,00" style="flex:1;min-width:0;">';
+      var hasPecas = Array.isArray(row.pecasLista) && row.pecasLista.length>0;
+      return '<div class="'+cellClass+'"'+warnTitle+' style="display:flex;gap:4px;align-items:center;">'+pcInput+
+        '<button class="icon-btn'+(hasPecas?' has':'')+'" data-act="pecas" data-id="'+row.id+'" title="'+(hasPecas?('Peças informadas: '+row.pecasLista.length+' — clique para ver/alterar'):'Informar quais peças foram e o valor de cada uma')+'" '+(editable?"":"disabled")+' style="flex:0 0 auto;">⚙</button>'+
+      '</div>';
+    }
+    if (col.type==="outros"){
+      var otInput = '<input class="cellval" type="text" inputmode="decimal" data-field="outros" data-id="'+row.id+'" value="'+escAttr(val)+'" '+(editable?"":"disabled")+' placeholder="R$ 0,00" style="flex:1;min-width:0;">';
+      var hasOutros = !!(row.outrosDescricao && String(row.outrosDescricao).trim());
+      return '<div class="'+cellClass+'"'+warnTitle+' style="display:flex;gap:4px;align-items:center;">'+otInput+
+        '<button class="icon-btn'+(hasOutros?' has':'')+'" data-act="outrosdesc" data-id="'+row.id+'" title="'+(hasOutros?('Outros: '+escAttr(row.outrosDescricao)):'Identificar o que foi esse outros')+'" '+(editable?"":"disabled")+' style="flex:0 0 auto;">⚙</button>'+
+      '</div>';
     }
     if (col.type==="maodeobra"){
       var mdInput = '<input class="cellval" type="text" inputmode="decimal" data-field="maoDeObra" data-id="'+row.id+'" value="'+escAttr(val)+'" '+(editable?"":"disabled")+' placeholder="R$ 0,00" style="flex:1;min-width:0;">';
@@ -3668,7 +3847,10 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     else if (state.modal.type==="novoForm") renderNovoFormModal();
     else if (state.modal.type==="novosMeta") renderNovosMetaModal();
     else if (state.modal.type==="maoDeObraForm") renderMaoDeObraFormModal();
+    else if (state.modal.type==="pecasForm") renderPecasFormModal();
+    else if (state.modal.type==="outrosForm") renderOutrosFormModal();
     else if (state.modal.type==="descontoForm") renderDescontoFormModal();
+    else if (state.modal.type==="linkSales") renderLinkSalesModal();
     else if (state.modal.type==="notaView") renderNotaViewModal();
     else renderAuthModal();
   }
@@ -3852,6 +4034,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         '<p>'+(purpose==="link"
             ? "Escolha quem comprou nesta linha. Isso fica salvo mesmo sem imprimir \u2014 d\u00e1 pra ver depois quem levou e religar uma nota a qualquer momento."
             : "Escolha quem comprou para gerar a nota. Se o cliente ainda n\u00e3o estiver cadastrado, use o bot\u00e3o abaixo.")+'</p>'+
+        (purpose!=="link" && currentRow && groupRows(currentRow).length>1 ? '<p style="font-size:12.5px;color:var(--text);">🔗 Esta nota vai juntar '+groupRows(currentRow).length+' vendas vinculadas: '+escHtml(groupRows(currentRow).map(rowResumo).join(" · "))+'.</p>' : '')+
         (customers.length ? '<input type="text" id="custSearch" class="search-input" placeholder="Buscar por nome, CPF ou telefone...">' : '')+
         '<div class="cust-list" id="custList">'+listHtml+'</div>'+
         '<div class="modal-actions" style="justify-content:space-between;margin-top:14px;">'+
@@ -3868,7 +4051,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         var row = findTblRow(rowId);
         state.modal = null;
         if (row && customer){
-          row.clienteId = customer.id; // fica ligado na linha independente de imprimir ou n\u00e3o
+          groupRows(row).forEach(function(r){ r.clienteId = customer.id; }); // fica ligado na linha (e nas vendas vinculadas) independente de imprimir ou n\u00e3o
           scheduleSave();
         }
         render();
@@ -4062,6 +4245,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       '<span class="stats">'+
         '<span><b'+(qtd<=0?' class="est-zero"':'')+'>'+qtd+' un.</b></span>'+
         '<span>'+fmtCurrency(parseNum(i.preco))+'</span>'+
+        (state.role==="master" && parseNum(i.custo)>0 ? '<span style="color:var(--text-faint);font-size:11px;" title="Preço de custo por unidade">custo '+fmtCurrency(parseNum(i.custo))+'</span>' : '')+
         '<span class="est-actions">'+
           '<button class="icon-btn" data-est-out="'+escAttr(i.id)+'" title="Retirar do estoque">−</button>'+
           '<button class="icon-btn" data-est-in="'+escAttr(i.id)+'" title="Adicionar ao estoque">+</button>'+
@@ -4957,6 +5141,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
           '<label>Marca</label><input type="text" id="efMarca" placeholder="Ex: Pirelli" value="'+escAttr(item?item.marca:"")+'">'+
           '<label>Quantidade em estoque</label><input type="text" inputmode="numeric" id="efQtd" placeholder="0" value="'+escAttr(item?Math.max(0,parseNum(item.quantidade)):"")+'">'+
           '<label>Preço por unidade (R$)</label><input type="text" inputmode="decimal" id="efPreco" placeholder="0,00" value="'+escAttr(item?parseNum(item.preco):"")+'">'+
+          (state.role==="master" ? '<label>Preço de custo por unidade (R$) — quanto você pagou no pneu</label><input type="text" inputmode="decimal" id="efCusto" placeholder="0,00" value="'+escAttr(item&&parseNum(item.custo)>0?parseNum(item.custo):"")+'">' : '')+
           '<label>Estoque mínimo (avisa quando ficar abaixo — deixe 0 pra não avisar)</label><input type="text" inputmode="numeric" id="efMinimo" placeholder="0" value="'+escAttr(item?Math.max(0,parseNum(item.minimo)):"")+'">'+
         '</div>'+
         '<div class="err">'+escHtml(state.modal.error||"")+'</div>'+
@@ -4992,6 +5177,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         preco: document.getElementById("efPreco").value,
         minimo: document.getElementById("efMinimo").value
       };
+      if (document.getElementById("efCusto")) dados.custo = document.getElementById("efCusto").value; // só o master vê/edita o custo
       if (item){
         var antes = Math.max(0, parseNum(item.quantidade));
         var depois = Math.max(0, parseNum(dados.quantidade));
@@ -5278,61 +5464,267 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     });
   }
 
+  // ---------- modal: quais peças foram e quanto custou cada uma ----------
+  function renderPecasFormModal(){
+    var row = findTblRow(state.modal.rowId);
+    if (!row){ state.modal = null; render(); return; }
+    var lista = Array.isArray(row.pecasLista) && row.pecasLista.length ? row.pecasLista.map(function(p){ return {nome:p.nome||"", valor:p.valor}; }) : [{nome:"", valor:""}];
+    var div = document.createElement("div");
+    div.className = "overlay";
+    div.innerHTML =
+      '<div class="modal wide">'+
+        '<h3>Peças desta venda</h3>'+
+        '<p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;">Informe qual peça foi e o valor de cada uma. A soma vira o "Valor das peças" e sai na nota/garantia.</p>'+
+        '<div id="pcLinhas"></div>'+
+        '<button class="btn ghost small" id="pcAdd" style="margin:4px 0 10px;">+ Adicionar peça</button>'+
+        '<div id="pcResumo" style="font-size:12.5px;color:var(--text-dim);margin:6px 2px 12px;"></div>'+
+        '<div class="modal-actions">'+
+          '<button class="btn ghost small" id="pcCancel">Voltar</button>'+
+          '<button class="btn primary small" id="pcSave">Salvar</button>'+
+        '</div>'+
+      '</div>';
+    document.body.appendChild(div);
+    var box = div.querySelector("#pcLinhas");
+    function lerDosCampos(){
+      var out = [];
+      box.querySelectorAll(".pcLinha").forEach(function(ln){
+        out.push({nome: ln.querySelector(".pcNome").value, valor: ln.querySelector(".pcValor").value});
+      });
+      return out;
+    }
+    function resumo(){
+      var soma = lerDosCampos().reduce(function(sm,p){ return sm+parseNum(p.valor); }, 0);
+      div.querySelector("#pcResumo").innerHTML = 'Total das peças: <b style="color:var(--text);">'+fmtCurrency(soma)+'</b>';
+    }
+    function desenhar(){
+      box.innerHTML = lista.map(function(p,i){
+        return '<div class="pcLinha" style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">'+
+          '<input type="text" class="pcNome" placeholder="Qual peça (ex: pastilha de freio)" value="'+escAttr(p.nome)+'" style="flex:2;min-width:0;">'+
+          '<input type="text" inputmode="decimal" class="pcValor" placeholder="0,00" value="'+escAttr(p.valor!==""&&p.valor!==undefined?String(p.valor).replace(".",","):"")+'" style="flex:1;min-width:0;">'+
+          '<button class="icon-btn pcDel" data-i="'+i+'" title="Remover peça" style="flex:0 0 auto;">✕</button>'+
+        '</div>';
+      }).join("");
+      box.querySelectorAll(".pcValor,.pcNome").forEach(function(el){ el.addEventListener("input", resumo); });
+      box.querySelectorAll(".pcDel").forEach(function(b){
+        b.addEventListener("click", function(){
+          lista = lerDosCampos();
+          lista.splice(parseInt(b.getAttribute("data-i"),10),1);
+          if (!lista.length) lista.push({nome:"", valor:""});
+          desenhar();
+        });
+      });
+      resumo();
+    }
+    desenhar();
+    div.querySelector("#pcAdd").addEventListener("click", function(){
+      lista = lerDosCampos();
+      lista.push({nome:"", valor:""});
+      desenhar();
+      var nomes = box.querySelectorAll(".pcNome");
+      if (nomes.length) nomes[nomes.length-1].focus();
+    });
+    function goBack(){ state.modal = null; render(); }
+    div.querySelector("#pcCancel").addEventListener("click", goBack);
+    div.addEventListener("click", function(e){ if (e.target===div) goBack(); });
+    div.querySelector("#pcSave").addEventListener("click", function(){
+      var final = lerDosCampos().map(function(p){ return {nome:String(p.nome||"").trim(), valor:parseNum(p.valor)}; })
+        .filter(function(p){ return p.nome || p.valor>0; });
+      if (final.length){
+        row.pecasLista = final;
+        var soma = final.reduce(function(sm,p){ return sm+p.valor; }, 0);
+        row.valorPecas = soma>0 ? soma.toFixed(2).replace(".",",") : "";
+      } else {
+        delete row.pecasLista;
+      }
+      state.modal = null;
+      render();
+      scheduleSave();
+    });
+  }
+
+  // ---------- modal: identificar o que foi o "outros" ----------
+  function renderOutrosFormModal(){
+    var row = findTblRow(state.modal.rowId);
+    if (!row){ state.modal = null; render(); return; }
+    var div = document.createElement("div");
+    div.className = "overlay";
+    div.innerHTML =
+      '<div class="modal wide">'+
+        '<h3>O que foi o "Outros"?</h3>'+
+        '<p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;">Valor em "Outros" nesta venda: <b style="color:var(--text);">'+fmtCurrency(parseNum(row.outros))+'</b>. A descrição sai na nota/garantia.</p>'+
+        '<input type="text" id="otDesc" placeholder="Ex: troca de válvula, frete, taxa de montagem..." value="'+escAttr(row.outrosDescricao||"")+'" style="width:100%;box-sizing:border-box;margin-bottom:12px;">'+
+        '<div class="modal-actions">'+
+          '<button class="btn ghost small" id="otCancel">Voltar</button>'+
+          '<button class="btn primary small" id="otSave">Salvar</button>'+
+        '</div>'+
+      '</div>';
+    document.body.appendChild(div);
+    var inp = div.querySelector("#otDesc");
+    inp.focus();
+    function goBack(){ state.modal = null; render(); }
+    function salvar(){
+      var t = inp.value.trim();
+      if (t) row.outrosDescricao = t; else delete row.outrosDescricao;
+      state.modal = null;
+      render();
+      scheduleSave();
+    }
+    div.querySelector("#otCancel").addEventListener("click", goBack);
+    div.addEventListener("click", function(e){ if (e.target===div) goBack(); });
+    div.querySelector("#otSave").addEventListener("click", salvar);
+    inp.addEventListener("keydown", function(e){ if (e.key==="Enter") salvar(); });
+  }
+
   // ---------- modal: dar desconto numa venda, escolhendo de qual campo ele sai ----------
+  // ---------- modal: vincular vendas do mesmo cliente (uma nota e uma garantia só) ----------
+  function renderLinkSalesModal(){
+    var row = findTblRow(state.modal.rowId);
+    if (!row){ state.modal = null; render(); return; }
+    var outras = tblRows().filter(function(r){ return r.id!==row.id; });
+    var atuais = groupRows(row).map(function(r){ return r.id; });
+    var listHtml = outras.length ? outras.map(function(r){
+      var cli = customerNameById(r.clienteId);
+      return '<label class="cust-item" style="display:flex;gap:10px;align-items:center;cursor:pointer;text-align:left;">'+
+        '<input type="checkbox" data-lsid="'+escAttr(r.id)+'"'+(atuais.indexOf(r.id)>-1?' checked':'')+' style="width:auto;margin:0;flex:0 0 auto;">'+
+        '<span style="flex:1;min-width:0;display:flex;flex-direction:column;">'+
+          '<span class="cust-name">'+escHtml(rowResumo(r))+'</span>'+
+          '<span class="cust-sub">'+fmtCurrency(computeValor(r))+(cli?' · '+escHtml(cli):'')+'</span>'+
+        '</span></label>';
+    }).join("") : '<div class="cust-empty">Não há outras vendas neste dia. Adicione a outra linha (por exemplo, o outro carro) e volte aqui.</div>';
+    var div = document.createElement("div");
+    div.className = "overlay";
+    div.innerHTML =
+      '<div class="modal wide">'+
+        '<h3>🔗 Vincular vendas do mesmo cliente</h3>'+
+        '<p>Venda atual: <b style="color:var(--text);">'+escHtml(rowResumo(row))+'</b><br>Marque as outras linhas que são do mesmo cliente (ex.: uma linha por carro). Ao imprimir, sai <b>uma nota e uma garantia só</b> com tudo.</p>'+
+        '<div class="cust-list" style="max-height:260px;">'+listHtml+'</div>'+
+        '<div class="modal-actions" style="margin-top:14px;">'+
+          '<button class="btn ghost small" id="lsCancel">Cancelar</button>'+
+          '<button class="btn primary small" id="lsSave">Salvar vínculo</button>'+
+        '</div>'+
+      '</div>';
+    document.body.appendChild(div);
+    function close(){ state.modal = null; render(); }
+    document.getElementById("lsCancel").addEventListener("click", close);
+    div.addEventListener("click", function(e){ if (e.target===div) close(); });
+    document.getElementById("lsSave").addEventListener("click", function(){
+      var marcados = [];
+      div.querySelectorAll("[data-lsid]").forEach(function(c){ if (c.checked) marcados.push(c.getAttribute("data-lsid")); });
+      var antes = groupRows(row);
+      var novos = [row].concat(outras.filter(function(r){ return marcados.indexOf(r.id)>-1; }));
+      var envolvidos = {};
+      novos.forEach(function(r){ if (r.grupoId) envolvidos[r.grupoId] = true; });
+      // quem estava vinculado e foi desmarcado sai do grupo
+      antes.forEach(function(r){ if (novos.indexOf(r)===-1) delete r.grupoId; });
+      if (novos.length<2){
+        novos.forEach(function(r){ delete r.grupoId; });
+      } else {
+        var gid = row.grupoId || (novos.filter(function(r){ return r.grupoId; })[0]||{}).grupoId || uid();
+        // se juntou com outro grupo já existente, o grupo inteiro entra
+        tblRows().forEach(function(r){ if (r.grupoId && envolvidos[r.grupoId]) r.grupoId = gid; });
+        novos.forEach(function(r){ r.grupoId = gid; });
+        // o cliente da compra vale para todas as linhas do grupo
+        var cid = novos.map(function(r){ return r.clienteId; }).filter(Boolean)[0];
+        if (cid) novos.forEach(function(r){ if (!r.clienteId) r.clienteId = cid; });
+      }
+      state.modal = null;
+      render();
+      scheduleSave();
+    });
+  }
+
   function renderDescontoFormModal(){
     var rowId = state.modal.rowId;
     var row = findTblRow(rowId);
     if (!row){ state.modal = null; render(); return; }
     var subtotal = computeSubtotal(row);
-    var atual = row.desconto || {origem: DESCONTO_ORIGENS[0].key, valor: ""};
+    var linhas = descontosList(row).map(function(d){ return {origem:d.origem||DESCONTO_ORIGENS[0].key, valor:d.valor}; });
+    if (!linhas.length) linhas.push({origem: DESCONTO_ORIGENS[0].key, valor: ""});
 
     var div = document.createElement("div");
     div.className = "overlay";
-    var opts = DESCONTO_ORIGENS.map(function(o){
-      return '<option value="'+escAttr(o.key)+'"'+(o.key===atual.origem?' selected':'')+'>'+escHtml(o.label)+'</option>';
-    }).join("");
     div.innerHTML =
-      '<div class="modal">'+
-        '<h3>Desconto nesta venda</h3>'+
-        '<p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;">Subtotal da venda: <b style="color:var(--text);">'+fmtCurrency(subtotal)+'</b></p>'+
-        '<div class="field-group">'+
-          '<label>Valor do desconto (R$)</label>'+
-          '<input type="text" inputmode="decimal" id="dscValor" placeholder="0,00" value="'+escAttr(atual.valor!==""&&atual.valor!==undefined&&atual.valor!==null?parseNum(atual.valor):"")+'">'+
-          '<label>De qual valor esse desconto vai sair</label>'+
-          '<select id="dscOrigem">'+opts+'</select>'+
-        '</div>'+
-        '<div id="dscResumo" style="font-size:12.5px;color:var(--text-dim);margin:0 2px 12px;"></div>'+
+      '<div class="modal wide">'+
+        '<h3>Descontos nesta venda</h3>'+
+        '<p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;">Subtotal da venda: <b style="color:var(--text);">'+fmtCurrency(subtotal)+'</b><br>Dá pra lançar mais de um desconto, cada um saindo de um campo diferente.</p>'+
+        '<div id="dscLinhas"></div>'+
+        '<button class="btn ghost small" id="dscAdd" style="margin:2px 0 12px;">+ Adicionar outro desconto</button>'+
+        '<div id="dscResumo" style="font-size:12.5px;color:var(--text-dim);margin:0 2px 12px;line-height:1.7;"></div>'+
         '<div class="err"></div>'+
         '<div class="modal-actions">'+
-          (row.desconto ? '<button class="btn ghost small" id="dscRemove" style="margin-right:auto;">Remover desconto</button>' : '')+
+          (descontosList(row).length ? '<button class="btn ghost small" id="dscRemove" style="margin-right:auto;">Remover todos</button>' : '')+
           '<button class="btn ghost small" id="dscCancel">Cancelar</button>'+
           '<button class="btn primary small" id="dscSave">Salvar</button>'+
         '</div>'+
       '</div>';
     document.body.appendChild(div);
     function g(id){ return document.getElementById(id); }
-    function atualizarResumo(){
-      var v = Math.max(0, parseNum(g("dscValor").value));
-      g("dscResumo").innerHTML = "Total final da venda: <b style=\"color:var(--text);\">"+fmtCurrency(Math.max(0, subtotal-v))+"</b>";
+    function lerLinhas(){
+      var vs = div.querySelectorAll("[data-dsc-valor]"), os = div.querySelectorAll("[data-dsc-origem]");
+      for (var k=0;k<linhas.length;k++){
+        if (vs[k]) linhas[k].valor = vs[k].value;
+        if (os[k]) linhas[k].origem = os[k].value;
+      }
     }
-    atualizarResumo();
-    g("dscValor").addEventListener("input", atualizarResumo);
-    g("dscValor").focus();
+    function atualizarResumo(){
+      lerLinhas();
+      var tot = 0;
+      linhas.forEach(function(l){ tot += Math.max(0, parseNum(l.valor)); });
+      g("dscResumo").innerHTML = 'Total de descontos: <b style="color:var(--red);">-'+fmtCurrency(tot)+'</b><br>Total final da venda: <b style="color:var(--text);">'+fmtCurrency(Math.max(0, subtotal-tot))+'</b>';
+    }
+    function desenharLinhas(){
+      g("dscLinhas").innerHTML = linhas.map(function(l, idx){
+        var opts = DESCONTO_ORIGENS.map(function(o){
+          return '<option value="'+escAttr(o.key)+'"'+(o.key===l.origem?' selected':'')+'>'+escHtml(o.label)+'</option>';
+        }).join("");
+        return '<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;">'+
+          '<div style="flex:0 0 120px;"><label style="font-size:11px;">Valor (R$)</label>'+
+            '<input type="text" inputmode="decimal" data-dsc-valor placeholder="0,00" style="margin-bottom:0;" value="'+escAttr(l.valor!==""&&l.valor!==undefined&&l.valor!==null?parseNum(l.valor):"")+'"></div>'+
+          '<div style="flex:1;min-width:0;"><label style="font-size:11px;">Sai de</label>'+
+            '<select data-dsc-origem style="margin-bottom:0;">'+opts+'</select></div>'+
+          (linhas.length>1 ? '<button class="icon-btn" data-dsc-del="'+idx+'" title="Tirar este desconto" style="margin-top:20px;">✕</button>' : '')+
+        '</div>';
+      }).join("");
+      div.querySelectorAll("[data-dsc-valor]").forEach(function(n){ n.addEventListener("input", atualizarResumo); });
+      div.querySelectorAll("[data-dsc-origem]").forEach(function(n){ n.addEventListener("change", atualizarResumo); });
+      div.querySelectorAll("[data-dsc-del]").forEach(function(b){
+        b.addEventListener("click", function(){
+          lerLinhas();
+          linhas.splice(parseInt(b.getAttribute("data-dsc-del"),10), 1);
+          desenharLinhas();
+        });
+      });
+      atualizarResumo();
+    }
+    desenharLinhas();
+    var primeiro = div.querySelector("[data-dsc-valor]"); if (primeiro) primeiro.focus();
+    g("dscAdd").addEventListener("click", function(){
+      lerLinhas();
+      // sugere o próximo campo ainda não usado
+      var usados = linhas.map(function(l){ return l.origem; });
+      var livre = DESCONTO_ORIGENS.filter(function(o){ return usados.indexOf(o.key)===-1; })[0];
+      linhas.push({origem: (livre||DESCONTO_ORIGENS[0]).key, valor: ""});
+      desenharLinhas();
+      var vs = div.querySelectorAll("[data-dsc-valor]"); if (vs.length) vs[vs.length-1].focus();
+    });
     function close(){ state.modal = null; render(); }
     g("dscCancel").addEventListener("click", close);
     div.addEventListener("click", function(e){ if (e.target===div) close(); });
     if (g("dscRemove")){
       g("dscRemove").addEventListener("click", function(){
-        delete row.desconto;
+        delete row.desconto; delete row.descontos;
         state.modal = null;
         render();
         scheduleSave();
       });
     }
     g("dscSave").addEventListener("click", function(){
-      var v = Math.max(0, parseNum(g("dscValor").value));
-      if (v<=0){ delete row.desconto; }
-      else { row.desconto = {origem: g("dscOrigem").value, valor: v}; }
+      lerLinhas();
+      var validas = linhas.filter(function(l){ return parseNum(l.valor)>0; })
+        .map(function(l){ return {origem:l.origem, valor:Math.max(0,parseNum(l.valor))}; });
+      delete row.desconto; // formato antigo (um desconto só) é substituído pela lista
+      if (!validas.length) delete row.descontos;
+      else row.descontos = validas;
       state.modal = null;
       render();
       scheduleSave();
@@ -5362,7 +5754,9 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         '<div class="archive-list" style="margin-bottom:12px;">'+itensHtml+'</div>'+
         '<div style="font-size:12.5px;line-height:1.7;margin-bottom:12px;">'+
           '<div>Subtotal: <b style="color:var(--text);">'+fmtCurrency(nota.subtotal!==undefined?nota.subtotal:nota.totalProdutos)+'</b></div>'+
-          (nota.desconto>0 ? '<div>Desconto'+(nota.descontoOrigem?' ('+escHtml(descontoOrigemLabel(nota.descontoOrigem))+')':'')+': <b style="color:var(--red);">-'+fmtCurrency(nota.desconto)+'</b></div>' : '')+
+          notaDescontosList(nota).map(function(d){
+            return '<div>'+escHtml(notaDescontoLabel(d, !!(nota.carros && nota.carros.length>1)))+': <b style="color:var(--red);">-'+fmtCurrency(d.valor)+'</b></div>';
+          }).join("")+
           '<div>Total: <b style="color:var(--yellow);">'+fmtCurrency(nota.totalProdutos)+'</b></div>'+
           (nota.formaPagamento ? '<div style="margin-top:6px;">Pagamento: <b style="color:var(--text);">'+escHtml(nota.formaPagamento)+'</b>'+(nota.pago?' · '+escHtml(nota.pago==="✅"?"Pago":"Pendente"):'')+
             (pagBreak ? '<br><span style="color:var(--text-dim);">'+pagBreak+'</span>' : '')+'</div>' : '')+
@@ -5422,6 +5816,10 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
           syncRowEstoque(row);
           if (!row.valorPneus && parseNum(item.preco)>0 && parseNum(row.quantidade)>0){
             row.valorPneus = (parseNum(item.preco)*parseNum(row.quantidade)).toFixed(2);
+          }
+          // pneus novos: puxa o custo cadastrado no estoque (custo por unidade × quantidade) se a linha ainda não tem custo
+          if (isNovosTbl() && !parseNum(row.custoPneus) && parseNum(item.custo)>0 && parseNum(row.quantidade)>0){
+            row.custoPneus = (parseNum(item.custo)*parseNum(row.quantidade)).toFixed(2);
           }
         }
         state.modal = null;
@@ -5545,8 +5943,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   // só conta quando o custo foi informado (sem custo não dá pra saber o lucro)
   function novoTemCusto(n){ return parseNum(n.custoPneus) > 0; }
   function novoReceitaPneus(n){
-    var d = n.desconto;
-    var descPneus = (d && (!d.origem || d.origem==="valorPneus")) ? descontoValor(n) : 0;
+    var descPneus = 0;
+    descontosList(n).forEach(function(d){ if (!d.origem || d.origem==="valorPneus") descPneus += d.valor; });
     return parseNum(n.valorPneus) - descPneus;
   }
   function novoLucro(n){ return novoTemCusto(n) ? novoReceitaPneus(n) - parseNum(n.custoPneus) : 0; }
