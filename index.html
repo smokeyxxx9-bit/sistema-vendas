@@ -20,6 +20,10 @@
   .medida-btn:hover:not(:disabled){color:#f5b700;}
   .medida-btn:disabled{cursor:default;}
   .est-actions{display:flex;gap:4px;align-items:center;}
+  .est-custo-btn{background:transparent;border:1px dashed var(--border,#555);border-radius:6px;color:var(--text-dim);font-size:11.5px;padding:2px 8px;cursor:pointer;white-space:nowrap;font-family:inherit;}
+  .est-custo-btn:hover{border-color:var(--accent,#c9a227);color:var(--text);}
+  .est-custo-btn.vazio{color:var(--text-faint);}
+  .est-margem{color:#3fae6a;} .est-margem.neg{color:#e2554c;}
   :root{
     --bg:#14181c;
     --panel:#1c2227;
@@ -4245,11 +4249,16 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       '<span class="stats">'+
         '<span><b'+(qtd<=0?' class="est-zero"':'')+'>'+qtd+' un.</b></span>'+
         '<span>'+fmtCurrency(parseNum(i.preco))+'</span>'+
-        (state.role==="master" && parseNum(i.custo)>0 ? '<span style="color:var(--text-faint);font-size:11px;" title="Preço de custo por unidade">custo '+fmtCurrency(parseNum(i.custo))+'</span>' : '')+
+        (state.role==="master" ? (function(){
+          var c = parseNum(i.custo), p = parseNum(i.preco);
+          var margem = (c>0 && p>0) ? ' <span class="est-margem'+(p<c?' neg':'')+'">('+Math.round((p-c)/p*100)+'%)</span>' : '';
+          return '<button type="button" class="est-custo-btn'+(c>0?'':' vazio')+'" data-est-custo="'+escAttr(i.id)+'" title="Clique para informar/alterar o preço de custo por unidade">'+
+            (c>0 ? 'custo '+fmtCurrency(c)+margem : '+ custo')+'</button>';
+        })() : '')+
         '<span class="est-actions">'+
           '<button class="icon-btn" data-est-out="'+escAttr(i.id)+'" title="Retirar do estoque">−</button>'+
           '<button class="icon-btn" data-est-in="'+escAttr(i.id)+'" title="Adicionar ao estoque">+</button>'+
-          '<button class="icon-btn" data-est-edit="'+escAttr(i.id)+'" title="Editar medida, marca ou preço">✎</button>'+
+          '<button class="icon-btn" data-est-edit="'+escAttr(i.id)+'" title="Editar medida, marca, preço ou custo">✎</button>'+
           '<button class="icon-btn" data-est-del="'+escAttr(i.id)+'" title="Apagar item">✕</button>'+
         '</span>'+
       '</span>'+
@@ -4263,11 +4272,12 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     var filtered = q ? list.filter(function(i){
       return ((i.medida||"")+" "+(i.marca||"")).toLowerCase().indexOf(q)>-1;
     }) : list;
-    var totalUnidades = 0, totalValor = 0, zerados = 0;
+    var totalUnidades = 0, totalValor = 0, totalCusto = 0, zerados = 0;
     list.forEach(function(i){
       var qt = Math.max(0, parseNum(i.quantidade));
       totalUnidades += qt;
       totalValor += qt * parseNum(i.preco);
+      totalCusto += qt * parseNum(i.custo);
       if (qt<=0) zerados++;
     });
 
@@ -4288,6 +4298,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         tstat("Unidades em estoque", totalUnidades)+
         tstat("Medidas zeradas", zerados)+
         (estoquista ? '' : tstat("Valor do estoque", fmtCurrency(totalValor)))+
+        (state.role==="master" ? tstat("Custo do estoque", fmtCurrency(totalCusto)) : '')+
       '</div>'+
 
       '<div class="tbl-head">'+
@@ -4356,6 +4367,20 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
           if (moved<0) addEstoqueLog("saida", estoqueLabel(item), Math.abs(moved));
           renderEstoque();
         }
+      });
+    });
+    root.querySelectorAll("[data-est-custo]").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        var id = btn.getAttribute("data-est-custo");
+        var item = estoqueItem(id);
+        if (!item) return;
+        var atual = parseNum(item.custo);
+        var v = window.prompt("Preço de custo por unidade de "+estoqueLabel(item)+" (R$):", atual>0 ? String(atual).replace(".",",") : "");
+        if (v===null) return;
+        var novo = Math.max(0, parseNum(v));
+        if (novo===atual) return;
+        updateEstoqueItem(id, {custo: novo});
+        renderEstoque();
       });
     });
     root.querySelectorAll("[data-est-edit]").forEach(function(btn){
