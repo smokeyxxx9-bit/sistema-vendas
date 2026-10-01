@@ -1143,6 +1143,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   }
 
   // ---------- estoque (medida, marca, quantidade, preço) ----------
+  // quem pode ver/editar o preço de custo: master e vendedor (estoquista não)
+  function podeCusto(){ return state.role==="master" || state.role==="vendedor"; }
   function loadEstoque(){ return lsGetJSON(K_ESTOQUE, []); }
   function saveEstoque(list){ return lsSetJSON(K_ESTOQUE, list); }
   function estoqueItem(id){ return loadEstoque().filter(function(i){ return i.id===id; })[0] || null; }
@@ -4249,7 +4251,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       '<span class="stats">'+
         '<span><b'+(qtd<=0?' class="est-zero"':'')+'>'+qtd+' un.</b></span>'+
         '<span>'+fmtCurrency(parseNum(i.preco))+'</span>'+
-        (state.role==="master" ? (function(){
+        (podeCusto() ? (function(){
           var c = parseNum(i.custo), p = parseNum(i.preco);
           var margem = (c>0 && p>0) ? ' <span class="est-margem'+(p<c?' neg':'')+'">('+Math.round((p-c)/p*100)+'%)</span>' : '';
           return '<button type="button" class="est-custo-btn'+(c>0?'':' vazio')+'" data-est-custo="'+escAttr(i.id)+'" title="Clique para informar/alterar o preço de custo por unidade">'+
@@ -5166,7 +5168,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
           '<label>Marca</label><input type="text" id="efMarca" placeholder="Ex: Pirelli" value="'+escAttr(item?item.marca:"")+'">'+
           '<label>Quantidade em estoque</label><input type="text" inputmode="numeric" id="efQtd" placeholder="0" value="'+escAttr(item?Math.max(0,parseNum(item.quantidade)):"")+'">'+
           '<label>Preço por unidade (R$)</label><input type="text" inputmode="decimal" id="efPreco" placeholder="0,00" value="'+escAttr(item?parseNum(item.preco):"")+'">'+
-          (state.role==="master" ? '<label>Preço de custo por unidade (R$) — quanto você pagou no pneu</label><input type="text" inputmode="decimal" id="efCusto" placeholder="0,00" value="'+escAttr(item&&parseNum(item.custo)>0?parseNum(item.custo):"")+'">' : '')+
+          (podeCusto() ? '<label>Preço de custo por unidade (R$) — quanto você pagou no pneu</label><input type="text" inputmode="decimal" id="efCusto" placeholder="0,00" value="'+escAttr(item&&parseNum(item.custo)>0?parseNum(item.custo):"")+'">' : '')+
           '<label>Estoque mínimo (avisa quando ficar abaixo — deixe 0 pra não avisar)</label><input type="text" inputmode="numeric" id="efMinimo" placeholder="0" value="'+escAttr(item?Math.max(0,parseNum(item.minimo)):"")+'">'+
         '</div>'+
         '<div class="err">'+escHtml(state.modal.error||"")+'</div>'+
@@ -5202,7 +5204,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         preco: document.getElementById("efPreco").value,
         minimo: document.getElementById("efMinimo").value
       };
-      if (document.getElementById("efCusto")) dados.custo = document.getElementById("efCusto").value; // só o master vê/edita o custo
+      if (document.getElementById("efCusto")) dados.custo = document.getElementById("efCusto").value; // master e vendedor veem/editam o custo
       if (item){
         var antes = Math.max(0, parseNum(item.quantidade));
         var depois = Math.max(0, parseNum(dados.quantidade));
