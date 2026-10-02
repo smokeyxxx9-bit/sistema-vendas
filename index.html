@@ -2407,6 +2407,11 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     var prevRows = rowsOfDay(prev);
     var lastWeek = addDays(iso, -7);
     var lwRows = rowsOfDay(lastWeek);
+    // mesmo dia do mês passado (se o mês passado não tem esse dia, ex.: 31, usa o último dia dele)
+    var lmKey = addMonths(iso.slice(0,7), -1);
+    var lmDia = Math.min(parseInt(iso.slice(8,10),10), daysInMonth(lmKey));
+    var lastMonthIso = lmKey+"-"+pad(lmDia);
+    var lmRows = rowsOfDay(lastMonthIso);
     var month = iso.slice(0,7);
     var monthDates = listAllDates().filter(function(d){ return d.slice(0,7)===month && d!==iso; })
       .filter(function(d){ return rowsOfDay(d).length>0; });
@@ -2438,6 +2443,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       pendCount:pend.length, pendTotal:pendTotal,
       prev:{iso:prev, total:sumRows(prevRows), count:prevRows.length},
       lastWeek:{iso:lastWeek, total:sumRows(lwRows), count:lwRows.length},
+      lastMonthDay:{iso:lastMonthIso, total:sumRows(lmRows), count:lmRows.length},
       avg:{total:avgDay, count:avgCount, days:monthDates.length},
       month:{key:month, total:curM.total, count:curM.count, days:curM.days,
         prevMonth:{key:prevMKey, total:prevM.total, count:prevM.count, days:prevM.days},
@@ -2568,6 +2574,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
           '<span><span class="amt">'+hv(det.prev.total)+'</span>'+deltaBadge(det.total, det.prev.total)+'</span></div>'+
         '<div class="dd-cmp"><span class="who">Mesmo dia da semana passada<small>'+escHtml(weekdayLabel(det.lastWeek.iso))+' · '+hq(det.lastWeek.count)+' venda(s)</small></span>'+
           '<span><span class="amt">'+hv(det.lastWeek.total)+'</span>'+deltaBadge(det.total, det.lastWeek.total)+'</span></div>'+
+        '<div class="dd-cmp"><span class="who">Mesmo dia do mês passado<small>'+escHtml(weekdayLabel(det.lastMonthDay.iso))+' · '+hq(det.lastMonthDay.count)+' venda(s)</small></span>'+
+          '<span><span class="amt">'+hv(det.lastMonthDay.total)+'</span>'+deltaBadge(det.total, det.lastMonthDay.total)+'</span></div>'+
         '<div class="dd-cmp"><span class="who">Média diária do mês<small>'+det.avg.days+' dia(s) com vendas · média de '+hq(det.avg.count.toFixed(1))+' venda(s)/dia</small></span>'+
           '<span><span class="amt">'+hv(det.avg.total)+'</span>'+deltaBadge(det.total, det.avg.total)+'</span></div>';
     } else {
@@ -5580,6 +5588,15 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         '<h3>O que foi o "Outros"?</h3>'+
         '<p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;">Valor em "Outros" nesta venda: <b style="color:var(--text);">'+fmtCurrency(parseNum(row.outros))+'</b>. A descrição sai na nota/garantia.</p>'+
         '<input type="text" id="otDesc" placeholder="Ex: troca de válvula, frete, taxa de montagem..." value="'+escAttr(row.outrosDescricao||"")+'" style="width:100%;box-sizing:border-box;margin-bottom:12px;">'+
+        (parseNum(row.outros)>0 ?
+          '<div style="border-top:1px solid var(--border-soft);padding-top:10px;margin-bottom:12px;">'+
+            '<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:8px;">Na verdade foi bico, cambagem ou roda? Jogue o valor para a coluna certa (o total da venda não muda):</div>'+
+            '<div style="display:flex;gap:6px;flex-wrap:wrap;">'+
+              '<button class="btn ghost small" data-ot-mover="Bicos">→ Bicos</button>'+
+              '<button class="btn ghost small" data-ot-mover="Cambagem">→ Cambagem</button>'+
+              '<button class="btn ghost small" data-ot-mover="Rodas">→ Rodas</button>'+
+            '</div>'+
+          '</div>' : '')+
         '<div class="modal-actions">'+
           '<button class="btn ghost small" id="otCancel">Voltar</button>'+
           '<button class="btn primary small" id="otSave">Salvar</button>'+
@@ -5596,6 +5613,23 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       render();
       scheduleSave();
     }
+    var DEST = {Bicos:["valorBicos","qtdBicos"], Cambagem:["valorCambagem","qtdCambagem"], Rodas:["valorRodas","qtdRodas"]};
+    div.querySelectorAll("[data-ot-mover]").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        var d = DEST[btn.getAttribute("data-ot-mover")];
+        var v = parseNum(row.outros);
+        if (!(v>0)) return;
+        var novo = parseNum(row[d[0]]) + v;
+        row[d[0]] = String(Math.round(novo*100)/100).replace(".", ",");
+        // quantidade zerada com valor preenchido acende o aviso de "não bate": já deixa 1 un.
+        if (!(parseNum(row[d[1]])>0)) row[d[1]] = "1";
+        row.outros = "";
+        delete row.outrosDescricao;
+        state.modal = null;
+        render();
+        scheduleSave();
+      });
+    });
     div.querySelector("#otCancel").addEventListener("click", goBack);
     div.addEventListener("click", function(e){ if (e.target===div) goBack(); });
     div.querySelector("#otSave").addEventListener("click", salvar);
