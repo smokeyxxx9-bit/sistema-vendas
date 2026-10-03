@@ -2078,11 +2078,11 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       // o LUCRO das vendas de pneus novos (valor − custo) é somado ao total do mês e, com isso, à meta
       var nvS = novosStats(loadNovosMonth(state.dashMonth));
       var yMonthKey = yesterday.slice(0,7);
-      var yLucro = ((yMonthKey===state.dashMonth) ? nvS : novosStats(loadNovosMonth(yMonthKey))).lucroDia[yesterday] || 0;
-      var nvIncludeHtml = nvS.lucro!==0 ? '<div class="sub" style="margin-top:2px;">inclui '+(state.hideValues?'••••':fmtCurrency(nvS.lucro))+' de lucro de pneus novos</div>' : '';
+      var yLucro = ((yMonthKey===state.dashMonth) ? nvS : novosStats(loadNovosMonth(yMonthKey))).aporteDia[yesterday] || 0;
+      var nvIncludeHtml = nvS.aporte!==0 ? '<div class="sub" style="margin-top:2px;">inclui '+(state.hideValues?'••••':fmtCurrency(nvS.aporte))+' de pneus novos (lucro + serviços)</div>' : '';
       for (var i=1;i<=nd;i++){
         var iso = state.dashMonth+"-"+pad(i);
-        var v = ((monthSummary[iso] && monthSummary[iso].total) || 0) + (nvS.lucroDia[iso]||0);
+        var v = ((monthSummary[iso] && monthSummary[iso].total) || 0) + (nvS.aporteDia[iso]||0);
         monthTotal += v;
         points.push({day:i, iso:iso, v:Math.max(0, v)});
       }
@@ -2150,7 +2150,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       // barra de progresso da meta do dia (só faz sentido olhando o mês atual)
       var todayGoalBarHtml = "";
       if (state.dashMonth===curMonthKey){
-        var hojeTotal = sumRows(rowsOfDay(today)) + (nvS.lucroDia[today]||0);
+        var hojeTotal = sumRows(rowsOfDay(today)) + (nvS.aporteDia[today]||0);
         var remainingHoje = GOAL_1 - monthTotal + hojeTotal;
         var metaHoje = daysLeft>0 ? remainingHoje/daysLeft : 0;
         var hojePct = metaHoje>0 ? Math.min(100, (hojeTotal/metaHoje)*100) : 100;
@@ -2206,7 +2206,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
           '<div class="card">'+
             '<h3>Resumo de ontem</h3>'+
             '<div class="yesterday-total">'+fmtCurrency(yData.total + yLucro)+'</div>'+
-            '<div class="yesterday-meta">'+escHtml(weekdayLabel(yesterday))+' · '+yData.count+' venda(s) registrada(s)'+(yLucro!==0 ? ' · inclui '+fmtCurrency(yLucro)+' de lucro de pneus novos' : '')+'</div>'+
+            '<div class="yesterday-meta">'+escHtml(weekdayLabel(yesterday))+' · '+yData.count+' venda(s) registrada(s)'+(yLucro!==0 ? ' · inclui '+fmtCurrency(yLucro)+' de pneus novos (lucro + serviços)' : '')+'</div>'+
             '<button class="btn ghost small" data-act="opendate" data-date="'+yesterday+'">Ver tabela de ontem</button>'+
           '</div>'+
           '<div class="card today-card">'+
@@ -2544,7 +2544,9 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     var periodo = isMonth ? "do mês" : "do dia";
     var nvDet = novosStats(loadNovosMonth(iso.slice(0,7)));
     var nvLucroPeriodo = isMonth ? nvDet.lucro : (nvDet.lucroDia[iso]||0);
-    var nvNote = nvLucroPeriodo!==0 ? '<div class="dd-note" style="margin:0 0 12px;">💰 Lucro de pneus novos '+periodo+': <b style="color:'+(nvLucroPeriodo>=0?'var(--green)':'var(--red)')+';">'+hv(nvLucroPeriodo)+'</b> — já somado na meta do mês.</div>' : '';
+    var nvAportePeriodo = isMonth ? nvDet.aporte : (nvDet.aporteDia[iso]||0);
+    var nvServPeriodo = nvAportePeriodo - nvLucroPeriodo;
+    var nvNote = nvAportePeriodo!==0 ? '<div class="dd-note" style="margin:0 0 12px;">💰 Pneus novos '+periodo+': <b style="color:'+(nvAportePeriodo>=0?'var(--green)':'var(--red)')+';">'+hv(nvAportePeriodo)+'</b> (lucro dos pneus '+hv(nvLucroPeriodo)+' + serviços/peças '+hv(nvServPeriodo)+') — já somado na meta do mês.</div>' : '';
 
     function barRows(list, keyLabel, colorCls, withRank){
       if (!list.length) return '<div class="dd-empty">Nada lançado neste '+(isMonth?'mês':'dia')+'.</div>';
@@ -2892,7 +2894,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     var estoqueBtn = '<button class="btn ghost small" data-act="openestoque" title="Abrir o controle de estoque">📦 Estoque</button>';
     var clientesBtn = '<button class="btn ghost small" data-act="openclientes" title="Cadastrar e editar clientes">👥 Clientes</button>';
     var notasBtn = '<button class="btn ghost small" data-act="opennotas" title="Ver todas as notas emitidas, em ordem de emissão">🧾 Notas</button>';
-    var novosBtn = '<button class="btn ghost small" data-act="opennovos" title="Vendas de pneus novos (o lucro entra na meta do dashboard principal)">🆕 Pneus novos</button>';
+    var novosBtn = '<button class="btn ghost small" data-act="opennovos" title="Vendas de pneus novos (o lucro dos pneus e o valor dos serviços/peças entram na meta do dashboard principal)">🆕 Pneus novos</button>';
     var avisosCount = avisosPendentesCount();
     var avisosBtn = '<button class="btn ghost small" data-act="openavisos" title="Clientes esperando medida, lembretes e estoque baixo">🔔 Avisos'+
       (avisosCount>0 ? '<span class="nav-badge">'+avisosCount+'</span>' : '')+'</button>';
@@ -6009,6 +6011,13 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     return parseNum(n.valorPneus) - descPneus;
   }
   function novoLucro(n){ return novoTemCusto(n) ? novoReceitaPneus(n) - parseNum(n.custoPneus) : 0; }
+  // serviços/peças da venda nova (alinhamento, bicos, cambagem, balanceamento, rodas, outros, peças, mão de obra),
+  // já descontados os descontos que não saíram do pneu. Esse valor soma inteiro no Dashboard principal.
+  function novoServicos(n){
+    var descPneus = 0;
+    descontosList(n).forEach(function(d){ if (!d.origem || d.origem==="valorPneus") descPneus += d.valor; });
+    return Math.max(0, computeSubtotal(n) - parseNum(n.valorPneus) - (descontoValor(n) - descPneus));
+  }
   function lucroCellInfo(n){
     if (!novoTemCusto(n)) return {text:"—", color:"var(--text-faint)"};
     var l = novoLucro(n);
@@ -6027,12 +6036,14 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   function isBlankNovo(n){ return !(n.medida||"").trim() && !(n.marca||"").trim() && !(n.cliente||"").trim() && novoTotal(n)===0; }
 
   function novosStats(list){
-    var t = {total:0, qtd:0, count:list.length, pend:0, porVendedor:{}, porPagamento:{"Dinheiro":0,"Pix":0,"Débito":0,"Crédito":0}, porMedida:{}, porDia:{}, lucro:0, semCusto:0, receitaCusto:0, qtdCusto:0, lucroDia:{}};
+    var t = {total:0, qtd:0, count:list.length, pend:0, porVendedor:{}, porPagamento:{"Dinheiro":0,"Pix":0,"Débito":0,"Crédito":0}, porMedida:{}, porDia:{}, lucro:0, semCusto:0, receitaCusto:0, qtdCusto:0, lucroDia:{}, servicos:0, aporte:0, aporteDia:{}};
     list.forEach(function(n){
       if (isBlankNovo(n)){ t.count--; return; }
       var v = novoTotal(n), q = parseNum(n.quantidade);
       t.total += v; t.qtd += q;
       var l = novoLucro(n);
+      var sv = novoServicos(n);
+      t.servicos += sv; t.aporte += l + sv; t.aporteDia[n.date] = (t.aporteDia[n.date]||0) + l + sv;
       if (novoTemCusto(n)){ t.lucro += l; t.receitaCusto += novoReceitaPneus(n); t.qtdCusto += q; t.lucroDia[n.date] = (t.lucroDia[n.date]||0) + l; }
       else if (parseNum(n.valorPneus)>0) t.semCusto++;
       if (n.pago!=="✅" && v>0) t.pend += v;
