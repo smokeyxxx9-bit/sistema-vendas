@@ -624,6 +624,32 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   .btn{padding-left:10px!important;padding-right:10px!important}
 }
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+
+/* ===== tabela do dia no celular: mais espaço para as linhas ===== */
+.mob-jump{display:none;}
+@media(max-width:700px){
+  /* o bloco grande do topo (voltar, data, filtros, totais) deixa de ficar preso na tela:
+     só a barra de atalhos + o cabeçalho das colunas ficam fixos */
+  .sticky-head-block{display:contents;}
+  .sticky-head-block .topbar{position:static;margin:0 0 10px;padding:6px 0 8px;backdrop-filter:none;background:transparent;}
+  .grid-top{position:sticky;top:0;z-index:20;background:var(--bg);padding-top:4px;}
+  .mob-jump{display:flex;gap:6px;overflow-x:auto;padding:2px 0 7px;scrollbar-width:none;-webkit-overflow-scrolling:touch;}
+  .mob-jump::-webkit-scrollbar{display:none;}
+  .jump-chip{flex:0 0 auto;background:var(--panel-alt);color:var(--text-dim);border:1px solid var(--border-soft);border-radius:99px;
+    padding:6px 12px;font-size:12px;font-family:inherit;cursor:pointer;white-space:nowrap;}
+  .jump-chip:active{background:var(--yellow);color:#111;border-color:var(--yellow);}
+  /* cards de totais do dia: uma fileira que rola de lado, em vez de ocupar 3–4 linhas */
+  .totals-strip{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:4px;margin-bottom:8px;}
+  .totals-strip::-webkit-scrollbar{display:none;}
+  .totals-strip .parts-card{flex:0 0 132px;}
+  /* linhas mais fáceis de acompanhar e de tocar */
+  .row-group:nth-child(even) .grid-row.data{background:rgba(255,255,255,.03);}
+  .grid-row.data{border-bottom:1px solid var(--border);}
+  .grid-row .cell{padding:8px 7px;}
+  .cellval, .grid-row select, .medida-btn{font-size:16px;min-height:40px;}
+  .cellval.computed, .cellval.lucro-cell{font-size:14px;} /* campos só de leitura: não dão zoom, mantêm o R$ inteiro visível */
+  .icon-btn{width:34px;height:34px;}
+}
 </style>
 <style id="oficina-novidades">
   /* ---- skeleton de carregamento inicial ---- */
@@ -3158,7 +3184,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         '<div class="nv-sec" style="margin:0 2px 6px;">Totais do dia</div>'+
         '<div class="totals-strip" data-role="tabletotals">'+tableTotalsHtml(t)+'</div>'+
 
-        (curRows.length===0 ? '' : '<div class="grid-scroll-head">'+gridHeadHtml(colTemplate, editable, cols)+'</div>')+
+        (curRows.length===0 ? '' : '<div class="grid-top">'+jumpChipsHtml(cols)+'<div class="grid-scroll-head">'+gridHeadHtml(colTemplate, editable, cols)+'</div></div>')+
       '</div>'+
 
       (curRows.length===0
@@ -3182,6 +3208,37 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     bindBackupControls();
     scheduleFitGrid();
     syncHeadScroll();
+    bindJumpChips(cols);
+  }
+
+  // ---- celular: atalhos para pular direto para um grupo de colunas (a tabela é larga e rola de lado) ----
+  var JUMP_CHIPS = [
+    {key:"medida", label:"Medida"}, {key:"qtdBicos", label:"Bicos"}, {key:"qtdCambagem", label:"Cambagem"},
+    {key:"qtdRodas", label:"Rodas"}, {key:"valorPecas", label:"Peças"}, {key:"valor", label:"Valor"},
+    {key:"lucro", label:"Lucro"}, {key:"formaPagamento", label:"Pagamento"}, {key:"vendedor", label:"Vendedor"},
+    {key:"__acoes", label:"Ações"}
+  ];
+  function jumpChipsHtml(cols){
+    var keys = cols.map(function(c){ return c.key; });
+    return '<div class="mob-jump">'+JUMP_CHIPS.filter(function(j){ return j.key==="__acoes" || keys.indexOf(j.key)>-1; })
+      .map(function(j){ return '<button type="button" class="jump-chip" data-jump="'+j.key+'">'+j.label+'</button>'; }).join("")+'</div>';
+  }
+  function bindJumpChips(cols){
+    var rowsWrap = document.querySelector(".grid-scroll");
+    var chips = document.querySelectorAll(".mob-jump .jump-chip");
+    if (!rowsWrap || !chips.length) return;
+    chips.forEach(function(btn){
+      btn.addEventListener("click", function(){
+        var key = btn.getAttribute("data-jump"), left = 0, i;
+        if (key==="__acoes"){ left = rowsWrap.scrollWidth; }
+        else {
+          for (i=0;i<cols.length;i++){ if (cols[i].key===key) break; left += parseInt(cols[i].w,10)||0; }
+        }
+        // deixa a coluna um pouco à esquerda para dar contexto
+        var alvo = Math.max(0, left - 6);
+        if (rowsWrap.scrollTo) rowsWrap.scrollTo({left: alvo, behavior:"smooth"}); else rowsWrap.scrollLeft = alvo;
+      });
+    });
   }
 
   // no celular a tabela permite arrastar de lado; isso mantém o cabeçalho
