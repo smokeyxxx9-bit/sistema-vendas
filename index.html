@@ -2477,8 +2477,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         avg:{total:avgMTotal, count:avgMCount, months:yearMonths.length}}};
 
     // agregações (vendedores, pagamentos, produtos, horários) do dia e do mês inteiro
-    det.dayAgg = aggregateRows(rows);
-    det.monthAgg = aggregateRows(rowsOfMonth(month));
+    det.dayAgg = aggregateRows(rows, novosRowsDoDia(iso));
+    det.monthAgg = aggregateRows(rowsOfMonth(month), loadNovosMonth(month).filter(function(n){ return !isBlankNovo(n); }));
     det.vendedores = det.dayAgg.vendedores;
     det.pagamentos = det.dayAgg.pagamentos;
     det.produtos   = det.dayAgg.produtos;
@@ -2496,7 +2496,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   }
 
   // calcula os quadros (vendedores / pagamentos / produtos / horas) de qualquer conjunto de vendas
-  function aggregateRows(rows){
+  function aggregateRows(rows, novosRows){
+    novosRows = novosRows || [];
     var total = sumRows(rows);
     var count = rows.length;
     var pend = rows.filter(function(r){ return r.pago!=="✅" && computeValor(r)>0; });
@@ -2524,18 +2525,20 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     if (semForma>0) pagList.push({nome:"Sem forma definida", total:semForma});
     pagList = pagList.filter(function(p){ return p.total>0; }).sort(function(a,b){ return b.total-a.total; });
 
-    // produtos e serviços
+    // produtos e serviços: tabela normal + serviços dos pneus novos, com a mesma conta das tabelas
+    // (a mão de obra dividida entra em Bicos / Cambagem / Rodas). Os pneus novos em si entram só pelo lucro na meta.
     function sumF(f){ var t=0; rows.forEach(function(r){ t+=parseNum(r[f]); }); return t; }
+    var sv = servicosTotais(rows.concat(novosRows));
     var prod = [
       {nome:"Pneus",         total:sumF("valorPneus"),        qtd:sumF("quantidade")},
-      {nome:"Alinhamento",   total:sumF("alinhamento"),       qtd:rows.filter(function(r){return parseNum(r.alinhamento)>0;}).length},
-      {nome:"Balanceamento", total:sumF("valorBalanceamento"),qtd:sumF("qtdBalanceamento")},
-      {nome:"Bicos",         total:sumF("valorBicos"),        qtd:sumF("qtdBicos")},
-      {nome:"Cambagem",      total:sumF("valorCambagem"),     qtd:sumF("qtdCambagem")},
-      {nome:"Rodas",         total:sumF("valorRodas"),        qtd:sumF("qtdRodas")},
-      {nome:"Peças",         total:sumF("valorPecas"),        qtd:0},
-      {nome:"Mão de obra",   total:sumF("maoDeObra"),         qtd:0},
-      {nome:"Outros",        total:sumF("outros"),            qtd:0}
+      {nome:"Alinhamento",   total:sv.alinhamento,            qtd:sv.qtdAlinhamento},
+      {nome:"Balanceamento", total:sv.valorBalanceamento,     qtd:sv.qtdBalanceamento},
+      {nome:"Bicos",         total:sv.totalBicos,             qtd:sv.qtdBicos},
+      {nome:"Cambagem",      total:sv.totalCambagem,          qtd:sv.qtdCambagem},
+      {nome:"Rodas",         total:sv.totalRodas,             qtd:sv.qtdRodas},
+      {nome:"Peças",         total:sv.valorPecas,             qtd:0},
+      {nome:"Mão de obra",   total:sv.maoDeObra,              qtd:0},
+      {nome:"Outros",        total:sv.outros,                 qtd:0}
     ].filter(function(p){ return p.total>0; }).sort(function(a,b){ return b.total-a.total; });
 
     // horários
@@ -3258,13 +3261,12 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   }
   function tableTotalsHtml(t){
     var hv = state.hideTableTotals;
-    var mo = t.porPessoaMaoObra || {};
     var out = "";
     out += pcard("Valor total do dia", "yellow", "", hv?'••••':fmtCurrency(t.valor));
     if (isNovosTbl()) out += pcard("💰 Lucro do dia", t.lucro>=0?"green":"red", t.semCusto>0 ? t.semCusto+" sem custo" : "", hv?'••••':fmtCurrency(t.lucro));
-    out += pcard("Bicos", "teal", t.qtdBicos+" un.", fmtCurrency(t.valorBicos + (mo["Wesley"]||0)));
-    out += pcard("Cambagem", "teal", t.qtdCambagem+" un.", fmtCurrency(t.valorCambagem + (mo["Renan"]||0)));
-    out += pcard("Rodas", "teal", t.qtdRodas+" un.", fmtCurrency(t.valorRodas + (mo["João"]||0)));
+    out += pcard("Bicos", "teal", t.qtdBicos+" un.", fmtCurrency(t.totalBicos));
+    out += pcard("Cambagem", "teal", t.qtdCambagem+" un.", fmtCurrency(t.totalCambagem));
+    out += pcard("Rodas", "teal", t.qtdRodas+" un.", fmtCurrency(t.totalRodas));
     out += pcard("Valor das peças", "teal", "", fmtCurrency(t.valorPecas));
     out += pcard("Mão de obra", "teal", "", fmtCurrency(t.maoDeObra));
     if (t.descontos>0) out += pcard("Descontos dados", "red", "", "-"+fmtCurrency(t.descontos));
@@ -3404,26 +3406,49 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     return '<div class="'+cellClass+'"'+warnTitle+'><input class="cellval" type="text" inputmode="decimal" data-field="'+col.key+'" data-id="'+row.id+'" value="'+escAttr(val)+'" '+(editable?"":"disabled")+' placeholder="R$ 0,00"></div>';
   }
 
-  function computeTotals(){
-    var t = {valor:0, qtdBicos:0, valorBicos:0, qtdCambagem:0, valorCambagem:0, qtdRodas:0, valorRodas:0, valorPecas:0, maoDeObra:0, descontos:0,
-              porPagamento:{"Dinheiro":0, "Pix":0, "Débito":0, "Crédito":0}, porPessoaMaoObra:{}};
+  // soma bicos, cambagem, rodas, peças e mão de obra de qualquer conjunto de vendas (tabela normal e/ou novos).
+  // A mão de obra dividida (⚙) entra em Bicos (Wesley), Cambagem (Renan) e Rodas (João).
+  // É a MESMA conta usada nas duas tabelas e no Dashboard principal, pra os valores sempre baterem.
+  function servicosTotais(rows){
+    var t = {qtdBicos:0, valorBicos:0, qtdCambagem:0, valorCambagem:0, qtdRodas:0, valorRodas:0,
+             qtdBalanceamento:0, valorBalanceamento:0, alinhamento:0, qtdAlinhamento:0, outros:0,
+             valorPecas:0, maoDeObra:0, moBicos:0, moCambagem:0, moRodas:0, porPessoaMaoObra:{}};
     MAODEOBRA_PESSOAS.forEach(function(p){ t.porPessoaMaoObra[p] = 0; });
-    tblRows().forEach(function(r){
-      t.valor += computeValor(r);
-      t.qtdBicos += parseNum(r.qtdBicos);
-      t.valorBicos += parseNum(r.valorBicos);
-      t.qtdCambagem += parseNum(r.qtdCambagem);
-      t.valorCambagem += parseNum(r.valorCambagem);
-      t.qtdRodas += parseNum(r.qtdRodas);
-      t.valorRodas += parseNum(r.valorRodas);
+    rows.forEach(function(r){
+      t.qtdBicos += parseNum(r.qtdBicos);           t.valorBicos += parseNum(r.valorBicos);
+      t.qtdCambagem += parseNum(r.qtdCambagem);     t.valorCambagem += parseNum(r.valorCambagem);
+      t.qtdRodas += parseNum(r.qtdRodas);           t.valorRodas += parseNum(r.valorRodas);
+      t.qtdBalanceamento += parseNum(r.qtdBalanceamento); t.valorBalanceamento += parseNum(r.valorBalanceamento);
+      var al = parseNum(r.alinhamento); t.alinhamento += al; if (al>0) t.qtdAlinhamento++;
+      t.outros += parseNum(r.outros);
       t.valorPecas += parseNum(r.valorPecas);
       t.maoDeObra += parseNum(r.maoDeObra);
-      t.descontos += descontoValor(r);
       if (Array.isArray(r.maoDeObraSplit)){
         r.maoDeObraSplit.forEach(function(p){
-          if (t.porPessoaMaoObra.hasOwnProperty(p.pessoa)) t.porPessoaMaoObra[p.pessoa] += parseNum(p.valor);
+          if (!t.porPessoaMaoObra.hasOwnProperty(p.pessoa)) return;
+          var v = parseNum(p.valor);
+          t.porPessoaMaoObra[p.pessoa] += v;
+          if (p.pessoa==="Wesley") t.moBicos += v;
+          else if (p.pessoa==="Renan") t.moCambagem += v;
+          else if (p.pessoa==="João") t.moRodas += v;
         });
       }
+    });
+    t.totalBicos = t.valorBicos + t.moBicos;
+    t.totalCambagem = t.valorCambagem + t.moCambagem;
+    t.totalRodas = t.valorRodas + t.moRodas;
+    return t;
+  }
+  // vendas de pneus novos de um dia (sem as linhas em branco)
+  function novosRowsDoDia(iso){ return novosOfDay(iso).filter(function(n){ return !isBlankNovo(n); }); }
+
+  function computeTotals(){
+    var nv = isNovosTbl();
+    var t = {valor:0, descontos:0,
+              porPagamento:{"Dinheiro":0, "Pix":0, "Débito":0, "Crédito":0}};
+    tblRows().forEach(function(r){
+      t.valor += computeValor(r);
+      t.descontos += descontoValor(r);
       var pb = paymentBreakdown(r);
       t.porPagamento["Dinheiro"] += pb["Dinheiro"];
       t.porPagamento["Pix"] += pb["Pix"];
@@ -3431,7 +3456,14 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       t.porPagamento["Crédito"] += pb["Crédito"];
     });
     t.lucro = 0; t.semCusto = 0;
-    if (isNovosTbl()) tblRows().forEach(function(r){ if (novoTemCusto(r)) t.lucro += novoLucro(r); else if (parseNum(r.valorPneus)>0) t.semCusto++; });
+    if (nv) tblRows().forEach(function(r){ if (novoTemCusto(r)) t.lucro += novoLucro(r); else if (parseNum(r.valorPneus)>0) t.semCusto++; });
+    // bicos/cambagem/rodas/peças/mão de obra: soma da tabela normal + pneus novos do mesmo dia,
+    // então as duas tabelas mostram o mesmo valor (a que está aberta usa as linhas ao vivo)
+    var d = tblDate();
+    var normais = nv ? rowsOfDay(d) : state.rows;
+    var novos = nv ? tblRows() : novosRowsDoDia(d);
+    var sv = servicosTotais((normais||[]).concat(novos||[]));
+    Object.keys(sv).forEach(function(k){ t[k] = sv[k]; });
     t.qtdBicos = t.qtdBicos.toFixed(0);
     t.qtdCambagem = t.qtdCambagem.toFixed(0);
     t.qtdRodas = t.qtdRodas.toFixed(0);
