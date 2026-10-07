@@ -684,6 +684,17 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   .nota-row .nota-num{font-family:'IBM Plex Mono',monospace;color:var(--yellow);font-size:13px;font-weight:600;}
   .nota-row .nota-meta{font-size:12px;color:var(--text-dim);margin-top:3px;}
   .nota-row .nota-valor{font-family:'IBM Plex Mono',monospace;font-size:15px;}
+  .nota-mes-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:16px 0 8px;padding:9px 12px;
+    background:var(--panel);border:1px solid var(--border-soft);border-left:3px solid var(--yellow);border-radius:8px;cursor:pointer;user-select:none;}
+  .nota-mes-head:first-child{margin-top:0;}
+  .nota-mes-head .nm-nome{font-weight:600;font-size:14px;text-transform:capitalize;}
+  .nota-mes-head .nm-info{font-size:12px;color:var(--text-dim);font-family:'IBM Plex Mono',monospace;text-align:right;}
+  .est-kp-toggle{margin:10px 0 0;}
+  .est-keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0 4px;}
+  .est-keypad .kp-key{min-height:54px;font-size:22px;font-family:'IBM Plex Mono',monospace;background:var(--panel);color:var(--text);
+    border:1px solid var(--border-soft);border-radius:10px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
+  .est-keypad .kp-key:active{background:var(--yellow);color:#000;}
+  .est-keypad .kp-key.kp-fn{font-size:15px;font-family:inherit;color:var(--text-dim);}
   .aviso-card{background:var(--panel);border:1px solid var(--border-soft);border-radius:8px;padding:16px 18px;margin-bottom:16px;}
   .aviso-card h3{font-size:14px;margin-bottom:10px;display:flex;align-items:center;gap:8px;}
   .aviso-row.matched{border-left:3px solid var(--yellow);background:rgba(245,183,0,.06);}
@@ -4370,9 +4381,16 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     var estoquista = state.role==="estoquista";
     var list = estoqueSorted();
     var q = (state.estoqueQuery||"").trim().toLowerCase();
+    // ignora espaços na comparação: "175/70r14" acha "175/70 R14"
+    var qn = q.replace(/\s+/g,"");
     var filtered = q ? list.filter(function(i){
-      return ((i.medida||"")+" "+(i.marca||"")).toLowerCase().indexOf(q)>-1;
+      return (i.medida||"").toLowerCase().replace(/\s+/g,"").indexOf(qn)>-1 ||
+             (i.marca||"").toLowerCase().replace(/\s+/g,"").indexOf(qn)>-1;
     }) : list;
+    // teclado numérico na tela (números, "/" e "R"): ligado por padrão no celular/tablet, dá pra alternar
+    var tecladoOn = (state.estTeclado===undefined)
+      ? !!(window.matchMedia && window.matchMedia("(pointer:coarse)").matches)
+      : state.estTeclado;
     var totalUnidades = 0, totalValor = 0, totalCusto = 0, zerados = 0;
     list.forEach(function(i){
       var qt = Math.max(0, parseNum(i.quantidade));
@@ -4411,7 +4429,15 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       '</div>'+
 
       '<div class="card" style="padding:14px 16px;">'+
-        '<input type="text" id="estSearch" class="dash-cust-search" placeholder="Buscar por medida ou marca..." value="'+escAttr(state.estoqueQuery||"")+'">'+
+        '<input type="text" id="estSearch" class="dash-cust-search" placeholder="Buscar por medida ou marca..." autocomplete="off"'+(tecladoOn ? ' inputmode="none"' : '')+' value="'+escAttr(state.estoqueQuery||"")+'">'+
+        (tecladoOn
+          ? '<div class="est-keypad">'+
+              ["7","8","9","4","5","6","1","2","3","/","0","R"].map(function(k){ return '<button type="button" class="kp-key" data-kp="'+k+'">'+k+'</button>'; }).join("")+
+              '<button type="button" class="kp-key kp-fn" data-kp="BACK" title="Apagar">⌫</button>'+
+              '<button type="button" class="kp-key kp-fn" data-kp="CLEAR">Limpar</button>'+
+              '<button type="button" class="kp-key kp-fn" data-kp="ABC" title="Voltar para o teclado normal (marca, letras)">ABC</button>'+
+            '</div>'
+          : '<button type="button" class="btn ghost small est-kp-toggle" data-kp="ON">🔢 Teclado numérico</button>')+
         '<div class="archive-list">'+
           (filtered.length
             ? filtered.map(estoqueRowHtml).join("")
@@ -4433,6 +4459,23 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         if (again){ again.focus(); try{ again.setSelectionRange(pos,pos); }catch(e){} }
       });
     }
+    root.querySelectorAll("[data-kp]").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        var k = btn.getAttribute("data-kp");
+        var cur = state.estoqueQuery||"";
+        if (k==="ON"){ state.estTeclado = true; renderEstoque(); return; }
+        if (k==="ABC"){
+          state.estTeclado = false; renderEstoque();
+          var again = document.getElementById("estSearch");
+          if (again) again.focus();
+          return;
+        }
+        if (k==="BACK") state.estoqueQuery = cur.slice(0,-1);
+        else if (k==="CLEAR") state.estoqueQuery = "";
+        else state.estoqueQuery = cur + k;
+        renderEstoque();
+      });
+    });
 
     function askQtd(mensagem){
       var v = window.prompt(mensagem, "1");
@@ -5055,7 +5098,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     var totalValor = filtered.reduce(function(a,n){ return a+parseNum(n.totalProdutos); }, 0);
     var pendentes = filtered.filter(function(n){ return n.pago!=="✅"; }).length;
 
-    var rowsHtml = filtered.length ? filtered.map(function(n){
+    function notaRowHtml(n){
       var d = new Date(n.createdAt);
       var quando = isNaN(d.getTime()) ? fmtDateBR(n.date) : fmtDateTimeBR(n.createdAt);
       var itensResumo = (n.items||[]).map(function(it){ return it.desc; }).join(", ") || "—";
@@ -5074,10 +5117,32 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
             '<button class="icon-btn" data-notadel="'+escAttr(n.id)+'" title="Apagar nota">✕</button>'+
           '</div>'+
         '</div>';
+    }
+    // mês da nota: pela data/hora de emissão (cai na data da venda se não houver horário)
+    function notaMesKey(n){
+      var d = new Date(n.createdAt);
+      if (!isNaN(d.getTime())) return d.getFullYear()+"-"+pad(d.getMonth()+1);
+      return (n.date||"").slice(0,7) || "sem-data";
+    }
+    // agrupa por mês (a lista já vem do mais recente para o mais antigo)
+    var grupos = [], gIdx = {};
+    filtered.forEach(function(n){
+      var k = notaMesKey(n);
+      if (gIdx[k]===undefined){ gIdx[k] = grupos.length; grupos.push({key:k, notas:[], total:0}); }
+      var g = grupos[gIdx[k]]; g.notas.push(n); g.total += parseNum(n.totalProdutos);
+    });
+    state.notasMesesFechados = state.notasMesesFechados || {};
+    var rowsHtml = grupos.length ? grupos.map(function(g){
+      var fechado = !q && !!state.notasMesesFechados[g.key]; // buscando, mostra tudo
+      return '<div class="nota-mes-head" data-notames="'+escAttr(g.key)+'" role="button" tabindex="0" title="Mostrar/esconder as notas deste mês">'+
+          '<span class="nm-nome">'+(fechado?'▸ ':'▾ ')+escHtml(g.key==="sem-data" ? "Sem data" : monthLabel(g.key))+'</span>'+
+          '<span class="nm-info">'+g.notas.length+' nota(s) · '+fmtCurrency(g.total)+'</span>'+
+        '</div>'+
+        (fechado ? '' : g.notas.map(notaRowHtml).join(""));
     }).join("") : '<div class="aviso-empty">Nenhuma nota emitida ainda'+(q?' para "'+escHtml(state.notasQuery)+'"':'')+'. Notas são geradas ao clicar em 🖨 numa venda.</div>';
 
     root.innerHTML =
-      clientesTopbarHtml("Notas", "TODAS AS NOTAS EMITIDAS · EM ORDEM DE EMISSÃO") +
+      clientesTopbarHtml("Notas", "NOTAS EMITIDAS · SEPARADAS POR MÊS") +
       '<div class="totals-bar">'+
         tstat("Notas emitidas", filtered.length, true)+
         tstat("Valor total", fmtCurrency(totalValor))+
@@ -5109,6 +5174,15 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         if (again){ again.focus(); try{ again.setSelectionRange(pos,pos); }catch(e){} }
       });
     }
+    root.querySelectorAll("[data-notames]").forEach(function(h){
+      function alternar(){
+        var k = h.getAttribute("data-notames");
+        state.notasMesesFechados[k] = !state.notasMesesFechados[k];
+        renderNotas();
+      }
+      h.addEventListener("click", alternar);
+      h.addEventListener("keydown", function(e){ if (e.key==="Enter" || e.key===" "){ e.preventDefault(); alternar(); } });
+    });
     root.querySelectorAll("[data-notaopen]").forEach(function(row){
       row.addEventListener("click", function(){
         var nota = loadNotas().filter(function(n){return n.id===row.getAttribute("data-notaopen");})[0];
