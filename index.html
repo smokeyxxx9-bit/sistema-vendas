@@ -782,7 +782,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
 (function(){
   "use strict";
 
-  var PASSWORD = "10203016829284";
+  var PW_SALT = "65486ebc76f65f733890d89b87194a0e", PW_ITER = 50000, PW_HASH = "011da3b83a0b945acbf6d378092c9e348b11fa72fc2fff04db39a99ab3b2aa11"; // a senha de edição não fica mais escrita no código: só o "hash" dela
   var GOAL_1 = 350000;
   var GOAL_2 = 450000;
   var PAYMENT_OPTIONS = ["Nenhum","Dinheiro","Débito","Crédito","Pix","Múltiplo (até 4 formas)"];
@@ -815,8 +815,6 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     {key:"valorBicos",  label:"Valor dos bicos",         type:"currency", w:"120px"},
     {key:"qtdCambagem", label:"Qtd. cambagens",          type:"select", w:"90px", options:range(0,4)},
     {key:"valorCambagem", label:"Valor da cambagem",     type:"currency", w:"125px"},
-    {key:"qtdBalanceamento", label:"Qtd. balanceamento", type:"select", w:"100px", options:range(0,4), advanced:true},
-    {key:"valorBalanceamento", label:"Valor do balanceamento", type:"currency", w:"135px", advanced:true},
     {key:"qtdRodas",    label:"Qtd. rodas",              type:"select", w:"82px", options:range(0,5)},
     {key:"valorRodas",  label:"Valor das rodas",         type:"currency", w:"120px"},
     {key:"valorPecas",  label:"Valor das peças",         type:"pecas", w:"145px"},
@@ -830,18 +828,17 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   ];
   // letras maiores na tabela => colunas um pouco mais largas
   // larguras enxutas: com a tabela ocupando a tela toda, o conjunto cabe sem rolar para o lado e as letras ficam maiores
-  var LARGURAS = {quantidade:64, medida:150, alinhamento:112, qtdBicos:64, valorBicos:112, qtdCambagem:70, valorCambagem:112,
-    qtdBalanceamento:74, valorBalanceamento:112, qtdRodas:64, valorRodas:112, outros:150, valorPecas:160, maoDeObra:160,
+  var LARGURAS = {quantidade:92, medida:150, alinhamento:112, qtdBicos:72, valorBicos:112, qtdCambagem:100, valorCambagem:112,
+    qtdBalanceamento:104, valorBalanceamento:112, qtdRodas:72, valorRodas:112, outros:150, valorPecas:160, maoDeObra:160,
     valorPneus:118, valor:130, formaPagamento:130, pago:64, carro:100, vendedor:110};
   COLUMNS.forEach(function(c){ if (LARGURAS[c.key]) c.w = LARGURAS[c.key]+"px"; });
   // pares quantidade/valor que devem bater: se um tem valor >0 e o outro é 0, é provável erro de digitação
   var QTY_VALUE_PAIRS = [
     ["qtdBicos","valorBicos"],
     ["qtdCambagem","valorCambagem"],
-    ["qtdBalanceamento","valorBalanceamento"],
     ["qtdRodas","valorRodas"]
   ];
-  var ROWACTIONS_W = "175px"; // largura da coluna de ações da linha (cliente, imprimir, apagar, arrastar)
+  var ROWACTIONS_W = "214px"; // largura da coluna de ações da linha (cliente, imprimir, apagar, arrastar)
 
   // ---------- storage helpers (localStorage — funciona 100% offline, direto no navegador) ----------
   var K_ROWS = "vo_rows:";
@@ -1582,7 +1579,6 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     addItem("Bico/Válvulas", row.qtdBicos, row.valorBicos);
     addItem("Alinhamento", 1, row.alinhamento);
     addItem("Cambagem", row.qtdCambagem, row.valorCambagem);
-    addItem("Balanceamento", row.qtdBalanceamento, row.valorBalanceamento);
     addItem("Desempeno de roda", row.qtdRodas, row.valorRodas);
     addItem("Mão de obra", 1, row.maoDeObra);
     // peças: uma linha por peça informada (o que sobrar do valor total vai como "Peças")
@@ -1985,6 +1981,559 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     return pdf.output("blob");
   }
 
+  // ======================= SENHA DE EDIÇÃO (só o hash fica no código) =======================
+  var pwErros = 0, pwBloqueadoAte = 0;
+  var SHA_K = [0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+  function sha256Bytes(msg){
+    function ror(x,n){ return (x>>>n)|(x<<(32-n)); }
+    var H = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+    var l = msg.length, padLen = ((l+9+63)>>6)<<6;
+    var buf = new Uint8Array(padLen); buf.set(msg); buf[l] = 0x80;
+    var bits = l*8; buf[padLen-4] = (bits>>>24)&255; buf[padLen-3] = (bits>>>16)&255; buf[padLen-2] = (bits>>>8)&255; buf[padLen-1] = bits&255;
+    var w = new Int32Array(64), i, off;
+    for (off=0; off<padLen; off+=64){
+      for (i=0;i<16;i++) w[i] = (buf[off+4*i]<<24)|(buf[off+4*i+1]<<16)|(buf[off+4*i+2]<<8)|buf[off+4*i+3];
+      for (i=16;i<64;i++){
+        var s0 = ror(w[i-15],7)^ror(w[i-15],18)^(w[i-15]>>>3);
+        var s1 = ror(w[i-2],17)^ror(w[i-2],19)^(w[i-2]>>>10);
+        w[i] = (w[i-16]+s0+w[i-7]+s1)|0;
+      }
+      var a=H[0],b=H[1],c=H[2],d=H[3],e=H[4],f=H[5],g=H[6],h=H[7];
+      for (i=0;i<64;i++){
+        var S1 = ror(e,6)^ror(e,11)^ror(e,25), ch = (e&f)^(~e&g);
+        var t1 = (h+S1+ch+SHA_K[i]+w[i])|0;
+        var S0 = ror(a,2)^ror(a,13)^ror(a,22), mj = (a&b)^(a&c)^(b&c);
+        var t2 = (S0+mj)|0;
+        h=g; g=f; f=e; e=(d+t1)|0; d=c; c=b; b=a; a=(t1+t2)|0;
+      }
+      H[0]=(H[0]+a)|0; H[1]=(H[1]+b)|0; H[2]=(H[2]+c)|0; H[3]=(H[3]+d)|0;
+      H[4]=(H[4]+e)|0; H[5]=(H[5]+f)|0; H[6]=(H[6]+g)|0; H[7]=(H[7]+h)|0;
+    }
+    var out = new Uint8Array(32);
+    for (i=0;i<8;i++){ out[4*i]=(H[i]>>>24)&255; out[4*i+1]=(H[i]>>>16)&255; out[4*i+2]=(H[i]>>>8)&255; out[4*i+3]=H[i]&255; }
+    return out;
+  }
+  function hashSenhaEdicao(pw){
+    var txt = unescape(encodeURIComponent(PW_SALT+":"+pw)), bytes = new Uint8Array(txt.length);
+    for (var i=0;i<txt.length;i++) bytes[i] = txt.charCodeAt(i);
+    var h = sha256Bytes(bytes);
+    for (var n=1;n<PW_ITER;n++) h = sha256Bytes(h);
+    var hex = ""; for (var j=0;j<h.length;j++) hex += (h[j]<16?"0":"")+h[j].toString(16);
+    return hex;
+  }
+  function senhaEdicaoConfere(pw){ return hashSenhaEdicao(String(pw||"")) === PW_HASH; }
+
+  // ======================= BACKUPS AUTOMÁTICOS (um por dia, guardados no navegador) =======================
+  var idbPromise = null;
+  function idbDb(){
+    if (idbPromise) return idbPromise;
+    idbPromise = new Promise(function(res, rej){
+      if (!window.indexedDB) return rej(new Error("Este navegador não permite guardar backups automáticos."));
+      var rq = indexedDB.open("vo_backup_db", 1);
+      rq.onupgradeneeded = function(){
+        var db = rq.result;
+        if (!db.objectStoreNames.contains("meta")) db.createObjectStore("meta", {keyPath:"id"});
+        if (!db.objectStoreNames.contains("snaps")) db.createObjectStore("snaps", {keyPath:"id"});
+      };
+      rq.onsuccess = function(){ res(rq.result); };
+      rq.onerror = function(){ rej(rq.error); };
+    });
+    return idbPromise;
+  }
+  function idbReq(store, mode, op){
+    return idbDb().then(function(db){
+      return new Promise(function(res, rej){
+        var tx = db.transaction(store, mode), rq = op(tx.objectStore(store));
+        tx.oncomplete = function(){ res(rq ? rq.result : undefined); };
+        tx.onerror = tx.onabort = function(){ rej(tx.error); };
+      });
+    });
+  }
+  function dadosParaSnapshot(){
+    var data = {};
+    for (var i=0;i<localStorage.length;i++){
+      var k = localStorage.key(i);
+      if (k && k.indexOf("vo_")===0 && k!==K_AUTOBACKUP) data[k] = localStorage.getItem(k);
+    }
+    return data;
+  }
+  function pruneSnapshots(){
+    return idbReq("meta","readonly",function(s){ return s.getAll(); }).then(function(list){
+      list.sort(function(a,b){ return b.ts-a.ts; });
+      var dias = 0, outros = 0, apagar = [];
+      list.forEach(function(m){
+        if (m.id.indexOf("dia-")===0){ dias++; if (dias>14) apagar.push(m.id); }
+        else { outros++; if (outros>10) apagar.push(m.id); }
+      });
+      return Promise.all(apagar.map(function(id){
+        return idbReq("snaps","readwrite",function(s){ return s.delete(id); }).then(function(){
+          return idbReq("meta","readwrite",function(s){ return s.delete(id); });
+        });
+      }));
+    });
+  }
+  function makeSnapshot(motivo, id){
+    var data = dadosParaSnapshot();
+    var meta = {id:id, ts:Date.now(), motivo:motivo, bytes:JSON.stringify(data).length, chaves:Object.keys(data).length};
+    return idbReq("snaps","readwrite",function(s){ return s.put({id:id, data:data}); })
+      .then(function(){ return idbReq("meta","readwrite",function(s){ return s.put(meta); }); })
+      .then(function(){ return pruneSnapshots(); })
+      .then(function(){ return meta; });
+  }
+  function dailySnapshot(){
+    var id = "dia-"+toISO(new Date());
+    return idbReq("meta","readonly",function(s){ return s.get(id); }).then(function(ex){
+      if (ex) return null;
+      if (!lsGetJSON(K_NOTAS, null) && !listAllDates().length) return null; // nada para guardar ainda
+      return makeSnapshot("Backup automático do dia", id);
+    }).catch(function(){ /* sem IndexedDB: o backup manual continua funcionando */ });
+  }
+  function listSnapshots(){
+    return idbReq("meta","readonly",function(s){ return s.getAll(); }).then(function(l){ return l.sort(function(a,b){ return b.ts-a.ts; }); });
+  }
+  function restoreSnapshot(id){
+    return makeSnapshot("Antes de restaurar um backup", "pre-"+Date.now()).then(function(){
+      return idbReq("snaps","readonly",function(s){ return s.get(id); });
+    }).then(function(rec){
+      if (!rec) throw new Error("Backup não encontrado.");
+      var n = 0;
+      Object.keys(rec.data).forEach(function(k){
+        try{ localStorage.setItem(k, rec.data[k]); cloudPush(k, JSON.parse(rec.data[k])); n++; }catch(e){}
+      });
+      state.monthSummaryCache = {}; state.monthPartsCache = {};
+      return n;
+    });
+  }
+  function baixarSnapshot(id){
+    return idbReq("snaps","readonly",function(s){ return s.get(id); }).then(function(rec){
+      if (!rec) return;
+      downloadTextFile("backup-"+id+".json", JSON.stringify(rec.data,null,2), "application/json");
+    });
+  }
+
+  // ======================= MIGRAÇÃO: Mão de obra → Serviço =======================
+  function fmtCampoNum(n){ return n>0 ? n.toFixed(2).replace(".",",") : ""; }
+  function migrarLinhaMaoDeObra(row){
+    var mo = parseNum(row.maoDeObra);
+    var partesMo = Array.isArray(row.maoDeObraSplit) ? row.maoDeObraSplit.filter(function(q){ return parseNum(q.valor)>0 && MAODEOBRA_PESSOAS.indexOf(q.pessoa)>-1; }).map(function(q){ return {pessoa:q.pessoa, valor:parseNum(q.valor)}; }) : [];
+    if (!(mo>0) && !partesMo.length){
+      if (row.maoDeObra!=="" && row.maoDeObra!==undefined && !(mo>0)){ row.maoDeObra = ""; }
+      if (row.maoDeObraSplit){ delete row.maoDeObraSplit; return true; }
+      return false;
+    }
+    var totalAntigo = parseNum(row.outros), lista;
+    if (Array.isArray(row.outrosLista) && row.outrosLista.length){
+      lista = row.outrosLista.slice();
+    } else {
+      lista = [];
+      var desc = row.outrosDescricao ? String(row.outrosDescricao).trim() : "";
+      if (Array.isArray(row.outrosSplit) && row.outrosSplit.length){
+        var pp = row.outrosSplit.filter(function(q){ return parseNum(q.valor)>0; }).map(function(q){ return {pessoa:q.pessoa, valor:parseNum(q.valor)}; });
+        var sp = pp.reduce(function(a,q){ return a+q.valor; }, 0);
+        if (pp.length) lista.push({nome:desc, valor:sp, pessoa:"", split:pp});
+        if (totalAntigo-sp>0.005) lista.push({nome:"", valor:totalAntigo-sp, pessoa:""});
+      } else if (totalAntigo>0 || desc){
+        lista.push({nome:desc, valor:totalAntigo, pessoa:""});
+      }
+    }
+    var somaPartes = partesMo.reduce(function(a,q){ return a+q.valor; }, 0);
+    var totalMo = Math.max(mo, somaPartes);
+    if (partesMo.length){
+      lista.push({nome:"Mão de obra", valor:somaPartes, pessoa:"", split:partesMo});
+      if (totalMo-somaPartes>0.005) lista.push({nome:"Mão de obra", valor:totalMo-somaPartes, pessoa:""});
+    } else {
+      lista.push({nome:"Mão de obra", valor:totalMo, pessoa:""});
+    }
+    row.outrosLista = lista;
+    row.outros = fmtCampoNum(totalAntigo + totalMo);
+    var nomes = lista.map(function(o){ return o.nome; }).filter(Boolean);
+    if (nomes.length) row.outrosDescricao = nomes.join(", "); else delete row.outrosDescricao;
+    delete row.outrosSplit;
+    row.maoDeObra = "";
+    delete row.maoDeObraSplit;
+    return true;
+  }
+  function chavesDeVendas(){
+    var keys = [];
+    for (var i=0;i<localStorage.length;i++){
+      var k = localStorage.key(i);
+      if (k && (k.indexOf(K_ROWS)===0 || k.indexOf(K_NOVOS)===0) && k!==K_NOVOS_META) keys.push(k);
+    }
+    return keys;
+  }
+  function contarMaoDeObra(){
+    var vendas = 0, valor = 0;
+    chavesDeVendas().forEach(function(k){
+      var rows = lsGetJSON(k, []);
+      if (!Array.isArray(rows)) return;
+      rows.forEach(function(r){
+        var mo = parseNum(r && r.maoDeObra);
+        if (mo>0 || (r && Array.isArray(r.maoDeObraSplit) && r.maoDeObraSplit.length)){ vendas++; valor += mo; }
+      });
+    });
+    return {vendas:vendas, valor:valor};
+  }
+  function migrarMaoDeObraParaServico(){
+    var vendas = 0, dias = 0;
+    chavesDeVendas().forEach(function(k){
+      var rows = lsGetJSON(k, []);
+      if (!Array.isArray(rows)) return;
+      var mudou = false;
+      rows.forEach(function(r){ if (r && migrarLinhaMaoDeObra(r)){ mudou = true; vendas++; } });
+      if (mudou){
+        dias++;
+        // grava direto (sem passar pela auditoria, para não lotar o histórico de edições) e envia para a nuvem
+        localStorage.setItem(k, JSON.stringify(rows));
+        try{ cloudPush(k, rows); }catch(e){}
+      }
+    });
+    state.monthSummaryCache = {}; state.monthPartsCache = {};
+    return {vendas:vendas, dias:dias};
+  }
+
+
+  // ======================= MIGRAÇÃO: Balanceamento → Serviço =======================
+  function migrarLinhaBalanceamento(row){
+    var v = parseNum(row.valorBalanceamento), q = parseNum(row.qtdBalanceamento);
+    var mudou = false;
+    // descontos que apontavam para o valor do balanceamento passam a apontar para Serviço
+    if (Array.isArray(row.descontos)){
+      row.descontos.forEach(function(d){ if (d && d.origem==="valorBalanceamento"){ d.origem = "outros"; mudou = true; } });
+    }
+    if (row.desconto && row.desconto.origem==="valorBalanceamento"){ row.desconto.origem = "outros"; mudou = true; }
+    if (!(v>0) && !(q>0) && !mudou) return false;
+    if (v>0){
+      var totalAntigo = parseNum(row.outros), lista;
+      if (Array.isArray(row.outrosLista) && row.outrosLista.length){
+        lista = row.outrosLista.slice();
+      } else {
+        lista = [];
+        var desc = row.outrosDescricao ? String(row.outrosDescricao).trim() : "";
+        if (Array.isArray(row.outrosSplit) && row.outrosSplit.length){
+          var pp = row.outrosSplit.filter(function(x){ return parseNum(x.valor)>0; }).map(function(x){ return {pessoa:x.pessoa, valor:parseNum(x.valor)}; });
+          var sp = pp.reduce(function(a,x){ return a+x.valor; }, 0);
+          if (pp.length) lista.push({nome:desc, valor:sp, pessoa:"", split:pp});
+          if (totalAntigo-sp>0.005) lista.push({nome:"", valor:totalAntigo-sp, pessoa:""});
+        } else if (totalAntigo>0 || desc){
+          lista.push({nome:desc, valor:totalAntigo, pessoa:""});
+        }
+      }
+      lista.push({nome: q>1 ? "Balanceamento ("+q+")" : "Balanceamento", valor:v, pessoa:""});
+      row.outrosLista = lista;
+      row.outros = fmtCampoNum(totalAntigo + v);
+      var nomes = lista.map(function(o){ return o.nome; }).filter(Boolean);
+      if (nomes.length) row.outrosDescricao = nomes.join(", "); else delete row.outrosDescricao;
+      delete row.outrosSplit;
+    }
+    row.valorBalanceamento = "";
+    row.qtdBalanceamento = "0";
+    return true;
+  }
+  function contarBalanceamento(){
+    var vendas = 0, valor = 0;
+    chavesDeVendas().forEach(function(k){
+      var rows = lsGetJSON(k, []);
+      if (!Array.isArray(rows)) return;
+      rows.forEach(function(r){
+        if (r && (parseNum(r.valorBalanceamento)>0 || parseNum(r.qtdBalanceamento)>0)){ vendas++; valor += parseNum(r.valorBalanceamento); }
+      });
+    });
+    return {vendas:vendas, valor:valor};
+  }
+  function migrarBalanceamentoParaServico(){
+    var vendas = 0, dias = 0;
+    chavesDeVendas().forEach(function(k){
+      var rows = lsGetJSON(k, []);
+      if (!Array.isArray(rows)) return;
+      var mudou = false;
+      rows.forEach(function(r){ if (r && migrarLinhaBalanceamento(r)){ mudou = true; vendas++; } });
+      if (mudou){
+        dias++;
+        localStorage.setItem(k, JSON.stringify(rows));
+        try{ cloudPush(k, rows); }catch(e){}
+      }
+    });
+    state.monthSummaryCache = {}; state.monthPartsCache = {};
+    return {vendas:vendas, dias:dias};
+  }
+  // roda sozinho ao abrir o app: se sobrou algo em Balanceamento, guarda um backup e leva para Serviço
+  function migrarBalanceamentoAuto(done){
+    var c;
+    try{ c = contarBalanceamento(); }catch(e){ done(); return; }
+    if (!c.vendas){ done(); return; }
+    var fim = function(){
+      try{ migrarBalanceamentoParaServico(); }catch(e){}
+      done();
+    };
+    try{ makeSnapshot("Antes de migrar Balanceamento para Serviço", "pre-bal-"+Date.now()).catch(function(){}).then(fim); }
+    catch(e){ fim(); }
+  }
+
+  // ======================= RELATÓRIO DO MÊS (por pessoa e por tipo de serviço) =======================
+  function itensServicoDe(r){
+    // devolve [{pessoa, valor}] com tudo que foi lançado como serviço/mão de obra nesta venda
+    var out = [];
+    var lista = Array.isArray(r.outrosLista) && r.outrosLista.length ? r.outrosLista : (Array.isArray(r.outrosSplit) ? r.outrosSplit : []);
+    lista.forEach(function(o){
+      var partes = Array.isArray(o.split) && o.split.length ? o.split : [o];
+      partes.forEach(function(q){ var v = parseNum(q.valor); if (v>0) out.push({pessoa:q.pessoa||"", valor:v}); });
+    });
+    if (Array.isArray(r.maoDeObraSplit)) r.maoDeObraSplit.forEach(function(q){ var v = parseNum(q.valor); if (v>0) out.push({pessoa:q.pessoa||"", valor:v}); });
+    return out;
+  }
+  function vendasDoMes(month){
+    var semi = [];
+    listAllDates().forEach(function(d){
+      if (d.slice(0,7)!==month) return;
+      rowsOfDay(d).forEach(function(r){ semi.push({date:d, r:r}); });
+    });
+    semi.sort(function(a,b){ return a.date<b.date ? -1 : (a.date>b.date ? 1 : 0); });
+    var novos = [];
+    try{ novos = loadNovosMonth(month).filter(function(n){ return !isBlankNovo(n); }); }catch(e){}
+    return {semi:semi, novos:novos};
+  }
+  function relatorioDoMes(month){
+    var v = vendasDoMes(month);
+    var todas = v.semi.map(function(x){ return x.r; }).concat(v.novos);
+    var sv = servicosTotais(todas);
+    var pessoas = {}; MAODEOBRA_PESSOAS.forEach(function(p){ pessoas[p] = {valor:0, itens:0}; });
+    var semPessoa = 0, totalServ = 0;
+    todas.forEach(function(r){
+      totalServ += parseNum(r.outros) + parseNum(r.maoDeObra);
+      var atribuido = 0;
+      itensServicoDe(r).forEach(function(it){
+        if (pessoas[it.pessoa]){ pessoas[it.pessoa].valor += it.valor; pessoas[it.pessoa].itens++; atribuido += it.valor; }
+      });
+    });
+    var somaPessoas = 0; MAODEOBRA_PESSOAS.forEach(function(p){ somaPessoas += pessoas[p].valor; });
+    semPessoa = Math.max(0, totalServ - somaPessoas);
+    var totalSemi = 0; v.semi.forEach(function(x){ totalSemi += computeValor(x.r); });
+    return {v:v, sv:sv, pessoas:pessoas, semPessoa:semPessoa, totalServ:totalServ, totalSemi:totalSemi, qtdSemi:v.semi.length, qtdNovos:v.novos.length};
+  }
+  function relatorioHtml(rel){
+    var cel = 'padding:8px 10px;border-bottom:1px solid var(--border-soft);';
+    var n = function(x){ return '<td style="'+cel+'text-align:right;font-family:\'IBM Plex Mono\',monospace;">'+x+'</td>'; };
+    var l = function(x){ return '<td style="'+cel+'">'+x+'</td>'; };
+    var h = function(x,al){ return '<th style="'+cel+'text-align:'+(al||'right')+';font-size:13px;color:var(--text-dim);font-weight:600;">'+x+'</th>'; };
+    var sv = rel.sv;
+    var t1 = '<table style="width:100%;border-collapse:collapse;margin:6px 0 16px;"><thead><tr>'+h('Quem fez o serviço','left')+h('Itens')+h('Valor a pagar/conferir')+'</tr></thead><tbody>'+
+      MAODEOBRA_PESSOAS.map(function(p){ return '<tr>'+l('<b>'+escHtml(p)+'</b>')+n(rel.pessoas[p].itens)+n(fmtCurrency(rel.pessoas[p].valor))+'</tr>'; }).join('')+
+      '<tr>'+l('<span style="color:var(--text-dim);">Serviço sem pessoa definida</span>')+n('')+n(fmtCurrency(rel.semPessoa))+'</tr>'+
+      '<tr>'+l('<b>Total de Serviço</b>')+n('')+n('<b>'+fmtCurrency(rel.totalServ)+'</b>')+'</tr></tbody></table>';
+    var linhasTipo = [
+      ['Alinhamento', sv.qtdAlinhamento, sv.alinhamento],
+      ['Bicos (inclui serviço do Wesley)', sv.qtdBicos, sv.totalBicos],
+      ['Cambagem (inclui serviço do Renan)', sv.qtdCambagem, sv.totalCambagem],
+      ['Rodas (inclui serviço do João)', sv.qtdRodas, sv.totalRodas],
+      ['Peças', '', sv.valorPecas],
+      ['Serviço sem pessoa definida', '', rel.semPessoa]
+    ];
+    var t2 = '<table style="width:100%;border-collapse:collapse;margin:6px 0 10px;"><thead><tr>'+h('Tipo de serviço','left')+h('Qtd.')+h('Valor')+'</tr></thead><tbody>'+
+      linhasTipo.map(function(x){ return '<tr>'+l(x[0])+n(x[1])+n(fmtCurrency(x[2]||0))+'</tr>'; }).join('')+'</tbody></table>';
+    return '<p style="margin:0 0 8px;">'+rel.qtdSemi+' venda(s) de seminovos'+(rel.qtdNovos ? ' e '+rel.qtdNovos+' de pneus novos' : '')+' neste mês. Total vendido (seminovos, já com descontos): <b style="color:var(--text);">'+fmtCurrency(rel.totalSemi)+'</b></p>'+t1+t2;
+  }
+  function n2(v){ return (v||0).toFixed(2).replace(".",","); }
+  function exportarMesCSV(month){
+    var rel = relatorioDoMes(month);
+    var cab = ["Data","Carro","Cliente","Medida","Qtd. pneus","Alinhamento","Bicos","Cambagem","Rodas","Peças","Serviço","Serviço Renan","Serviço João","Serviço Wesley","Valor dos pneus","Desconto","Total","Forma de pagamento","Pago","Vendedor"];
+    var linhas = [cab.map(csvEscape).join(";")];
+    rel.v.semi.forEach(function(x){
+      var r = x.r, porP = {Renan:0,"João":0,Wesley:0};
+      itensServicoDe(r).forEach(function(it){ if (porP.hasOwnProperty(it.pessoa)) porP[it.pessoa] += it.valor; });
+      linhas.push([
+        fmtDateBR(x.date), r.carro||"", customerNameById(r.clienteId)||"", r.medida||"", parseNum(r.quantidade),
+        n2(parseNum(r.alinhamento)), n2(parseNum(r.valorBicos)), n2(parseNum(r.valorCambagem)), n2(parseNum(r.valorRodas)),
+        n2(parseNum(r.valorPecas)), n2(parseNum(r.outros)+parseNum(r.maoDeObra)), n2(porP.Renan), n2(porP["João"]), n2(porP.Wesley),
+        n2(parseNum(r.valorPneus)), n2(descontoValor(r)), n2(computeValor(r)), r.formaPagamento||"", (r.pago==="✅"?"Pago":"Pendente"),
+        (r.vendedor && r.vendedor!=="Nenhum" ? r.vendedor : "")
+      ].map(csvEscape).join(";"));
+    });
+    linhas.push("");
+    linhas.push(["RESUMO DO MÊS "+month].map(csvEscape).join(";"));
+    linhas.push(["Pessoa","Itens","Valor"].map(csvEscape).join(";"));
+    MAODEOBRA_PESSOAS.forEach(function(p){ linhas.push([p, rel.pessoas[p].itens, n2(rel.pessoas[p].valor)].map(csvEscape).join(";")); });
+    linhas.push(["Serviço sem pessoa definida","",n2(rel.semPessoa)].map(csvEscape).join(";"));
+    linhas.push(["Total de Serviço","",n2(rel.totalServ)].map(csvEscape).join(";"));
+    linhas.push("");
+    linhas.push(["Tipo","Qtd.","Valor"].map(csvEscape).join(";"));
+    var sv = rel.sv;
+    [["Alinhamento",sv.qtdAlinhamento,sv.alinhamento],["Bicos (com serviço do Wesley)",sv.qtdBicos,sv.totalBicos],
+     ["Cambagem (com serviço do Renan)",sv.qtdCambagem,sv.totalCambagem],["Rodas (com serviço do João)",sv.qtdRodas,sv.totalRodas],["Peças","",sv.valorPecas]]
+      .forEach(function(x){ linhas.push([x[0], x[1], n2(x[2])].map(csvEscape).join(";")); });
+    downloadTextFile("vendas-"+month+".csv", linhas.join("\r\n"));
+  }
+
+  // ======================= AVISO DE PAGAMENTO / DUPLICAR VENDA / ENTER =======================
+  function pagamentoAviso(row, valor){
+    if (!(valor>0)) return "";
+    var fp = row.formaPagamento || "Nenhum";
+    if (row.pago==="✅" && (fp==="Nenhum" || fp==="")) return "Venda marcada como paga, mas sem forma de pagamento.";
+    if (fp.indexOf("Múltiplo")===0){
+      var soma = 0;
+      (Array.isArray(row.pagamentosMultiplos) ? row.pagamentosMultiplos : []).forEach(function(p){ if (p) soma += Math.max(0, parseNum(p.valor)); });
+      if (Math.abs(soma-valor)>0.005) return "Os pagamentos múltiplos somam "+fmtCurrency(soma)+", mas a venda vale "+fmtCurrency(valor)+".";
+    }
+    return "";
+  }
+  function dupRow(id){
+    var rws = tblRows(), idx = -1;
+    for (var i=0;i<rws.length;i++){ if (rws[i].id===id){ idx = i; break; } }
+    if (idx===-1) return;
+    if (isNovosTbl() && !novoEditable(tblDate())){ state.modal = {type:"auth", error:""}; render(); return; }
+    var c = JSON.parse(JSON.stringify(rws[idx]));
+    c.id = uid(); c.criadoEm = new Date().toISOString();
+    c.pago = "❌"; c.formaPagamento = "Nenhum";
+    ["pagamentosMultiplos","splitValor","descontos","desconto","grupoId","notaId","vendaNum"].forEach(function(k){ delete c[k]; });
+    c.medidaBaixa = 0;
+    try{ syncRowEstoque(c); }catch(e){}
+    rws.splice(idx+1, 0, c);
+    renderTable();
+    scheduleSave();
+  }
+  // Enter pula para o próximo campo da tabela (Shift+Enter volta)
+  document.addEventListener("keydown", function(e){
+    if (e.key!=="Enter" || e.isComposing) return;
+    var t = e.target;
+    if (!t || t.tagName!=="INPUT" || !t.classList.contains("cellval") || !t.closest(".grid-row.data")) return;
+    var todos = [].slice.call(document.querySelectorAll("#gridInner .cellval:not([disabled]):not(.computed)"));
+    var i = todos.indexOf(t); if (i<0) return;
+    var prox = todos[e.shiftKey ? i-1 : i+1]; if (!prox) return;
+    e.preventDefault(); prox.focus(); if (prox.select) prox.select();
+  });
+
+  // ======================= MODAL: FERRAMENTAS (relatório, backups, migração) =======================
+  function renderFerramentasModal(){
+    var div = document.createElement("div");
+    div.className = "overlay";
+    var mes = state.modal.mes || state.dashMonth || today.slice(0,7);
+    div.innerHTML =
+      '<div class="modal wide">'+
+        '<h3>🛠 Ferramentas do gestor</h3>'+
+        '<h4 style="margin:14px 0 6px;font-size:17px;">Relatório do mês</h4>'+
+        '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">'+
+          '<input type="month" id="ferMes" value="'+escAttr(mes)+'" style="width:auto;letter-spacing:normal;margin:0;">'+
+          '<button class="btn ghost small" id="ferCsv">⇩ Exportar o mês (CSV/Excel)</button>'+
+        '</div>'+
+        '<div id="ferRel"></div>'+
+        '<h4 style="margin:18px 0 6px;font-size:17px;">Backups automáticos</h4>'+
+        '<p>O sistema guarda uma cópia por dia (as últimas 14) neste navegador. Restaurar também atualiza a nuvem.</p>'+
+        '<button class="btn ghost small" id="ferSnapNow" style="margin-bottom:10px;">Fazer backup agora</button>'+
+        '<div id="ferSnaps"></div>'+
+        '<h4 style="margin:18px 0 6px;font-size:17px;">Migrar Mão de obra → Serviço</h4>'+
+        '<div id="ferMig"></div>'+
+        '<div class="modal-actions" style="margin-top:18px;"><button class="btn ghost small" id="ferVoltar">Voltar</button></div>'+
+      '</div>';
+    document.body.appendChild(div);
+    function q(id){ return div.querySelector(id); }
+    function desenharRel(){
+      var m = q("#ferMes").value || mes; state.modal.mes = m;
+      try{ q("#ferRel").innerHTML = relatorioHtml(relatorioDoMes(m)); }catch(e){ q("#ferRel").innerHTML = '<p>Não foi possível montar o relatório deste mês.</p>'; }
+    }
+    function desenharSnaps(){
+      listSnapshots().then(function(lista){
+        if (!lista.length){ q("#ferSnaps").innerHTML = '<p>Ainda não há backups guardados. O primeiro é feito sozinho em alguns segundos, ou clique em "Fazer backup agora".</p>'; return; }
+        q("#ferSnaps").innerHTML = '<div style="border:1px solid var(--border-soft);border-radius:4px;max-height:240px;overflow-y:auto;">'+lista.map(function(m){
+          return '<div style="display:flex;gap:10px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--border-soft);flex-wrap:wrap;">'+
+            '<div style="flex:1 1 220px;min-width:0;"><b>'+escHtml(new Date(m.ts).toLocaleString("pt-BR"))+'</b><div style="font-size:13px;color:var(--text-dim);">'+escHtml(m.motivo||"")+' · '+Math.max(1,Math.round(m.bytes/1024))+' KB</div></div>'+
+            '<button class="btn ghost small ferRest" data-id="'+escAttr(m.id)+'">Restaurar</button>'+
+            '<button class="btn ghost small ferDown" data-id="'+escAttr(m.id)+'">⇩ Baixar</button></div>';
+        }).join("")+'</div>';
+        div.querySelectorAll(".ferRest").forEach(function(b){ b.addEventListener("click", function(){
+          if (!confirm("Restaurar este backup? Os dados de hoje serão substituídos pelos dessa cópia (uma cópia do estado atual é guardada antes).")) return;
+          restoreSnapshot(b.getAttribute("data-id")).then(function(n){ alert(n+" registro(s) restaurado(s)."); state.modal = null; state.view = "dashboard"; render(); })
+            .catch(function(e){ alert("Não foi possível restaurar: "+(e&&e.message?e.message:e)); });
+        }); });
+        div.querySelectorAll(".ferDown").forEach(function(b){ b.addEventListener("click", function(){ baixarSnapshot(b.getAttribute("data-id")); }); });
+      }).catch(function(e){ q("#ferSnaps").innerHTML = '<p>'+escHtml(e&&e.message?e.message:"Backups indisponíveis neste navegador.")+'</p>'; });
+    }
+    function desenharMig(){
+      var c = contarMaoDeObra();
+      if (!c.vendas){ q("#ferMig").innerHTML = '<p>✓ Nenhuma venda com valor em Mão de obra. Não há nada para migrar.</p>'; return; }
+      q("#ferMig").innerHTML = '<p>'+c.vendas+' venda(s) ainda têm valor em Mão de obra ('+fmtCurrency(c.valor)+'). Esse valor continua somando no total, mas não aparece mais na tabela. Ao migrar, ele vai para o campo Serviço (mantendo a divisão por pessoa). Os totais do dia/mês não mudam e é feito um backup antes.</p>'+
+        '<button class="btn primary small" id="ferMigGo">Migrar agora</button>';
+      q("#ferMigGo").addEventListener("click", function(){
+        if (!confirm("Migrar "+c.vendas+" venda(s) de Mão de obra para Serviço? Um backup é guardado antes.")) return;
+        makeSnapshot("Antes de migrar Mão de obra para Serviço", "pre-"+Date.now()).catch(function(){}).then(function(){
+          var r = migrarMaoDeObraParaServico();
+          alert(r.vendas+" venda(s) migrada(s) em "+r.dias+" dia(s).");
+          state.modal = null; state.view = "dashboard"; render();
+        });
+      });
+    }
+    q("#ferMes").addEventListener("change", desenharRel);
+    q("#ferCsv").addEventListener("click", function(){ exportarMesCSV(q("#ferMes").value || mes); });
+    q("#ferSnapNow").addEventListener("click", function(){ makeSnapshot("Backup manual","man-"+Date.now()).then(desenharSnaps).catch(function(e){ alert("Não foi possível guardar o backup: "+(e&&e.message?e.message:e)); }); });
+    q("#ferVoltar").addEventListener("click", function(){ state.modal = null; render(); });
+    div.addEventListener("click", function(e){ if (e.target===div){ state.modal = null; render(); } });
+    desenharRel(); desenharSnaps(); desenharMig();
+  }
+
+  // ======================= MODAL: FECHAMENTO DO DIA =======================
+  function renderFechamentoModal(){
+    var d = state.modal.date, t = null;
+    try{ t = computeTotals(); }catch(e){}
+    if (!t){ state.modal = null; render(); return; }
+    var chave = "vo_fechamento:"+d, salvo = lsGetJSON(chave, {}) || {};
+    var contado = salvo.contado || {};
+    var metodos = ["Dinheiro","Pix","Débito","Crédito"];
+    var todas = rowsOfDay(d).concat(novosRowsDoDia(d));
+    var avisos = todas.filter(function(r){ return pagamentoAviso(r, computeValor(r)); }).length;
+    var pend = todas.filter(function(r){ return r.pago!=="✅" && computeValor(r)>0; });
+    var pendValor = pend.reduce(function(a,r){ return a+computeValor(r); }, 0);
+    var cel = 'padding:8px 8px;border-bottom:1px solid var(--border-soft);';
+    var div = document.createElement("div");
+    div.className = "overlay";
+    div.innerHTML =
+      '<div class="modal wide">'+
+        '<h3>💵 Fechamento do dia — '+escHtml(fmtDateBR(d))+'</h3>'+
+        '<p>Compare o que foi lançado no sistema com o que você realmente conferiu (dinheiro na gaveta, extrato da maquininha e do Pix).</p>'+
+        '<table style="width:100%;border-collapse:collapse;margin-bottom:10px;"><thead><tr>'+
+          '<th style="'+cel+'text-align:left;font-size:13px;color:var(--text-dim);">Forma</th><th style="'+cel+'text-align:right;font-size:13px;color:var(--text-dim);">Lançado</th>'+
+          '<th style="'+cel+'text-align:right;font-size:13px;color:var(--text-dim);">Conferido</th><th style="'+cel+'text-align:right;font-size:13px;color:var(--text-dim);">Diferença</th></tr></thead><tbody>'+
+        metodos.map(function(m){
+          return '<tr><td style="'+cel+'"><b>'+escHtml(m)+'</b></td><td style="'+cel+'text-align:right;font-family:\'IBM Plex Mono\',monospace;">'+fmtCurrency(t.porPagamento[m]||0)+'</td>'+
+            '<td style="'+cel+'"><input type="text" inputmode="decimal" class="fcIn" data-m="'+escAttr(m)+'" placeholder="0,00" value="'+escAttr(contado[m]!==undefined&&contado[m]!==""?String(contado[m]).replace(".",","):"")+'" style="margin:0;text-align:right;letter-spacing:normal;"></td>'+
+            '<td style="'+cel+'text-align:right;font-family:\'IBM Plex Mono\',monospace;" class="fcDif" data-m="'+escAttr(m)+'">—</td></tr>';
+        }).join("")+
+        '</tbody></table>'+
+        '<div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;"><label style="flex:0 0 auto;font-size:14px;color:var(--text-dim);">Fundo de caixa (troco que já estava na gaveta)</label>'+
+          '<input type="text" inputmode="decimal" id="fcFundo" placeholder="0,00" value="'+escAttr(salvo.fundo!==undefined&&salvo.fundo!==""?String(salvo.fundo).replace(".",","):"")+'" style="margin:0;max-width:160px;text-align:right;letter-spacing:normal;"></div>'+
+        '<div style="font-size:15px;line-height:1.7;margin:6px 0 14px;">'+
+          'Total lançado como entrada: <b style="color:var(--text);">'+fmtCurrency(t.entrouTotal||0)+'</b><br>'+
+          (pend.length ? '⚠ '+pend.length+' venda(s) ainda pendente(s) de pagamento: <b>'+fmtCurrency(pendValor)+'</b><br>' : '✓ Nenhuma venda pendente de pagamento<br>')+
+          (avisos ? '⚠ '+avisos+' venda(s) com problema na forma de pagamento (marcadas em amarelo na tabela)<br>' : '')+
+          (t.semForma>0.005 ? '⚠ '+fmtCurrency(t.semForma)+' em vendas sem forma de pagamento definida<br>' : '')+
+        '</div>'+
+        '<div class="modal-actions"><button class="btn ghost small" id="fcVoltar">Voltar</button><button class="btn primary small" id="fcSalvar">Salvar conferência</button></div>'+
+      '</div>';
+    document.body.appendChild(div);
+    function atualizar(){
+      var fundo = parseNum(div.querySelector("#fcFundo").value);
+      div.querySelectorAll(".fcIn").forEach(function(inp){
+        var m = inp.getAttribute("data-m"), cel = div.querySelector('.fcDif[data-m="'+m+'"]');
+        if (inp.value.trim()===""){ cel.textContent = "—"; cel.style.color = ""; return; }
+        var dif = parseNum(inp.value) - (m==="Dinheiro" ? fundo : 0) - (t.porPagamento[m]||0);
+        cel.textContent = (dif>0.004?"+":"")+fmtCurrency(dif);
+        cel.style.color = Math.abs(dif)<0.005 ? "var(--green)" : "var(--red)";
+      });
+    }
+    div.querySelectorAll(".fcIn,#fcFundo").forEach(function(i){ i.addEventListener("input", atualizar); });
+    atualizar();
+    div.querySelector("#fcSalvar").addEventListener("click", function(){
+      var c = {};
+      div.querySelectorAll(".fcIn").forEach(function(inp){ c[inp.getAttribute("data-m")] = inp.value.trim(); });
+      lsSetJSON(chave, {contado:c, fundo:div.querySelector("#fcFundo").value.trim(), ts:Date.now()});
+      state.modal = null; render();
+    });
+    div.querySelector("#fcVoltar").addEventListener("click", function(){ state.modal = null; render(); });
+    div.addEventListener("click", function(e){ if (e.target===div){ state.modal = null; render(); } });
+  }
+
+  // backup automático do dia: logo depois de abrir o sistema e de hora em hora
+  setTimeout(function(){ dailySnapshot(); }, 8000);
+  setInterval(function(){ dailySnapshot(); }, 3600000);
+
+
   // ---------- backup / restauração ----------
   function exportBackup(auto){
     var data = {};
@@ -2016,19 +2565,27 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   function importBackupFile(file){
     var reader = new FileReader();
     reader.onload = function(){
-      try{
-        var data = JSON.parse(reader.result);
-        var n = 0;
-        Object.keys(data).forEach(function(k){
-          if (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS || k.indexOf(K_NOVOS)===0 || k===K_NOVOS_META){ localStorage.setItem(k, data[k]); n++; }
-        });
-        state.monthSummaryCache = {};
-        state.monthPartsCache = {};
-        alert(n+" registro(s) importado(s) com sucesso.");
-        render();
-      }catch(e){
-        alert("Não foi possível ler esse arquivo de backup.");
+      var data;
+      try{ data = JSON.parse(reader.result); }catch(e){ alert("Não foi possível ler esse arquivo de backup."); return; }
+      function go(){
+        try{
+          var n = 0;
+          Object.keys(data).forEach(function(k){
+            if (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS || k.indexOf(K_NOVOS)===0 || k===K_NOVOS_META){
+              localStorage.setItem(k, data[k]); n++;
+              try{ cloudPush(k, JSON.parse(data[k])); }catch(e2){}
+            }
+          });
+          state.monthSummaryCache = {};
+          state.monthPartsCache = {};
+          alert(n+" registro(s) importado(s) com sucesso.");
+          render();
+        }catch(e){
+          alert("Não foi possível ler esse arquivo de backup.");
+        }
       }
+      // guarda uma cópia do que existe agora antes de sobrescrever
+      makeSnapshot("Antes de importar um arquivo de backup", "pre-"+Date.now()).then(go, go);
     };
     reader.readAsText(file);
   }
@@ -2124,7 +2681,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     return {
       id:uid(), quantidade:"0", medida:"", medidaId:"", medidaBaixa:0, servico:"", alinhamento:"",
       qtdBicos:"0", valorBicos:"", qtdCambagem:"0", valorCambagem:"",
-      qtdBalanceamento:"0", valorBalanceamento:"", qtdRodas:"0", valorRodas:"",
+      qtdRodas:"0", valorRodas:"",
       outros:"", valorPecas:"", maoDeObra:"", valorPneus:"",
       formaPagamento:"Nenhum", pago:"❌", carro:"Carro 1", vendedor:VENDEDORES[0], detalhes:"",
       clienteId:"", criadoEm: new Date().toISOString()
@@ -2717,7 +3274,6 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     var prod = [
       {nome:"Pneus",         total:sumF("valorPneus"),        qtd:sumF("quantidade")},
       {nome:"Alinhamento",   total:sv.alinhamento,            qtd:sv.qtdAlinhamento},
-      {nome:"Balanceamento", total:sv.valorBalanceamento,     qtd:sv.qtdBalanceamento},
       {nome:"Bicos",         total:sv.totalBicos,             qtd:sv.qtdBicos},
       {nome:"Cambagem",      total:sv.totalCambagem,          qtd:sv.qtdCambagem},
       {nome:"Rodas",         total:sv.totalRodas,             qtd:sv.qtdRodas},
@@ -3217,6 +3773,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       (avisosCount>0 ? '<span class="nav-badge">'+avisosCount+'</span>' : '')+'</button>';
     var historicoBtn = isMaster ? '<button class="btn ghost small" data-act="openhistorico" title="Ver logins e movimentações de estoque">🕘 Histórico'+histBadgeHtml()+'</button>' : '';
     var usuariosBtn = isMaster ? '<button class="btn ghost small" data-act="openusuarios" title="Criar logins e alterar cargos">👤 Usuários</button>' : '';
+    if (isMaster) usuariosBtn += '<button class="btn ghost small" data-act="openferramentas" title="Relatório do mês por pessoa, backups automáticos e migração de dados">🛠 Ferramentas</button>';
     if (state.authed){
       return '<div class="auth-zone"><span class="pill on">✓ edição de dias anteriores liberada</span>'+estoqueBtn+clientesBtn+notasBtn+novosBtn+avisosBtn+historicoBtn+usuariosBtn+backupBtns+'<button class="btn ghost small" data-act="logout">Sair</button>'+acctLogout+'</div>';
     }
@@ -3257,6 +3814,9 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     else if (act==="cmpmonth"){ state.cmpMode="month"; render(); }
     else if (act==="back"){ state.view="dashboard"; render(); }
     else if (act==="addrow"){ addRow(); }
+    else if (act==="duprow"){ dupRow(node.getAttribute("data-id")); }
+    else if (act==="openferramentas"){ if (state.role==="master"){ state.modal = {type:"ferramentas"}; render(); } }
+    else if (act==="openfechamento"){ if (state.role==="master"){ state.modal = {type:"fechamento", date:tblDate()}; render(); } }
     else if (act==="prevday" || act==="nextday"){
       var dd = act==="prevday" ? -1 : 1;
       if (isNovosTbl()){ flushNovos(); state.novosDate = addDays(tblDate(),dd); state.novosRows = null; state.openDetails = {}; render(); }
@@ -3468,6 +4028,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
                 return '<option value="'+escAttr(v)+'"'+(vendFilt===v?' selected':'')+'>'+escHtml(v)+'</option>';
               }).join("")+
             '</select>'+
+            (state.role==="master" ? '<button class="btn small ghost" data-act="openfechamento" title="Conferir o caixa do dia: o que foi lançado x o que está na gaveta/maquininha">💵 Fechamento</button>' : '')+
             (state.role==="master" ? '<button class="btn small ghost" data-act="exportdiacsv" title="Baixar as vendas deste dia em planilha (CSV)">⇩ CSV</button>' : '')+
             '<button class="btn small ghost" data-act="toggletabletotals" title="'+(state.hideTableTotals?"Mostrar o valor total do dia e as somas das formas de pagamento":"Ocultar o valor total do dia e as somas das formas de pagamento")+'">'+(state.hideTableTotals?"🙈 Mostrar totais":"👁 Ocultar totais")+'</button>'+
           '</div>'
@@ -3619,7 +4180,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     var open = !!state.openDetails[row.id];
     var mainRow = '<div class="grid-row data" style="grid-template-columns:'+colTemplate+'" data-row="'+row.id+'">'+cells+'</div>';
     var toggleRow = '<div class="grid-row" style="grid-template-columns:'+colTemplate+'">'+
-      '<div class="detail-toggle-row"><button class="detail-toggle'+(open?' open':'')+'" data-act="toggledetail" data-id="'+row.id+'"><span class="car">▸</span> detalhes da venda</button></div>'+
+      '<div class="detail-toggle-row"><button class="detail-toggle'+(open?' open':'')+'" data-act="toggledetail" data-id="'+row.id+'"><span class="car">▸</span> detalhes da venda</button>'+(editable ? '<button class="detail-toggle" data-act="duprow" data-id="'+row.id+'" title="Cria uma cópia desta venda logo abaixo (mesmo cliente), sem pagamento e sem desconto">⧉ duplicar venda</button>' : '')+'</div>'+
       '</div>';
     var detailRow = "";
     if (open){
@@ -3635,9 +4196,10 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
 
   function cellHtml(row, col, editable, computedValor){
     var val = row[col.key];
-    var mismatch = pairMismatch(row, col.key);
+    var pagAviso = col.key==="formaPagamento" ? pagamentoAviso(row, computedValor) : "";
+    var mismatch = pairMismatch(row, col.key) || !!pagAviso;
     var cellClass = "cell"+(mismatch?" cell-warn":"");
-    var warnTitle = mismatch ? ' title="Confira: a quantidade e o valor deste grupo não batem"' : '';
+    var warnTitle = pagAviso ? ' title="⚠ '+escAttr(pagAviso)+'"' : (mismatch ? ' title="Confira: a quantidade e o valor deste grupo não batem"' : '');
     if (col.type==="computed"){
       var descv = descontoValor(row);
       var descNote = descv>0 ? '<div style="font-size:9px;color:var(--yellow);line-height:1.2;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">-'+fmtCurrency(descv)+' desc.</div>' : '';
@@ -4288,6 +4850,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     else if (state.modal.type==="descontoForm") renderDescontoFormModal();
     else if (state.modal.type==="linkSales") renderLinkSalesModal();
     else if (state.modal.type==="notaView") renderNotaViewModal();
+    else if (state.modal.type==="ferramentas") renderFerramentasModal();
+    else if (state.modal.type==="fechamento") renderFechamentoModal();
     else renderAuthModal();
   }
 
@@ -4367,13 +4931,21 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     var input = document.getElementById("pwInput");
     input.focus();
     function tryAuth(){
-      if (input.value === PASSWORD){
+      var agora = Date.now();
+      if (agora < pwBloqueadoAte){
+        state.modal.error = "Muitas tentativas erradas. Aguarde "+Math.ceil((pwBloqueadoAte-agora)/1000)+"s.";
+        render(); return;
+      }
+      if (senhaEdicaoConfere(input.value)){
+        pwErros = 0;
         state.authed = true;
         sessionStorage.setItem("vf_auth","1");
         state.modal = null;
         render();
       } else {
-        state.modal.error = "Senha incorreta.";
+        pwErros++;
+        if (pwErros >= 5){ pwBloqueadoAte = Date.now()+60000; pwErros = 0; state.modal.error = "Senha incorreta. Muitas tentativas: aguarde 60s para tentar de novo."; }
+        else state.modal.error = "Senha incorreta.";
         render();
       }
     }
@@ -7082,11 +7654,13 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   function bootApp(afterPull){
     loadRole(function(){
       cloudPullAll(function(hadRemoteData){
-        if (typeof afterPull === "function") afterPull(); // ex: registrar o login já com os dados mais recentes em mãos
-        render();
-        if (!hadRemoteData) pushAllLocalToCloud(); // primeira ativação: sobe o histórico local pra nuvem
-        initCloudSync(handleRemoteChange);
-        avisarPendenciasNoBoot();
+        migrarBalanceamentoAuto(function(){
+          if (typeof afterPull === "function") afterPull(); // ex: registrar o login já com os dados mais recentes em mãos
+          render();
+          if (!hadRemoteData) pushAllLocalToCloud(); // primeira ativação: sobe o histórico local pra nuvem
+          initCloudSync(handleRemoteChange);
+          avisarPendenciasNoBoot();
+        });
       });
     });
   }
@@ -7144,10 +7718,12 @@ html{font-size:17px}
 body{font-size:16px}
 /* tabela de vendas */
 .grid-row.head .cell{font-size:13px!important;padding:12px 6px!important;font-weight:600}
+.detail-toggle{font-size:14px!important;padding:6px 10px!important}
+.detail-toggle-row{display:flex;gap:6px;align-items:center}
 .grid-row .cell{padding:6px 5px!important}
 .cellval,.grid-row select,.medida-btn{font-size:16px!important;min-height:46px!important;padding:8px 5px!important}
 .cellval.computed,.cellval.lucro-cell{font-size:17px!important;font-weight:600}
-.icon-btn{width:34px!important;height:34px!important;font-size:16px!important}
+.icon-btn{width:30px!important;height:30px!important;font-size:15px!important}
 .tstat .k{font-size:12.5px!important}.tstat .v{font-size:19px!important}
 .parts-card .pc-label,.dt-label{font-size:13px!important}
 .parts-card .pc-value,.dt-value{font-size:26px!important}
