@@ -798,7 +798,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     {key:"valorCambagem",    label:"Valor da cambagem"},
     {key:"valorBalanceamento", label:"Valor do balanceamento"},
     {key:"valorRodas",       label:"Valor das rodas"},
-    {key:"outros",           label:"Outros"}
+    {key:"outros",           label:"Serviço"}
   ];
   function descontoOrigemLabel(key){
     var f = DESCONTO_ORIGENS.filter(function(o){return o.key===key;})[0];
@@ -810,7 +810,6 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   var COLUMNS = [
     {key:"quantidade",  label:"Quantidade",              type:"select", w:"78px", options:range(0,8)},
     {key:"medida",      label:"Medida",                  type:"medida", w:"170px"},
-    {key:"servico",     label:"Serviço",                 type:"number", w:"130px", advanced:true},
     {key:"alinhamento", label:"Alinhamento",              type:"currency", w:"110px", advanced:true},
     {key:"qtdBicos",    label:"Qtd. bicos",              type:"select", w:"82px", options:range(0,8)},
     {key:"valorBicos",  label:"Valor dos bicos",         type:"currency", w:"120px"},
@@ -820,9 +819,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     {key:"valorBalanceamento", label:"Valor do balanceamento", type:"currency", w:"135px", advanced:true},
     {key:"qtdRodas",    label:"Qtd. rodas",              type:"select", w:"82px", options:range(0,5)},
     {key:"valorRodas",  label:"Valor das rodas",         type:"currency", w:"120px"},
-    {key:"outros",      label:"Outros",                  type:"outros", w:"130px", advanced:true},
     {key:"valorPecas",  label:"Valor das peças",         type:"pecas", w:"145px"},
-    {key:"maoDeObra",   label:"Mão de obra",             type:"maodeobra", w:"140px"},
+    {key:"outros",      label:"Serviço",                  type:"outros", w:"130px"},
     {key:"valorPneus",  label:"Valor dos pneus",         type:"currency", w:"115px"},
     {key:"valor",       label:"Valor",                   type:"computed", w:"132px"},
     {key:"formaPagamento", label:"Forma de pagamento",   type:"select", w:"150px", options:PAYMENT_OPTIONS},
@@ -830,6 +828,12 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     {key:"carro",       label:"Carro",                   type:"select", w:"95px", options:range(1,20).map(function(n){return "Carro "+n;})},
     {key:"vendedor",    label:"Vendedor",                type:"select", w:"105px", options:VENDEDORES}
   ];
+  // letras maiores na tabela => colunas um pouco mais largas
+  // larguras enxutas: com a tabela ocupando a tela toda, o conjunto cabe sem rolar para o lado e as letras ficam maiores
+  var LARGURAS = {quantidade:64, medida:150, alinhamento:112, qtdBicos:64, valorBicos:112, qtdCambagem:70, valorCambagem:112,
+    qtdBalanceamento:74, valorBalanceamento:112, qtdRodas:64, valorRodas:112, outros:150, valorPecas:160, maoDeObra:160,
+    valorPneus:118, valor:130, formaPagamento:130, pago:64, carro:100, vendedor:110};
+  COLUMNS.forEach(function(c){ if (LARGURAS[c.key]) c.w = LARGURAS[c.key]+"px"; });
   // pares quantidade/valor que devem bater: se um tem valor >0 e o outro é 0, é provável erro de digitação
   var QTY_VALUE_PAIRS = [
     ["qtdBicos","valorBicos"],
@@ -837,7 +841,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     ["qtdBalanceamento","valorBalanceamento"],
     ["qtdRodas","valorRodas"]
   ];
-  var ROWACTIONS_W = "186px"; // largura da coluna de ações da linha (cliente, imprimir, apagar, arrastar)
+  var ROWACTIONS_W = "175px"; // largura da coluna de ações da linha (cliente, imprimir, apagar, arrastar)
 
   // ---------- storage helpers (localStorage — funciona 100% offline, direto no navegador) ----------
   var K_ROWS = "vo_rows:";
@@ -848,6 +852,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   var K_NOTAS = "vo_notas";
   var K_ESTOQUE = "vo_estoque";
   var K_LOGIN_LOG = "vo_login_log";
+  var K_EDICOES_LOG = "vo_edicoes_vendas"; // registro (só o master vê) de alterações em vendas já existentes
+  var K_LINHAS_APAGADAS = "vo_linhas_apagadas"; // registro (só o master vê) das linhas de venda apagadas
   var K_ESTOQUE_LOG = "vo_estoque_log";
   var K_ORCAMENTO = "vo_orcamento_draft";
   var K_ORC_SEQ = "vo_orcamento_seq";
@@ -985,6 +991,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   }
   function lsSetJSON(key, obj){
     try{
+      try{ auditarVendas(key, obj); }catch(e){ /* a auditoria nunca pode impedir de salvar */ }
       localStorage.setItem(key, JSON.stringify(obj));
       cloudPush(key, obj);
       return true;
@@ -1394,6 +1401,164 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     saveEstoqueLog(list);
   }
 
+  // ---------- linhas apagadas: guarda uma cópia completa de toda linha de venda removida ----------
+  function loadLinhasApagadas(){ return lsGetJSON(K_LINHAS_APAGADAS, []); }
+  function saveLinhasApagadas(list){ return lsSetJSON(K_LINHAS_APAGADAS, list); }
+  // linha em branco (acabou de ser criada e foi removida) não vale registrar
+  function linhaApagadaVazia(row){
+    if (!row) return true;
+    var texto = [row.cliente, row.medida, row.marca, row.detalhes].some(function(x){ return String(x||"").trim()!==""; });
+    return !texto && computeSubtotal(row)===0;
+  }
+  // tabela: "Seminovos" | "Pneus novos". Devolve o id do registro (ou null se era linha em branco)
+  function addLinhaApagada(tabela, row, dataIso){
+    if (linhaApagadaVazia(row)) return null;
+    var list = loadLinhasApagadas();
+    var entry = {id: uid(), ts: new Date().toISOString(), email: state.userEmail || "(desconhecido)",
+                 tabela: tabela, data: dataIso || row.date || "", valor: computeValor(row),
+                 linha: JSON.parse(JSON.stringify(row))};
+    list.push(entry);
+    if (list.length > 1000) list = list.slice(list.length - 1000);
+    saveLinhasApagadas(list);
+    return entry.id;
+  }
+  // quando a pessoa clica em "Desfazer", a linha volta e o registro de apagada sai
+  function desfazLinhaApagada(id){
+    if (!id) return;
+    saveLinhasApagadas(loadLinhasApagadas().filter(function(e){ return e.id!==id; }));
+  }
+
+  // ---------- alterações em vendas: compara o que estava salvo com o que está sendo salvo ----------
+  var AUDIT_CAMPOS = ["quantidade","medida","marca","cliente","alinhamento","qtdBicos","valorBicos","qtdCambagem","valorCambagem",
+    "qtdBalanceamento","valorBalanceamento","qtdRodas","valorRodas","outros","valorPecas","maoDeObra","valorPneus","custoPneus",
+    "formaPagamento","pago","vendedor"];
+  var AUDIT_MOEDA = {alinhamento:1, valorBicos:1, valorCambagem:1, valorBalanceamento:1, valorRodas:1, outros:1, valorPecas:1, maoDeObra:1, valorPneus:1, custoPneus:1};
+  var AUDIT_LABELS = {marca:"Marca", cliente:"Cliente"};
+  function loadEdicoesLog(){ return lsGetJSON(K_EDICOES_LOG, []); }
+  function saveEdicoesLog(list){ return lsSetJSON(K_EDICOES_LOG, list); }
+  function auditLabel(k){
+    if (AUDIT_LABELS[k]) return AUDIT_LABELS[k];
+    var cols = COLUMNS.concat((typeof NV_COLUMNS!=="undefined" && NV_COLUMNS) || []);
+    for (var i=0;i<cols.length;i++){ if (cols[i].key===k) return cols[i].label; }
+    return k;
+  }
+  function auditMultiTxt(list){
+    if (!Array.isArray(list) || !list.length) return "—";
+    return list.map(function(p){ return (p && p.metodo ? p.metodo : "?")+" "+fmtCurrency(parseNum(p && p.valor)); }).join(" + ");
+  }
+  // chamada a cada gravação das tabelas de vendas; registra só mudanças em vendas que já existiam
+  function auditarVendas(key, nova){
+    var tabela, dia = "";
+    if (key.indexOf(K_ROWS)===0){ tabela = "Seminovos"; dia = key.slice(K_ROWS.length); }
+    else if (key.indexOf(K_NOVOS)===0){ tabela = "Pneus novos"; }
+    else return;
+    if (!Array.isArray(nova)) return;
+    var antigaTxt = localStorage.getItem(key);
+    if (!antigaTxt) return;
+    var antiga = JSON.parse(antigaTxt);
+    if (!Array.isArray(antiga)) return;
+    var porId = {};
+    antiga.forEach(function(r){ if (r && r.id) porId[r.id] = r; });
+    var log = null;
+    var agora = Date.now(), email = state.userEmail || "(desconhecido)";
+    nova.forEach(function(r){
+      var o = (r && r.id) ? porId[r.id] : null;
+      if (!o || linhaApagadaVazia(o)) return;            // venda nova ou ainda em branco: não é alteração
+      var diaVenda = dia || o.date || r.date || "";
+      var criado = o.criadoEm ? Date.parse(o.criadoEm) : NaN;
+      if (!isNaN(criado) && (agora - criado) < 10*60*1000 && (!diaVenda || diaVenda===today)) return; // ainda sendo preenchida
+      var difs = [];
+      AUDIT_CAMPOS.forEach(function(k){
+        var a = o[k], b = r[k];
+        if (AUDIT_MOEDA[k]){
+          if (parseNum(a)!==parseNum(b)) difs.push({k:k, de:parseNum(a), para:parseNum(b), moeda:true});
+        } else {
+          var sa = String(a===undefined||a===null ? "" : a).trim(), sb = String(b===undefined||b===null ? "" : b).trim();
+          if (sa!==sb) difs.push({k:k, de:sa, para:sb});
+        }
+      });
+      var da = descontoValor(o), db = descontoValor(r);
+      if (da!==db) difs.push({k:"desconto", label:"Desconto", de:da, para:db, moeda:true});
+      if (JSON.stringify(o.pagamentosMultiplos||[])!==JSON.stringify(r.pagamentosMultiplos||[]))
+        difs.push({k:"pagamentosMultiplos", label:"Pagamentos (múltiplo)", de:auditMultiTxt(o.pagamentosMultiplos), para:auditMultiTxt(r.pagamentosMultiplos)});
+      if (!difs.length) return;
+      if (!log) log = loadEdicoesLog();
+      difs.forEach(function(d){
+        var campo = d.label || auditLabel(d.k), idx = -1;
+        // digitar "4", "40", "400" seguidos vira uma alteração só (mantém o valor original)
+        for (var i=log.length-1; i>=0 && log.length-i<=80; i--){
+          var x = log[i];
+          if (x.rowId===r.id && x.campo===campo && x.email===email && (agora - Date.parse(x.ts))<120000){ idx = i; break; }
+        }
+        if (idx>-1){
+          log[idx].para = d.para; log[idx].ts = new Date().toISOString();
+          if (String(log[idx].de)===String(log[idx].para)) log.splice(idx,1);
+        } else {
+          log.push({id:uid(), ts:new Date().toISOString(), email:email, tabela:tabela, data:diaVenda, rowId:r.id,
+                    cliente:(r.cliente||r.medida||""), campo:campo, moeda:!!d.moeda, de:d.de, para:d.para});
+        }
+      });
+    });
+    if (log){
+      if (log.length > 1000) log = log.slice(log.length - 1000);
+      saveEdicoesLog(log);
+    }
+  }
+  // aviso no botão Histórico: quantas apagadas/alterações de OUTROS usuários desde a última vez que o master abriu
+  function histNovosCount(){
+    var visto = parseInt(localStorage.getItem("vf_hist_visto")||"0",10) || 0, n = 0, eu = state.userEmail || "";
+    function conta(l){ l.forEach(function(e){ if (e.email!==eu && Date.parse(e.ts)>visto) n++; }); }
+    conta(loadLinhasApagadas()); conta(loadEdicoesLog());
+    return n;
+  }
+  function histBadgeHtml(){
+    var n = 0;
+    try{ n = histNovosCount(); }catch(e){}
+    return n>0 ? ' <span title="Apagadas/alterações novas desde a última visita" style="background:var(--red);color:#fff;border-radius:9px;padding:0 6px;font-size:11px;margin-left:3px;">'+n+'</span>' : '';
+  }
+
+  // devolve uma linha apagada pra tabela do dia em que ela estava (só master). O registro fica, marcado como restaurado.
+  function restaurarLinhaApagada(entryId){
+    if (state.role!=="master") return;
+    var log = loadLinhasApagadas();
+    var e = log.filter(function(x){ return x.id===entryId; })[0];
+    if (!e || e.restauradaEm) return;
+    var novos = e.tabela==="Pneus novos";
+    var date = e.data || (e.linha && e.linha.date) || today;
+    var l0 = e.linha || {};
+    var quem = (l0.cliente || l0.medida || "sem cliente");
+    if (!confirm("Restaurar esta venda ("+quem+") na tabela de "+e.tabela+" do dia "+fmtDateBR(date)+"?")) return;
+    var row = JSON.parse(JSON.stringify(l0));
+    row.medidaBaixa = 0; // ao apagar, o estoque foi devolvido; aqui a baixa é feita de novo
+    var month = date.slice(0,7);
+    function finalizar(){
+      e.restauradaEm = new Date().toISOString();
+      e.restauradaPor = state.userEmail || "(desconhecido)";
+      saveLinhasApagadas(log);
+      delete state.monthSummaryCache[month];
+      delete state.monthPartsCache[month];
+      render();
+    }
+    if (novos){
+      row.date = date;
+      var lista = loadNovosMonth(month);
+      if (lista.some(function(x){ return x.id===row.id; })){ alert("Essa venda já está na tabela de pneus novos."); return finalizar(); }
+      syncRowEstoque(row);
+      lista.push(row);
+      if (!saveNovosMonth(month, lista)){ alert("Não foi possível salvar — armazenamento do navegador cheio ou bloqueado."); return; }
+      finalizar();
+    } else {
+      var rows = rowsOfDay(date);
+      if (rows.some(function(x){ return x.id===row.id; })){ alert("Essa venda já está na tabela de seminovos."); return finalizar(); }
+      syncRowEstoque(row);
+      rows.push(row);
+      saveRows(date, rows).then(function(){
+        if (state.date===date) state.rows = rows;
+        finalizar();
+      }).catch(function(err){ alert((err && err.message) || "Não foi possível salvar."); });
+    }
+  }
+
   // ---------- nota de venda (impressão) ----------
   function nextVendaNumber(){
     var n = parseInt(localStorage.getItem(K_VENDA_SEQ)||"0",10);
@@ -1430,8 +1595,17 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     } else {
       addItem("Peças", 1, row.valorPecas);
     }
-    var outrosDesc = row.outrosDescricao ? String(row.outrosDescricao).trim() : "";
-    addItem(outrosDesc ? "Outros — "+outrosDesc : "Outros", 1, row.outros);
+    // outros: uma linha por item informado (o que sobrar do valor total vai como "Outros (restante)")
+    var outrosTotal = parseNum(row.outros);
+    var listaOutros = Array.isArray(row.outrosLista) ? row.outrosLista.filter(function(o){ return parseNum(o.valor)>0; }) : [];
+    var somaOutros = listaOutros.reduce(function(sm,o){ return sm+parseNum(o.valor); }, 0);
+    if (listaOutros.length && somaOutros<=outrosTotal+0.005){
+      listaOutros.forEach(function(o){ addItem(o.nome && String(o.nome).trim() ? "Serviço — "+String(o.nome).trim() : "Serviço", 1, o.valor); });
+      if (outrosTotal-somaOutros>0.005) addItem("Serviço (restante)", 1, outrosTotal-somaOutros);
+    } else {
+      var outrosDesc = row.outrosDescricao ? String(row.outrosDescricao).trim() : "";
+      addItem(outrosDesc ? "Serviço — "+outrosDesc : "Serviço", 1, row.outros);
+    }
     return items;
   }
 
@@ -2549,7 +2723,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       {nome:"Rodas",         total:sv.totalRodas,             qtd:sv.qtdRodas},
       {nome:"Peças",         total:sv.valorPecas,             qtd:0},
       {nome:"Mão de obra",   total:sv.maoDeObra,              qtd:0},
-      {nome:"Outros",        total:sv.outros,                 qtd:0}
+      {nome:"Serviço",        total:sv.outros,                 qtd:0}
     ].filter(function(p){ return p.total>0; }).sort(function(a,b){ return b.total-a.total; });
 
     // horários
@@ -2709,10 +2883,96 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   // ---------- histórico: logins e movimentações de estoque ----------
   function renderHistorico(){
     var tab = state.historicoTab || "logins";
-    var logins = loadLoginLog().slice().reverse();
-    var movsAll = loadEstoqueLog().slice().reverse();
+    var loginsRaw = loadLoginLog().slice().reverse();
+    var movsRaw = loadEstoqueLog().slice().reverse();
+    var apagadasRaw = loadLinhasApagadas().slice().reverse();
+    var edicoesRaw = loadEdicoesLog().slice().reverse();
+    // filtros por usuário e por período: valem para todas as abas
+    var usersSet = {};
+    [loginsRaw, movsRaw, apagadasRaw, edicoesRaw].forEach(function(l){ l.forEach(function(x){ if (x.email) usersSet[x.email] = 1; }); });
+    var usersList = Object.keys(usersSet).sort();
+    var uSel = state.historicoUser || "";
+    if (uSel && !usersSet[uSel]) uSel = "";
+    var perSel = state.historicoPeriodo || "";
+    var desde = 0;
+    if (perSel==="hoje"){ var d0 = new Date(); d0.setHours(0,0,0,0); desde = d0.getTime(); }
+    else if (perSel==="7d") desde = Date.now() - 7*86400000;
+    else if (perSel==="30d") desde = Date.now() - 30*86400000;
+    function porUsuario(l){
+      return l.filter(function(x){ return (!uSel || x.email===uSel) && (!desde || Date.parse(x.ts)>=desde); });
+    }
+    var logins = porUsuario(loginsRaw);
+    var movsAll = porUsuario(movsRaw);
     var q = (state.historicoQuery||"").trim().toLowerCase();
     var movs = q ? movsAll.filter(function(m){ return (m.medida||"").toLowerCase().indexOf(q)>-1; }) : movsAll;
+
+    var apagadasAll = porUsuario(apagadasRaw);
+    var apagadas = q ? apagadasAll.filter(function(e){
+      var l = e.linha||{};
+      return [e.email, e.tabela, l.cliente, l.medida, l.marca, l.vendedor].join(" ").toLowerCase().indexOf(q)>-1;
+    }) : apagadasAll;
+    var edicoes = porUsuario(edicoesRaw);
+    if (q) edicoes = edicoes.filter(function(e){ return [e.email, e.tabela, e.cliente, e.campo].join(" ").toLowerCase().indexOf(q)>-1; });
+    function edVal(e, v){ return e.moeda ? fmtCurrency(parseNum(v)) : escHtml(v===""||v===undefined||v===null ? "—" : v); }
+    var edicoesHtml = edicoes.length
+      ? edicoes.map(function(e){
+          return '<div class="arow">'+
+            '<span class="d">'+fmtDateTimeBR(e.ts)+'</span>'+
+            '<span class="stats">'+
+              '<span style="color:var(--yellow);font-weight:600;">Alterada</span>'+
+              '<span><b>'+escHtml(e.email)+'</b></span>'+
+              '<span>'+escHtml(e.tabela)+' · venda de '+(e.data ? fmtDateBR(e.data) : "—")+'</span>'+
+              '<span>'+escHtml(e.cliente||"(sem cliente)")+'</span>'+
+              '<span>'+escHtml(e.campo)+': <b>'+edVal(e,e.de)+' → '+edVal(e,e.para)+'</b></span>'+
+            '</span>'+
+          '</div>';
+        }).join("")
+      : '<div class="arow-empty">'+(edicoesRaw.length ? 'Nenhuma alteração encontrada para esse filtro.' : 'Nenhuma alteração registrada ainda. Só entram alterações feitas em vendas que já existiam há mais de 10 minutos (ou de dias anteriores).')+'</div>';
+    var apagadasTotal = 0; apagadas.forEach(function(e){ apagadasTotal += parseNum(e.valor); });
+    var moedaTipos = ["currency","computed","outros","pecas","maodeobra"];
+    var apagadasHtml = apagadas.length
+      ? '<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:10px;">'+apagadas.length+' linha(s) apagada(s) · valor somado: <b style="color:var(--red);">'+fmtCurrency(apagadasTotal)+'</b></div>'+
+        apagadas.map(function(e){
+          var l = e.linha||{};
+          var cols = e.tabela==="Pneus novos" ? NV_COLUMNS : COLUMNS;
+          var det = [];
+          if (l.cliente) det.push(["Cliente", escHtml(l.cliente)]);
+          cols.forEach(function(c){
+            if (c.type==="lucro") return;
+            var v = c.type==="computed" ? computeValor(l) : l[c.key];
+            if (moedaTipos.indexOf(c.type)>-1){
+              var n = c.type==="computed" ? computeValor(l) : parseNum(v);
+              if (n>0) det.push([c.label, fmtCurrency(n)]);
+            } else if (v!==undefined && v!==null && typeof v!=="object" && String(v)!=="" && String(v)!=="0" && String(v)!=="Nenhum"){
+              det.push([c.label, escHtml(v)]);
+            }
+          });
+          if (descontoValor(l)>0) det.push(["Desconto", "-"+fmtCurrency(descontoValor(l))]);
+          if (l.detalhes) det.push(["Detalhes", escHtml(l.detalhes)]);
+          var detHtml = det.map(function(d){ return '<div style="display:flex;justify-content:space-between;gap:12px;padding:2px 0;"><span style="color:var(--text-dim);">'+escHtml(d[0])+'</span><span>'+d[1]+'</span></div>'; }).join("");
+          var resumo = (l.cliente || l.medida || "(sem cliente)");
+          return '<div style="border-bottom:1px solid var(--border, rgba(128,128,128,.25));padding:8px 0;">'+
+            '<div class="arow">'+
+              '<span class="d">'+fmtDateTimeBR(e.ts)+'</span>'+
+              '<span class="stats">'+
+                '<span style="color:var(--red);font-weight:600;">Apagada</span>'+
+                '<span><b>'+escHtml(e.email)+'</b></span>'+
+                '<span>'+escHtml(e.tabela)+' · venda de '+(e.data ? fmtDateBR(e.data) : "—")+'</span>'+
+                '<span>'+escHtml(resumo)+'</span>'+
+                '<span><b>'+fmtCurrency(parseNum(e.valor))+'</b></span>'+
+              '</span>'+
+            '</div>'+
+            '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">'+
+            '<details style="margin:4px 0 0 2px;font-size:12.5px;"><summary style="cursor:pointer;color:var(--text-dim);">Ver tudo que estava na linha</summary>'+
+              '<div style="padding:6px 0 2px;max-width:460px;">'+(detHtml || '<span style="color:var(--text-dim);">Sem detalhes.</span>')+'</div>'+
+            '</details>'+
+            (e.restauradaEm
+              ? '<span style="font-size:12px;color:var(--green);margin-top:4px;">✓ Restaurada em '+fmtDateTimeBR(e.restauradaEm)+' por '+escHtml(e.restauradaPor||"—")+'</span>'
+              : '<button class="btn small ghost" data-act="restaurarapagada" data-id="'+escAttr(e.id)+'" title="Devolver esta venda para a tabela">↩ Restaurar</button>')+
+            '</div>'+
+          '</div>';
+        }).join("")
+      : '<div class="arow-empty">'+(apagadasRaw.length ? 'Nenhuma linha apagada encontrada para esse filtro.' : 'Nenhuma linha apagada registrada ainda.')+'</div>';
 
     var loginsHtml = logins.length
       ? logins.map(function(l){
@@ -2721,7 +2981,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
             '<span class="stats"><span><b>'+escHtml(l.email)+'</b></span></span>'+
           '</div>';
         }).join("")
-      : '<div class="arow-empty">Nenhum login registrado ainda.</div>';
+      : '<div class="arow-empty">'+(loginsRaw.length ? 'Nenhum login encontrado para esse usuário.' : 'Nenhum login registrado ainda.')+'</div>';
 
     var tipoLabel = {entrada:"Entrada", saida:"Saída", ajuste:"Ajuste", venda:"Venda"};
     var tipoColor = {entrada:"var(--green)", saida:"var(--red)", ajuste:"var(--yellow)", venda:"var(--red)"};
@@ -2738,11 +2998,11 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
             '</span>'+
           '</div>';
         }).join("")
-      : '<div class="arow-empty">'+(movsAll.length ? 'Nenhuma movimentação encontrada para essa medida.' : 'Nenhuma movimentação de estoque registrada ainda.')+'</div>';
+      : '<div class="arow-empty">'+(movsRaw.length ? 'Nenhuma movimentação encontrada para esse filtro.' : 'Nenhuma movimentação de estoque registrada ainda.')+'</div>';
 
     root.innerHTML =
       '<div class="topbar">'+
-        '<div class="brand"><span class="mark"></span><h1>Histórico</h1><span class="tag">LOGINS · MOVIMENTAÇÕES DE ESTOQUE</span>'+syncBadgeHtml()+'</div>'+
+        '<div class="brand"><span class="mark"></span><h1>Histórico</h1><span class="tag">LOGINS · ESTOQUE · LINHAS APAGADAS · ALTERAÇÕES</span>'+syncBadgeHtml()+'</div>'+
         '<div class="auth-zone">'+
           '<button class="btn ghost small" data-act="back">‹ Painel de vendas</button>'+
           '<button class="btn ghost small" data-act="openestoque">📦 Estoque</button>'+
@@ -2754,20 +3014,37 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       '<div class="tbl-head">'+
         '<div class="tbl-head-left">'+
           '<button class="btn small'+(tab==="logins"?" primary":" ghost")+'" data-act="historicotab" data-tab="logins">Logins</button> '+
-          '<button class="btn small'+(tab==="estoque"?" primary":" ghost")+'" data-act="historicotab" data-tab="estoque" style="margin-left:8px;">Movimentações de estoque</button>'+
+          '<button class="btn small'+(tab==="estoque"?" primary":" ghost")+'" data-act="historicotab" data-tab="estoque" style="margin-left:8px;">Movimentações de estoque</button> '+
+          '<button class="btn small'+(tab==="apagadas"?" primary":" ghost")+'" data-act="historicotab" data-tab="apagadas" style="margin-left:8px;">🗑 Linhas apagadas'+(apagadasRaw.length ? ' ('+apagadasRaw.length+')' : '')+'</button> '+
+          '<button class="btn small'+(tab==="edicoes"?" primary":" ghost")+'" data-act="historicotab" data-tab="edicoes" style="margin-left:8px;">✏️ Alterações em vendas'+(edicoesRaw.length ? ' ('+edicoesRaw.length+')' : '')+'</button> '+
+          '<select id="histUser" class="btn small ghost" style="padding:5px 8px;margin-left:8px;" title="Filtrar por usuário">'+
+            '<option value="">👤 Todos os usuários</option>'+
+            usersList.map(function(u){ return '<option value="'+escAttr(u)+'"'+(u===uSel?' selected':'')+'>'+escHtml(u)+'</option>'; }).join("")+
+          '</select> '+
+          '<select id="histPeriodo" class="btn small ghost" style="padding:5px 8px;margin-left:8px;" title="Filtrar por período">'+
+            [["","📅 Todo o período"],["hoje","Hoje"],["7d","Últimos 7 dias"],["30d","Últimos 30 dias"]].map(function(o){ return '<option value="'+o[0]+'"'+(o[0]===perSel?' selected':'')+'>'+o[1]+'</option>'; }).join("")+
+          '</select>'+
         '</div>'+
       '</div>'+
 
-      (tab==="estoque" ? '<div class="card" style="padding:12px 16px;margin-bottom:14px;">'+
-        '<input type="text" id="histSearch" class="dash-cust-search" placeholder="Buscar por medida (ex: 175/70 R14)..." value="'+escAttr(state.historicoQuery||"")+'">'+
+      (tab!=="logins" ? '<div class="card" style="padding:12px 16px;margin-bottom:14px;">'+
+        '<input type="text" id="histSearch" class="dash-cust-search" placeholder="'+(tab==="apagadas" ? 'Buscar por cliente, medida ou usuário...' : tab==="edicoes" ? 'Buscar por cliente, campo ou usuário...' : 'Buscar por medida (ex: 175/70 R14)...')+'" value="'+escAttr(state.historicoQuery||"")+'">'+
       '</div>' : '')+
 
       '<div class="card" style="padding:14px 16px;">'+
         '<div class="archive-list">'+
-          (tab==="logins" ? loginsHtml : movsHtml)+
+          (tab==="logins" ? loginsHtml : (tab==="apagadas" ? apagadasHtml : (tab==="edicoes" ? edicoesHtml : movsHtml)))+
         '</div>'+
       '</div>';
 
+    var histUser = document.getElementById("histUser");
+    if (histUser){
+      histUser.addEventListener("change", function(){ state.historicoUser = histUser.value; renderHistorico(); });
+    }
+    var histPeriodo = document.getElementById("histPeriodo");
+    if (histPeriodo){
+      histPeriodo.addEventListener("change", function(){ state.historicoPeriodo = histPeriodo.value; renderHistorico(); });
+    }
     var histSearch = document.getElementById("histSearch");
     if (histSearch){
       histSearch.addEventListener("input", function(){
@@ -2836,7 +3113,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
           '<button class="btn ghost small" data-act="back">‹ Painel de vendas</button>'+
           '<button class="btn ghost small" data-act="openestoque">📦 Estoque</button>'+
           '<button class="btn ghost small" data-act="openclientes">👥 Clientes</button>'+
-          '<button class="btn ghost small" data-act="openhistorico">🕘 Histórico</button>'+
+          '<button class="btn ghost small" data-act="openhistorico">🕘 Histórico'+histBadgeHtml()+'</button>'+
         '</div>'+
       '</div>'+
 
@@ -2938,7 +3215,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     var avisosCount = avisosPendentesCount();
     var avisosBtn = '<button class="btn ghost small" data-act="openavisos" title="Clientes esperando medida, lembretes e estoque baixo">🔔 Avisos'+
       (avisosCount>0 ? '<span class="nav-badge">'+avisosCount+'</span>' : '')+'</button>';
-    var historicoBtn = isMaster ? '<button class="btn ghost small" data-act="openhistorico" title="Ver logins e movimentações de estoque">🕘 Histórico</button>' : '';
+    var historicoBtn = isMaster ? '<button class="btn ghost small" data-act="openhistorico" title="Ver logins e movimentações de estoque">🕘 Histórico'+histBadgeHtml()+'</button>' : '';
     var usuariosBtn = isMaster ? '<button class="btn ghost small" data-act="openusuarios" title="Criar logins e alterar cargos">👤 Usuários</button>' : '';
     if (state.authed){
       return '<div class="auth-zone"><span class="pill on">✓ edição de dias anteriores liberada</span>'+estoqueBtn+clientesBtn+notasBtn+novosBtn+avisosBtn+historicoBtn+usuariosBtn+backupBtns+'<button class="btn ghost small" data-act="logout">Sair</button>'+acctLogout+'</div>';
@@ -3037,8 +3314,9 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     else if (act==="avisostab"){ state.avisosTab = node.getAttribute("data-tab"); render(); }
     else if (act==="clientenew"){ state.modal = {type:"customerForm", error:""}; renderModal(); }
     else if (act==="clientedit"){ state.modal = {type:"customerForm", customerId: node.getAttribute("data-id"), error:""}; renderModal(); }
-    else if (act==="openhistorico"){ if (state.role==="master"){ state.view="historico"; state.historicoTab = state.historicoTab || "logins"; render(); } }
-    else if (act==="historicotab"){ state.historicoTab = node.getAttribute("data-tab"); render(); }
+    else if (act==="openhistorico"){ if (state.role==="master"){ try{ localStorage.setItem("vf_hist_visto", String(Date.now())); }catch(e){} state.view="historico"; state.historicoTab = state.historicoTab || "logins"; render(); } }
+    else if (act==="restaurarapagada"){ restaurarLinhaApagada(node.getAttribute("data-id")); }
+    else if (act==="historicotab"){ state.historicoTab = node.getAttribute("data-tab"); state.historicoQuery = ""; render(); }
     else if (act==="openusuarios"){ if (state.role==="master"){ state.view="usuarios"; render(); } }
     else if (act==="selectmedida"){
       state.modal = {type:"selectMedida", rowId: node.getAttribute("data-id")};
@@ -3267,8 +3545,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
 
   // resumo do dia (cards de totais e formas de pagamento), tudo numa linha só;
   // "Ocultar totais" (state.hideTableTotals) esconde só o valor total do dia e as somas das formas de pagamento
-  function pcard(label, color, right, val){
-    return '<div class="parts-card pc-'+color+'"><div class="pc-top"><span class="pc-label">'+escHtml(label)+'</span><span class="pc-qty">'+right+'</span></div><div class="pc-value">'+val+'</div></div>';
+  function pcard(label, color, right, val, tip){
+    return '<div class="parts-card pc-'+color+'"'+(tip?' title="'+escAttr(tip)+'"':'')+'><div class="pc-top"><span class="pc-label">'+escHtml(label)+'</span><span class="pc-qty">'+right+'</span></div><div class="pc-value">'+val+'</div></div>';
   }
   function tableTotalsHtml(t){
     var hv = state.hideTableTotals;
@@ -3279,12 +3557,15 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     out += pcard("Cambagem", "teal", t.qtdCambagem+" un.", fmtCurrency(t.totalCambagem));
     out += pcard("Rodas", "teal", t.qtdRodas+" un.", fmtCurrency(t.totalRodas));
     out += pcard("Valor das peças", "teal", "", fmtCurrency(t.valorPecas));
-    out += pcard("Mão de obra", "teal", "", fmtCurrency(t.maoDeObra));
-    if (t.descontos>0) out += pcard("Descontos dados", "red", "", "-"+fmtCurrency(t.descontos));
-    out += pcard("💵 Dinheiro", "yellow", "", hv?'••••':fmtCurrency(t.porPagamento["Dinheiro"]));
-    out += pcard("📲 Pix", "yellow", "", hv?'••••':fmtCurrency(t.porPagamento["Pix"]));
-    out += pcard("💳 Débito", "yellow", "", hv?'••••':fmtCurrency(t.porPagamento["Débito"]));
-    out += pcard("💳 Crédito", "yellow", "", hv?'••••':fmtCurrency(t.porPagamento["Crédito"]));
+    out += pcard("Serviço", "teal", "", fmtCurrency((t.outros||0) + t.maoDeObra));
+    out += pcard("💰 Total que entrou", "green", t.semForma>0.005 ? "⚠ sem forma pgto." : "", hv?'••••':fmtCurrency(t.entrouTotal),
+      "Fechamento de caixa — Seminovos: "+fmtCurrency(t.entrouSemi)+" + Pneus novos: "+fmtCurrency(t.entrouNovos)+
+      " (soma das formas de pagamento das duas tabelas, já com os descontos)"+
+      (t.semForma>0.005 ? ". Atenção: "+fmtCurrency(t.semForma)+" em vendas sem forma de pagamento definida, que não entram neste total." : ""));
+    out += pcard("💵 Dinheiro", "yellow", "", hv?'••••':fmtCurrency(t.porPagamento["Dinheiro"]), "Seminovos + pneus novos do dia");
+    out += pcard("📲 Pix", "yellow", "", hv?'••••':fmtCurrency(t.porPagamento["Pix"]), "Seminovos + pneus novos do dia");
+    out += pcard("💳 Débito", "yellow", "", hv?'••••':fmtCurrency(t.porPagamento["Débito"]), "Seminovos + pneus novos do dia");
+    out += pcard("💳 Crédito", "yellow", "", hv?'••••':fmtCurrency(t.porPagamento["Crédito"]), "Seminovos + pneus novos do dia");
     return out;
   }
   function tstat(label, val, accent){
@@ -3398,9 +3679,14 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     }
     if (col.type==="outros"){
       var otInput = '<input class="cellval" type="text" inputmode="decimal" data-field="outros" data-id="'+row.id+'" value="'+escAttr(val)+'" '+(editable?"":"disabled")+' placeholder="R$ 0,00" style="flex:1;min-width:0;">';
-      var hasOutros = !!(row.outrosDescricao && String(row.outrosDescricao).trim());
+      var temListaOutros = Array.isArray(row.outrosLista) && row.outrosLista.length>0;
+      var temSplitOutros = Array.isArray(row.outrosSplit) && row.outrosSplit.length>0;
+      var hasOutros = temListaOutros || temSplitOutros || !!(row.outrosDescricao && String(row.outrosDescricao).trim());
+      var outrosTip = temListaOutros
+        ? row.outrosLista.map(function(o){ return (o.nome||"(sem descrição)")+(Array.isArray(o.split)&&o.split.length ? " ["+o.split.filter(function(q){return parseNum(q.valor)>0;}).map(function(q){return q.pessoa+" "+fmtCurrency(parseNum(q.valor));}).join(" · ")+"]" : (o.pessoa?" ["+o.pessoa+"]":""))+" — "+fmtCurrency(parseNum(o.valor)); }).join("\n")
+        : ((row.outrosDescricao ? String(row.outrosDescricao) : "") + (temSplitOutros ? "\n"+row.outrosSplit.map(function(o){ return o.pessoa+": "+fmtCurrency(parseNum(o.valor)); }).join(" · ") : ""));
       return '<div class="'+cellClass+'"'+warnTitle+' style="display:flex;gap:4px;align-items:center;">'+otInput+
-        '<button class="icon-btn'+(hasOutros?' has':'')+'" data-act="outrosdesc" data-id="'+row.id+'" title="'+(hasOutros?('Outros: '+escAttr(row.outrosDescricao)):'Identificar o que foi esse outros')+'" '+(editable?"":"disabled")+' style="flex:0 0 auto;">⚙</button>'+
+        '<button class="icon-btn'+(hasOutros?' has':'')+'" data-act="outrosdesc" data-id="'+row.id+'" title="'+(hasOutros?('Serviço:\n'+escAttr(outrosTip)+'\n(clique para ver/alterar)'):'Informar o que foi e dividir entre Renan, João e Wesley')+'" '+(editable?"":"disabled")+' style="flex:0 0 auto;">⚙</button>'+
       '</div>';
     }
     if (col.type==="maodeobra"){
@@ -3444,6 +3730,18 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
           else if (p.pessoa==="João") t.moRodas += v;
         });
       }
+      // "Outros" (⚙): cada item com pessoa soma no card dela — Wesley→Bicos, Renan→Cambagem, João→Rodas
+      var itensOutros = Array.isArray(r.outrosLista) && r.outrosLista.length ? r.outrosLista : (Array.isArray(r.outrosSplit) ? r.outrosSplit : []);
+      itensOutros.forEach(function(p){
+        // item dividido entre pessoas: cada uma soma o seu pedaço; senão vale a pessoa única do item
+        var partes = Array.isArray(p.split) && p.split.length ? p.split : [p];
+        partes.forEach(function(q){
+          var v = parseNum(q.valor);
+          if (q.pessoa==="Wesley") t.moBicos += v;
+          else if (q.pessoa==="Renan") t.moCambagem += v;
+          else if (q.pessoa==="João") t.moRodas += v;
+        });
+      });
     });
     t.totalBicos = t.valorBicos + t.moBicos;
     t.totalCambagem = t.valorCambagem + t.moCambagem;
@@ -3473,6 +3771,26 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     var d = tblDate();
     var normais = nv ? rowsOfDay(d) : state.rows;
     var novos = nv ? tblRows() : novosRowsDoDia(d);
+    // total que entrou no dia (seminovos + pneus novos), pelas formas de pagamento: serve pro fechamento de caixa
+    function entrouDe(list){
+      var e = 0, sf = 0;
+      (list||[]).forEach(function(r){
+        var pb = paymentBreakdown(r), pago = pb["Dinheiro"]+pb["Pix"]+pb["Débito"]+pb["Crédito"];
+        e += pago;
+        sf += Math.max(0, computeValor(r) - pago);
+      });
+      return {entrou:e, semForma:sf};
+    }
+    // formas de pagamento: soma das duas tabelas (seminovos + pneus novos) do dia, pro fechamento de caixa
+    t.porPagamento = {"Dinheiro":0, "Pix":0, "Débito":0, "Crédito":0};
+    (normais||[]).concat(novos||[]).forEach(function(r){
+      var pb = paymentBreakdown(r);
+      Object.keys(t.porPagamento).forEach(function(k){ t.porPagamento[k] += pb[k]; });
+    });
+    var eS = entrouDe(normais), eN = entrouDe(novos);
+    t.entrouSemi = eS.entrou; t.entrouNovos = eN.entrou;
+    t.entrouTotal = eS.entrou + eN.entrou;
+    t.semForma = eS.semForma + eN.semForma;
     var sv = servicosTotais((normais||[]).concat(novos||[]));
     Object.keys(sv).forEach(function(k){ t[k] = sv[k]; });
     t.qtdBicos = t.qtdBicos.toFixed(0);
@@ -3903,12 +4221,14 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     for (var i=0;i<rws.length;i++){ if (rws[i].id===id){ idx=i; break; } }
     if (idx===-1) return;
     var row = rws[idx];
+    var logId = addLinhaApagada(isNovosTbl() ? "Pneus novos" : "Seminovos", row, tblDate()); // registra antes de mexer na linha
     releaseRowEstoque(row); // devolve pro estoque o que essa linha havia baixado
     rws.splice(idx, 1);
     delete state.openDetails[id];
     renderTable();
     scheduleSave();
     showUndoToast("Linha apagada", function(){
+      desfazLinhaApagada(logId);
       tblRows().splice(idx, 0, row);
       syncRowEstoque(row); // baixa de novo o estoque que tinha sido devolvido
       renderTable();
@@ -4406,7 +4726,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         '<div class="auth-zone">'+
           (estoquista ? '' : '<button class="btn ghost small" data-act="back">‹ Painel de vendas</button>')+
           '<button class="btn ghost small" data-act="openclientes" title="Cadastrar e editar clientes">👥 Clientes</button>'+
-          (state.role==="master" ? '<button class="btn ghost small" data-act="openhistorico" title="Ver logins e movimentações de estoque">🕘 Histórico</button>' : '')+
+          (state.role==="master" ? '<button class="btn ghost small" data-act="openhistorico" title="Ver logins e movimentações de estoque">🕘 Histórico'+histBadgeHtml()+'</button>' : '')+
           (state.role==="master" ? '<button class="btn ghost small" data-act="openusuarios" title="Criar logins e alterar cargos">👤 Usuários</button>' : '')+
           (sb ? '<button class="btn ghost small" data-act="accountlogout" title="Sair da sua conta">Sair da conta</button>' : '')+
         '</div>'+
@@ -4920,7 +5240,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         '<button class="btn ghost small" data-act="opennotas">🧾 Notas</button>'+
         '<button class="btn ghost small" data-act="opennovos">🆕 Pneus novos</button>'+
         '<button class="btn ghost small" data-act="openavisos">🔔 Avisos'+(avisosCount>0?'<span class="nav-badge">'+avisosCount+'</span>':'')+'</button>'+
-        (state.role==="master" ? '<button class="btn ghost small" data-act="openhistorico">🕘 Histórico</button>' : '')+
+        (state.role==="master" ? '<button class="btn ghost small" data-act="openhistorico">🕘 Histórico'+histBadgeHtml()+'</button>' : '')+
         (state.role==="master" ? '<button class="btn ghost small" data-act="openusuarios">👤 Usuários</button>' : '')+
         (sb ? '<button class="btn ghost small" data-act="accountlogout">Sair da conta</button>' : '')+
       '</div>'+
@@ -5742,63 +6062,154 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     });
   }
 
-  // ---------- modal: identificar o que foi o "outros" ----------
+  // ---------- modal: "Outros" — vários itens: o que foi, valor e quem fez (soma no card da pessoa) ----------
   function renderOutrosFormModal(){
     var row = findTblRow(state.modal.rowId);
     if (!row){ state.modal = null; render(); return; }
+    var lista;
+    var destinos = {"Renan":"Cambagem","Wesley":"Bicos","João":"Rodas"};
+    var descAntiga = row.outrosDescricao ? String(row.outrosDescricao).trim() : "";
+    if (Array.isArray(row.outrosLista) && row.outrosLista.length){
+      lista = row.outrosLista.map(function(o){ return {nome:o.nome||"", valor:o.valor, pessoa:o.pessoa||"", split:(Array.isArray(o.split)&&o.split.length ? o.split.map(function(q){return {pessoa:q.pessoa,valor:q.valor};}) : null)}; });
+    } else if (Array.isArray(row.outrosSplit) && row.outrosSplit.length){
+      lista = row.outrosSplit.map(function(o){ return {nome:descAntiga, valor:parseNum(o.valor), pessoa:o.pessoa||""}; });
+    } else if (parseNum(row.outros)>0 || descAntiga){
+      lista = [{nome:descAntiga, valor: parseNum(row.outros)>0 ? parseNum(row.outros) : "", pessoa:""}];
+    } else {
+      lista = [{nome:"", valor:"", pessoa:"", split:null}];
+    }
     var div = document.createElement("div");
     div.className = "overlay";
     div.innerHTML =
       '<div class="modal wide">'+
-        '<h3>O que foi o "Outros"?</h3>'+
-        '<p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;">Valor em "Outros" nesta venda: <b style="color:var(--text);">'+fmtCurrency(parseNum(row.outros))+'</b>. A descrição sai na nota/garantia.</p>'+
-        '<input type="text" id="otDesc" placeholder="Ex: troca de válvula, frete, taxa de montagem..." value="'+escAttr(row.outrosDescricao||"")+'" style="width:100%;box-sizing:border-box;margin-bottom:12px;">'+
-        (parseNum(row.outros)>0 ?
-          '<div style="border-top:1px solid var(--border-soft);padding-top:10px;margin-bottom:12px;">'+
-            '<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:8px;">Na verdade foi bico, cambagem ou roda? Jogue o valor para a coluna certa (o total da venda não muda):</div>'+
-            '<div style="display:flex;gap:6px;flex-wrap:wrap;">'+
-              '<button class="btn ghost small" data-ot-mover="Bicos">→ Bicos</button>'+
-              '<button class="btn ghost small" data-ot-mover="Cambagem">→ Cambagem</button>'+
-              '<button class="btn ghost small" data-ot-mover="Rodas">→ Rodas</button>'+
-            '</div>'+
-          '</div>' : '')+
+        '<h3>Serviço desta venda</h3>'+
+        '<p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;">Informe o que foi, o valor e quem fez. Se o serviço foi feito por mais de uma pessoa, use "÷ Dividir" e coloque o valor de cada uma (até 3). A soma vai para o campo "Serviço" e cada valor soma no card de quem fez (Renan → Cambagem, Wesley → Bicos, João → Rodas). Na nota sai só o serviço normal, sem a divisão.</p>'+
+        '<div id="otLinhas"></div>'+
+        '<button class="btn ghost small" id="otAdd" style="margin:4px 0 10px;">+ Adicionar serviço</button>'+
+        '<div id="otResumo" style="font-size:12.5px;color:var(--text-dim);margin:6px 2px 12px;"></div>'+
         '<div class="modal-actions">'+
           '<button class="btn ghost small" id="otCancel">Voltar</button>'+
           '<button class="btn primary small" id="otSave">Salvar</button>'+
         '</div>'+
       '</div>';
     document.body.appendChild(div);
-    var inp = div.querySelector("#otDesc");
-    inp.focus();
+    var box = div.querySelector("#otLinhas");
+    var pessoasOpts = function(sel){
+      return '<option value="">Sem pessoa</option>'+MAODEOBRA_PESSOAS.map(function(pp){ return '<option value="'+escAttr(pp)+'"'+(pp===sel?' selected':'')+'>'+escHtml(pp)+'</option>'; }).join("");
+    };
+    function lerDosCampos(){
+      var out = [];
+      box.querySelectorAll(".otLinha").forEach(function(ln){
+        var nome = ln.querySelector(".otNome").value;
+        if (ln.getAttribute("data-split")==="1"){
+          var partes = [], soma = 0;
+          ln.querySelectorAll(".otSp").forEach(function(inp){
+            partes.push({pessoa: inp.getAttribute("data-p"), valor: inp.value});
+            soma += parseNum(inp.value);
+          });
+          out.push({nome: nome, valor: soma>0 ? soma : "", pessoa:"", split: partes});
+        } else {
+          out.push({nome: nome, valor: ln.querySelector(".otValor").value, pessoa: ln.querySelector(".otPessoa").value, split:null});
+        }
+      });
+      return out;
+    }
+    function resumo(){
+      var itens = lerDosCampos(), soma = 0, porPessoa = {};
+      itens.forEach(function(o){
+        if (o.split){
+          o.split.forEach(function(q){ var v = parseNum(q.valor); soma += v; if (v>0) porPessoa[q.pessoa] = (porPessoa[q.pessoa]||0) + v; });
+          return;
+        }
+        var v = parseNum(o.valor); soma += v;
+        if (o.pessoa && v>0) porPessoa[o.pessoa] = (porPessoa[o.pessoa]||0) + v;
+      });
+      var pp = Object.keys(porPessoa).map(function(k){ return escHtml(k)+' '+fmtCurrency(porPessoa[k]); }).join(' · ');
+      div.querySelector("#otResumo").innerHTML = 'Total de "Serviço": <b style="color:var(--text);">'+fmtCurrency(soma)+'</b>'+(pp ? '<br>Por pessoa: '+pp : '');
+    }
+    function fmtCampo(v){ return v!=="" && v!==undefined && v!==null ? String(v).replace(".",",") : ""; }
+    function desenhar(){
+      box.innerHTML = lista.map(function(o,i){
+        var nomeInp = '<input type="text" class="otNome" placeholder="O que foi (ex: troca de válvula, frete...)" value="'+escAttr(o.nome)+'" style="flex:1 1 0;min-width:0;">';
+        var del = '<button class="icon-btn otDel" data-i="'+i+'" title="Remover item" style="flex:0 0 auto;">✕</button>';
+        var dividirBtn = '<button class="btn ghost small otDiv" data-i="'+i+'" title="'+(o.split?'Voltar para uma pessoa só':'Dividir o valor entre até 3 pessoas')+'" style="flex:0 0 auto;white-space:nowrap;">'+(o.split?'Uma pessoa':'÷ Dividir')+'</button>';
+        var topo = '<div style="display:flex;gap:10px;align-items:center;margin-bottom:8px;">'+nomeInp+dividirBtn+del+'</div>';
+        var cx = 'margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border-soft);';
+        if (o.split){
+          var campos = MAODEOBRA_PESSOAS.map(function(pp){
+            var ex = o.split.filter(function(q){ return q.pessoa===pp; })[0];
+            return '<div style="flex:1 1 0;min-width:0;"><label style="display:block;font-size:13px;color:var(--text-dim);margin:0 0 3px;">'+escHtml(pp)+'</label>'+
+                   '<input type="text" inputmode="decimal" class="otSp" data-p="'+escAttr(pp)+'" placeholder="0,00" value="'+escAttr(fmtCampo(ex?ex.valor:""))+'" style="width:100%;margin:0;"></div>';
+          }).join("");
+          return '<div class="otLinha" data-split="1" style="'+cx+'">'+topo+'<div style="display:flex;gap:10px;">'+campos+'</div></div>';
+        }
+        return '<div class="otLinha" data-split="0" style="'+cx+'">'+topo+
+          '<div style="display:flex;gap:10px;">'+
+            '<input type="text" inputmode="decimal" class="otValor" placeholder="Valor 0,00" value="'+escAttr(fmtCampo(o.valor))+'" style="flex:1 1 0;min-width:0;margin:0;">'+
+            '<select class="otPessoa" style="flex:1 1 0;min-width:0;" title="Quem fez (opcional)">'+pessoasOpts(o.pessoa)+'</select>'+
+          '</div></div>';
+      }).join("");
+      box.querySelectorAll(".otValor,.otNome,.otSp").forEach(function(el){ el.addEventListener("input", resumo); });
+      box.querySelectorAll(".otPessoa").forEach(function(el){ el.addEventListener("change", resumo); });
+      box.querySelectorAll(".otDiv").forEach(function(b){
+        b.addEventListener("click", function(){
+          lista = lerDosCampos();
+          var i = parseInt(b.getAttribute("data-i"),10), o = lista[i];
+          if (o.split){
+            o.split = null; // volta para uma pessoa só (o valor total é mantido)
+          } else {
+            var v = o.valor, pe = o.pessoa;
+            o.split = MAODEOBRA_PESSOAS.map(function(pp){ return {pessoa:pp, valor:(pe===pp ? v : "")}; });
+            o.pessoa = "";
+          }
+          desenhar();
+        });
+      });
+      box.querySelectorAll(".otDel").forEach(function(b){
+        b.addEventListener("click", function(){
+          lista = lerDosCampos();
+          lista.splice(parseInt(b.getAttribute("data-i"),10),1);
+          if (!lista.length) lista.push({nome:"", valor:"", pessoa:"", split:null});
+          desenhar();
+        });
+      });
+      resumo();
+    }
+    desenhar();
+    div.querySelector("#otAdd").addEventListener("click", function(){
+      lista = lerDosCampos();
+      lista.push({nome:"", valor:"", pessoa:"", split:null});
+      desenhar();
+      var nomes = box.querySelectorAll(".otNome");
+      if (nomes.length) nomes[nomes.length-1].focus();
+    });
     function goBack(){ state.modal = null; render(); }
-    function salvar(){
-      var t = inp.value.trim();
-      if (t) row.outrosDescricao = t; else delete row.outrosDescricao;
+    div.querySelector("#otCancel").addEventListener("click", goBack);
+    div.addEventListener("click", function(e){ if (e.target===div) goBack(); });
+    div.querySelector("#otSave").addEventListener("click", function(){
+      var final = lerDosCampos().map(function(o){
+          var item = {nome:String(o.nome||"").trim(), valor:parseNum(o.valor), pessoa:o.pessoa||""};
+          if (o.split){
+            var partes = o.split.map(function(q){ return {pessoa:q.pessoa, valor:parseNum(q.valor)}; }).filter(function(q){ return q.valor>0; });
+            if (partes.length){ item.split = partes; item.pessoa = ""; }
+          }
+          return item;
+        }).filter(function(o){ return o.nome || o.valor>0; });
+      delete row.outrosSplit; // a divisão agora fica em cada item
+      if (final.length){
+        row.outrosLista = final;
+        var soma = final.reduce(function(sm,o){ return sm+o.valor; }, 0);
+        row.outros = soma>0 ? soma.toFixed(2).replace(".",",") : "";
+        var nomes = final.map(function(o){ return o.nome; }).filter(Boolean);
+        if (nomes.length) row.outrosDescricao = nomes.join(", "); else delete row.outrosDescricao;
+      } else {
+        delete row.outrosLista;
+        delete row.outrosDescricao;
+      }
       state.modal = null;
       render();
       scheduleSave();
-    }
-    var DEST = {Bicos:["valorBicos","qtdBicos"], Cambagem:["valorCambagem","qtdCambagem"], Rodas:["valorRodas","qtdRodas"]};
-    div.querySelectorAll("[data-ot-mover]").forEach(function(btn){
-      btn.addEventListener("click", function(){
-        var d = DEST[btn.getAttribute("data-ot-mover")];
-        var v = parseNum(row.outros);
-        if (!(v>0)) return;
-        var novo = parseNum(row[d[0]]) + v;
-        row[d[0]] = String(Math.round(novo*100)/100).replace(".", ",");
-        // quantidade zerada com valor preenchido acende o aviso de "não bate": já deixa 1 un.
-        if (!(parseNum(row[d[1]])>0)) row[d[1]] = "1";
-        row.outros = "";
-        delete row.outrosDescricao;
-        state.modal = null;
-        render();
-        scheduleSave();
-      });
     });
-    div.querySelector("#otCancel").addEventListener("click", goBack);
-    div.addEventListener("click", function(e){ if (e.target===div) goBack(); });
-    div.querySelector("#otSave").addEventListener("click", salvar);
-    inp.addEventListener("keydown", function(e){ if (e.key==="Enter") salvar(); });
   }
 
   // ---------- modal: dar desconto numa venda, escolhendo de qual campo ele sai ----------
@@ -6460,11 +6871,13 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     var idx = -1, item = null;
     for (var i=0;i<list.length;i++){ if (list[i].id===id){ idx=i; item=list[i]; break; } }
     if (idx===-1) return;
+    var logId = addLinhaApagada("Pneus novos", item, item.date);
     releaseRowEstoque(item); // devolve pro estoque o que essa venda havia baixado
     list.splice(idx,1);
     saveNovosMonth(month, list);
     render();
     showUndoToast("Venda de pneu novo apagada", function(){
+      desfazLinhaApagada(logId);
       var l2 = loadNovosMonth(month);
       l2.splice(Math.min(idx,l2.length), 0, item);
       syncRowEstoque(item);
@@ -6725,6 +7138,51 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   checkAuthAndBoot();
 })();
 </script>
+<style id="oficina-legibilidade">
+/* ===== letras maiores e caixas (engrenagens) maiores ===== */
+html{font-size:17px}
+body{font-size:16px}
+/* tabela de vendas */
+.grid-row.head .cell{font-size:13px!important;padding:12px 6px!important;font-weight:600}
+.grid-row .cell{padding:6px 5px!important}
+.cellval,.grid-row select,.medida-btn{font-size:16px!important;min-height:46px!important;padding:8px 5px!important}
+.cellval.computed,.cellval.lucro-cell{font-size:17px!important;font-weight:600}
+.icon-btn{width:34px!important;height:34px!important;font-size:16px!important}
+.tstat .k{font-size:12.5px!important}.tstat .v{font-size:19px!important}
+.parts-card .pc-label,.dt-label{font-size:13px!important}
+.parts-card .pc-value,.dt-value{font-size:26px!important}
+.parts-card .pc-qty,.dt-percent{font-size:13px!important}
+.totals-strip .pc-label,.totals-strip .pc-qty{font-size:12px!important}
+.totals-strip .pc-value{font-size:19px!important}
+.dd-row,.dd-cmp{font-size:15.5px!important}.dd-row .val,.dd-cmp .amt{font-size:15.5px!important}
+.dd-kpi .v{font-size:21px!important}.dd-kpi .k{font-size:12px!important}
+.arow,.arow .d,.arow .stats{font-size:15px!important}
+.btn{font-size:15px!important;min-height:44px}.btn.small{font-size:14px!important;min-height:40px}
+.tbl-head h2{font-size:23px!important}
+.sub,.dash-sub,.subtitle,.hint,.yesterday-meta,.date-sub{font-size:14.5px!important}
+.nota-row .nota-meta,.aviso-row .aviso-sub,.cust-sub,.cust-detail-sub{font-size:14px!important}
+.nota-row .nota-valor,.nota-row .nota-num{font-size:17px!important}
+.cust-item,.cust-detail-name,.gsearch-item .gs-title{font-size:16px!important}
+/* caixas que abrem das engrenagens e demais modais */
+.overlay{padding:24px!important}
+.modal{max-width:520px!important;padding:30px 32px!important;max-height:92vh;overflow-y:auto}
+.modal.wide{max-width:780px!important}
+.modal h3{font-size:22px!important;margin-bottom:10px!important}
+.modal p{font-size:15.5px!important;line-height:1.55}
+.modal input,.modal select,.modal textarea{font-size:17px!important;padding:12px 14px!important;min-height:48px}
+.modal .field-group label,.detail-box label{font-size:14px!important}
+.modal .err{font-size:14px!important}
+.modal .btn{font-size:16px!important;min-height:48px;padding:10px 20px}
+.cust-list{max-height:380px!important}
+.otLinha{gap:12px!important;margin-bottom:12px!important}
+#otResumo{font-size:16px!important}
+@media(max-width:700px){
+  html{font-size:16px}
+  .modal{width:calc(100vw - 16px)!important;max-width:none!important;padding:22px 16px!important}
+  .modal h3{font-size:20px!important}
+  .grid-row .cell{padding:8px 8px!important}
+}
+</style>
 <style id="oficina-extras">
   .ui-toast-wrap{position:fixed;left:50%;transform:translateX(-50%);bottom:86px;z-index:10050;display:flex;flex-direction:column;gap:8px;width:min(420px,calc(100vw - 24px));pointer-events:none}
   .ui-toast{pointer-events:auto;background:#1b2329;border:1px solid var(--border);border-left:3px solid var(--yellow);color:var(--text);
