@@ -2469,6 +2469,218 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   }
 
   // ======================= MODAL: FECHAMENTO DO DIA =======================
+  var FC_METODOS = ["Dinheiro","Débito","Crédito","Pix"];
+  function fcNomeVenda(r, tipo){
+    var cli = (r.clienteId && customerNameById(r.clienteId)) || r.cliente || "";
+    var partes = [];
+    if (tipo==="Novo") partes.push("Pneu novo");
+    else if (r.carro) partes.push(r.carro);
+    if (cli) partes.push(cli);
+    if (r.medida) partes.push(r.medida);
+    return partes.join(" · ") || "Venda sem identificação";
+  }
+  // procura vendas (1, 2 ou 3) cuja soma é exatamente a diferença encontrada; pool = [{i:índice, c:centavos}]
+  function fcSubconjuntos(pool, alvo){
+    var n = pool.length, out = [], a, b, c;
+    if (!(alvo>0)) return out;
+    for (a=0;a<n;a++) if (Math.abs(pool[a].c-alvo)<=1) out.push([pool[a].i]);
+    if (out.length) return out.slice(0,5);
+    for (a=0;a<n;a++) for (b=a+1;b<n;b++) if (Math.abs(pool[a].c+pool[b].c-alvo)<=1) out.push([pool[a].i,pool[b].i]);
+    if (out.length) return out.slice(0,5);
+    if (n<=40){
+      for (a=0;a<n && out.length<5;a++) for (b=a+1;b<n && out.length<5;b++) for (c=b+1;c<n && out.length<5;c++){
+        if (Math.abs(pool[a].c+pool[b].c+pool[c].c-alvo)<=1) out.push([pool[a].i,pool[b].i,pool[c].i]);
+      }
+    }
+    return out.slice(0,5);
+  }
+  // compara o que foi lançado nas vendas do dia com o que o master diz que entrou em cada forma
+  function fcComparar(d, contado, fundo){
+    var lista = [];
+    rowsOfDay(d).forEach(function(r){ lista.push({r:r, tipo:"Seminovo"}); });
+    novosRowsDoDia(d).forEach(function(r){ lista.push({r:r, tipo:"Novo"}); });
+    var vendas = [];
+    lista.forEach(function(x){
+      var v = computeValor(x.r);
+      if (!(v>0.004)) return;
+      var pb = paymentBreakdown(x.r), pago = 0;
+      FC_METODOS.forEach(function(m){ pago += pb[m]; });
+      var forma = x.r.formaPagamento || "Nenhum";
+      var venda = {nome:fcNomeVenda(x.r, x.tipo), valor:v, pb:pb, sobra:Math.max(0, v-pago), forma:forma, flags:[], suspeitas:[]};
+      if (x.r.pago!=="✅") venda.flags.push("Não está marcada como paga");
+      var aviso = pagamentoAviso(x.r, v);
+      if (aviso) venda.flags.push(aviso);
+      else if (venda.sobra>0.005) venda.flags.push(forma==="Nenhum" ? "Sem forma de pagamento lançada" : "Falta lançar "+fmtCurrency(venda.sobra)+" na forma de pagamento");
+      vendas.push(venda);
+    });
+    var metodos = FC_METODOS.map(function(m){
+      var lanc = 0; vendas.forEach(function(v){ lanc += v.pb[m]; });
+      var txt = (contado && contado[m]!==undefined && contado[m]!==null) ? String(contado[m]).trim() : "";
+      var entrou = txt==="" ? null : parseNum(txt) - (m==="Dinheiro" ? fundo : 0);
+      return {m:m, lanc:lanc, entrou:entrou, dif:(entrou===null ? null : entrou-lanc), notas:[]};
+    });
+    function pool(m, modo){
+      var p = [];
+      vendas.forEach(function(v,i){ var a = modo==="pago" ? v.pb[m] : v.sobra; if (a>0.004) p.push({i:i, c:Math.round(a*100)}); });
+      return p;
+    }
+    function nomes(ids){ return ids.map(function(i){ return vendas[i].nome+" ("+fmtCurrency(vendas[i].valor)+")"; }).join(" + "); }
+    var TOL = 0.005;
+    // 1) forma de pagamento trocada: faltou em uma forma e sobrou na outra no mesmo valor
+    metodos.forEach(function(mf){
+      if (mf.dif===null || !(mf.dif<-TOL)) return;
+      metodos.forEach(function(ms){
+        if (ms===mf || ms.dif===null || !(ms.dif>TOL)) return;
+        var alvo = Math.round(Math.min(-mf.dif, ms.dif)*100);
+        fcSubconjuntos(pool(mf.m,"pago"), alvo).forEach(function(ids){
+          mf.notas.push("Pode ter sido lançada em "+mf.m+" mas entrou em "+ms.m+": "+nomes(ids));
+          ms.notas.push("Pode ser venda lançada em "+mf.m+": "+nomes(ids));
+          ids.forEach(function(i){ vendas[i].suspeitas.push("Lançada em "+mf.m+", mas pode ter entrado em "+ms.m+" ("+fmtCurrency(alvo/100)+")"); });
+        });
+      });
+    });
+    // 2) entrou menos do que o lançado, ou mais
+    metodos.forEach(function(mm){
+      if (mm.dif===null) return;
+      if (mm.dif<-TOL){
+        var s1 = fcSubconjuntos(pool(mm.m,"pago"), Math.round(-mm.dif*100));
+        s1.forEach(function(ids){
+          mm.notas.push("Pode explicar a falta de "+fmtCurrency(-mm.dif)+": "+nomes(ids));
+          ids.forEach(function(i){ vendas[i].suspeitas.push("Pode explicar a falta de "+fmtCurrency(-mm.dif)+" em "+mm.m); });
+        });
+        if (!s1.length && !mm.notas.length) mm.notas.push("Nenhuma venda isolada tem esse valor: pode ser mais de uma venda, valor digitado errado ou venda lançada em "+mm.m+" que não entrou.");
+      } else if (mm.dif>TOL){
+        var s2 = fcSubconjuntos(pool(mm.m,"sobra"), Math.round(mm.dif*100));
+        s2.forEach(function(ids){
+          mm.notas.push("Pode ter sido paga em "+mm.m+" mas está sem forma de pagamento: "+nomes(ids));
+          ids.forEach(function(i){ vendas[i].suspeitas.push("Pode ter sido paga em "+mm.m+" ("+fmtCurrency(mm.dif)+")"); });
+        });
+        if (!s2.length && !mm.notas.length) mm.notas.push("Entrou mais do que o lançado: pode ser venda não lançada, valor lançado menor ou pagamento lançado em outra forma.");
+      }
+    });
+    vendas.sort(function(x,y){ return (y.suspeitas.length*2+y.flags.length) - (x.suspeitas.length*2+x.flags.length); });
+    return {metodos:metodos, vendas:vendas};
+  }
+
+  // ---------- conferência por extrato: cada pagamento do extrato x cada pagamento lançado nas vendas ----------
+  var FC_EXT_METODOS = ["Débito","Crédito","Pix"];
+  function fcValorBR(str){
+    var v = String(str).replace(/\s/g,"");
+    if (!v) return null;
+    if (v.indexOf(",")>-1 && v.indexOf(".")>-1) v = v.replace(/\./g,"").replace(",",".");
+    else if (v.indexOf(",")>-1) v = v.replace(",",".");
+    else if (/^\d{1,3}(\.\d{3})+$/.test(v)) v = v.replace(/\./g,"");
+    if (!/^\d+(\.\d+)?$/.test(v)) return null;
+    var n = parseFloat(v);
+    return isFinite(n) ? Math.round(n*100) : null;
+  }
+  // lê uma lista de valores (um por linha ou separados por ;) em centavos; linhas que não deu para entender vão em "ignoradas"
+  function fcLerValores(texto){
+    var valores = [], ignoradas = [];
+    String(texto||"").split(/[\n;]+/).forEach(function(linha){
+      var t = linha.replace(/R\$/gi,"").trim();
+      if (!t) return;
+      var c = fcValorBR(t);
+      if (c===null){
+        var toks = t.match(/\d{1,3}(?:\.\d{3})*,\d{2}(?!\d)|\d+\.\d{2}(?!\d)/g);
+        if (toks && toks.length) c = fcValorBR(toks[toks.length-1]);
+      }
+      if (c===null || c<=0) ignoradas.push(t); else valores.push(c);
+    });
+    return {valores:valores, ignoradas:ignoradas};
+  }
+  function fcVendasBase(d){
+    var lista = [];
+    rowsOfDay(d).forEach(function(r){ lista.push({r:r, tipo:"Seminovo"}); });
+    novosRowsDoDia(d).forEach(function(r){ lista.push({r:r, tipo:"Novo"}); });
+    var vendas = [];
+    lista.forEach(function(x){
+      var v = computeValor(x.r);
+      if (!(v>0.004)) return;
+      var pb = paymentBreakdown(x.r), pago = 0;
+      FC_METODOS.forEach(function(m){ pago += pb[m]; });
+      vendas.push({nome:fcNomeVenda(x.r, x.tipo), valor:v, pb:pb, sobra:Math.max(0, v-pago), forma:x.r.formaPagamento||"Nenhum"});
+    });
+    return vendas;
+  }
+  function fcConferirExtrato(d, textos, tol){
+    var vendas = fcVendasBase(d);
+    var tolC = Math.round(Math.max(0, tol||0)*100);
+    var ext = {}, sys = {}, info = {};
+    FC_METODOS.forEach(function(m){
+      sys[m] = [];
+      vendas.forEach(function(v,i){ if (v.pb[m]>0.004) sys[m].push({i:i, c:Math.round(v.pb[m]*100), usado:false, par:null}); });
+    });
+    FC_EXT_METODOS.forEach(function(m){
+      var txt = (textos && textos[m]) || "";
+      var lidos = fcLerValores(txt);
+      info[m] = {informado: String(txt).trim()!=="", ignoradas: lidos.ignoradas};
+      ext[m] = lidos.valores.map(function(c){ return {c:c, usado:false, par:null}; });
+    });
+    // 1) valores iguais; 2) com a diferença aceita (taxa da maquininha, por exemplo)
+    FC_EXT_METODOS.forEach(function(m){
+      if (!info[m].informado) return;
+      ext[m].forEach(function(e){
+        for (var k=0;k<sys[m].length;k++){ var s1 = sys[m][k]; if (!s1.usado && s1.c===e.c){ s1.usado = true; e.usado = true; e.par = s1; s1.par = e; break; } }
+      });
+      if (tolC>0){
+        ext[m].forEach(function(e){
+          if (e.usado) return;
+          var best = null;
+          sys[m].forEach(function(s2){ if (!s2.usado && Math.abs(s2.c-e.c)<=tolC && (!best || Math.abs(s2.c-e.c)<Math.abs(best.c-e.c))) best = s2; });
+          if (best){ best.usado = true; e.usado = true; e.par = best; best.par = e; }
+        });
+      }
+    });
+    function achaSys(c, exceto){
+      var out = null;
+      FC_METODOS.forEach(function(m2){
+        if (m2===exceto || out) return;
+        sys[m2].forEach(function(s3){ if (!out && !s3.usado && Math.abs(s3.c-c)<=tolC) out = {m:m2, s:s3}; });
+      });
+      return out;
+    }
+    function achaExt(c, exceto){
+      var out = null;
+      FC_EXT_METODOS.forEach(function(m2){
+        if (m2===exceto || out || !info[m2].informado) return;
+        ext[m2].forEach(function(e2){ if (!out && !e2.usado && Math.abs(e2.c-c)<=tolC) out = {m:m2, e:e2}; });
+      });
+      return out;
+    }
+    var metodos = [];
+    FC_EXT_METODOS.forEach(function(m){
+      var r = {m:m, informado:info[m].informado, ignoradas:info[m].ignoradas, bateram:0, soExtrato:[], soSistema:[], somaExt:0, somaSys:0, comDif:[]};
+      sys[m].forEach(function(s4){ r.somaSys += s4.c; });
+      if (!r.informado){ metodos.push(r); return; }
+      ext[m].forEach(function(e){
+        r.somaExt += e.c;
+        if (e.usado){ r.bateram++; if (e.par && e.par.c!==e.c) r.comDif.push({nome:vendas[e.par.i].nome, extrato:e.c, sistema:e.par.c}); return; }
+        var dica = "";
+        var o = achaSys(e.c, m);
+        if (o) dica = "Existe venda deste valor lançada em "+o.m+": "+vendas[o.s.i].nome;
+        else {
+          var sv = null;
+          vendas.forEach(function(v){ if (!sv && Math.abs(Math.round(v.sobra*100)-e.c)<=tolC && v.sobra>0.004) sv = v; });
+          if (sv) dica = "A venda "+sv.nome+" está sem forma de pagamento (ou pendente) com este valor";
+          else {
+            var tv = null;
+            vendas.forEach(function(v){ if (!tv && Math.abs(Math.round(v.valor*100)-e.c)<=tolC && Math.abs(Math.round(v.pb[m]*100)-e.c)>tolC) tv = v; });
+            dica = tv ? "Igual ao total da venda "+tv.nome+", que está lançada de outra forma ou dividida" : "Nenhuma venda lançada com este valor";
+          }
+        }
+        r.soExtrato.push({c:e.c, dica:dica});
+      });
+      sys[m].forEach(function(s5){
+        if (s5.usado) return;
+        var o2 = achaExt(s5.c, m);
+        r.soSistema.push({nome:vendas[s5.i].nome, c:s5.c, dica:(o2 ? "Este valor apareceu no extrato de "+o2.m : "Não apareceu no extrato")});
+      });
+      metodos.push(r);
+    });
+    return {metodos:metodos};
+  }
+
   function renderFechamentoModal(){
     var d = state.modal.date, t = null;
     try{ t = computeTotals(); }catch(e){}
@@ -2481,48 +2693,193 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     var pend = todas.filter(function(r){ return r.pago!=="✅" && computeValor(r)>0; });
     var pendValor = pend.reduce(function(a,r){ return a+computeValor(r); }, 0);
     var cel = 'padding:8px 8px;border-bottom:1px solid var(--border-soft);';
+    var tab = state.modal.tab || "caixa";
+    var extSalvo = salvo.extrato || {};
+    function valIn(m){ return escAttr(contado[m]!==undefined&&contado[m]!==""?String(contado[m]).replace(".",","):""); }
+    var fundoVal = escAttr(salvo.fundo!==undefined&&salvo.fundo!==""?String(salvo.fundo).replace(".",","):"");
     var div = document.createElement("div");
     div.className = "overlay";
     div.innerHTML =
       '<div class="modal wide">'+
         '<h3>💵 Fechamento do dia — '+escHtml(fmtDateBR(d))+'</h3>'+
-        '<p>Compare o que foi lançado no sistema com o que você realmente conferiu (dinheiro na gaveta, extrato da maquininha e do Pix).</p>'+
-        '<table style="width:100%;border-collapse:collapse;margin-bottom:10px;"><thead><tr>'+
-          '<th style="'+cel+'text-align:left;font-size:13px;color:var(--text-dim);">Forma</th><th style="'+cel+'text-align:right;font-size:13px;color:var(--text-dim);">Lançado</th>'+
-          '<th style="'+cel+'text-align:right;font-size:13px;color:var(--text-dim);">Conferido</th><th style="'+cel+'text-align:right;font-size:13px;color:var(--text-dim);">Diferença</th></tr></thead><tbody>'+
-        metodos.map(function(m){
-          return '<tr><td style="'+cel+'"><b>'+escHtml(m)+'</b></td><td style="'+cel+'text-align:right;font-family:\'IBM Plex Mono\',monospace;">'+fmtCurrency(t.porPagamento[m]||0)+'</td>'+
-            '<td style="'+cel+'"><input type="text" inputmode="decimal" class="fcIn" data-m="'+escAttr(m)+'" placeholder="0,00" value="'+escAttr(contado[m]!==undefined&&contado[m]!==""?String(contado[m]).replace(".",","):"")+'" style="margin:0;text-align:right;letter-spacing:normal;"></td>'+
-            '<td style="'+cel+'text-align:right;font-family:\'IBM Plex Mono\',monospace;" class="fcDif" data-m="'+escAttr(m)+'">—</td></tr>';
-        }).join("")+
-        '</tbody></table>'+
-        '<div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;"><label style="flex:0 0 auto;font-size:14px;color:var(--text-dim);">Fundo de caixa (troco que já estava na gaveta)</label>'+
-          '<input type="text" inputmode="decimal" id="fcFundo" placeholder="0,00" value="'+escAttr(salvo.fundo!==undefined&&salvo.fundo!==""?String(salvo.fundo).replace(".",","):"")+'" style="margin:0;max-width:160px;text-align:right;letter-spacing:normal;"></div>'+
-        '<div style="font-size:15px;line-height:1.7;margin:6px 0 14px;">'+
-          'Total lançado como entrada: <b style="color:var(--text);">'+fmtCurrency(t.entrouTotal||0)+'</b><br>'+
-          (pend.length ? '⚠ '+pend.length+' venda(s) ainda pendente(s) de pagamento: <b>'+fmtCurrency(pendValor)+'</b><br>' : '✓ Nenhuma venda pendente de pagamento<br>')+
-          (avisos ? '⚠ '+avisos+' venda(s) com problema na forma de pagamento (marcadas em amarelo na tabela)<br>' : '')+
-          (t.semForma>0.005 ? '⚠ '+fmtCurrency(t.semForma)+' em vendas sem forma de pagamento definida<br>' : '')+
+        '<div style="display:flex;gap:6px;margin:0 0 12px;">'+
+          '<button class="btn small fcTab" data-tab="caixa">Caixa</button>'+
+          '<button class="btn small fcTab" data-tab="cmp">🔎 Comparativo</button>'+
+          '<button class="btn small fcTab" data-tab="ext">📋 Extrato</button>'+
+        '</div>'+
+        '<div id="fcPaneCaixa">'+
+          '<p>Compare o que foi lançado no sistema com o que você realmente conferiu (dinheiro na gaveta, extrato da maquininha e do Pix).</p>'+
+          '<table style="width:100%;border-collapse:collapse;margin-bottom:10px;"><thead><tr>'+
+            '<th style="'+cel+'text-align:left;font-size:13px;color:var(--text-dim);">Forma</th><th style="'+cel+'text-align:right;font-size:13px;color:var(--text-dim);">Lançado</th>'+
+            '<th style="'+cel+'text-align:right;font-size:13px;color:var(--text-dim);">Conferido</th><th style="'+cel+'text-align:right;font-size:13px;color:var(--text-dim);">Diferença</th></tr></thead><tbody>'+
+          metodos.map(function(m){
+            return '<tr><td style="'+cel+'"><b>'+escHtml(m)+'</b></td><td style="'+cel+'text-align:right;font-family:\'IBM Plex Mono\',monospace;">'+fmtCurrency(t.porPagamento[m]||0)+'</td>'+
+              '<td style="'+cel+'"><input type="text" inputmode="decimal" class="fcIn" data-m="'+escAttr(m)+'" placeholder="0,00" value="'+valIn(m)+'" style="margin:0;text-align:right;letter-spacing:normal;"></td>'+
+              '<td style="'+cel+'text-align:right;font-family:\'IBM Plex Mono\',monospace;" class="fcDif" data-m="'+escAttr(m)+'">—</td></tr>';
+          }).join("")+
+          '</tbody></table>'+
+          '<div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;"><label style="flex:0 0 auto;font-size:14px;color:var(--text-dim);">Fundo de caixa (troco que já estava na gaveta)</label>'+
+            '<input type="text" inputmode="decimal" class="fcFundoIn" placeholder="0,00" value="'+fundoVal+'" style="margin:0;max-width:160px;text-align:right;letter-spacing:normal;"></div>'+
+          '<div style="font-size:15px;line-height:1.7;margin:6px 0 14px;">'+
+            'Total lançado como entrada: <b style="color:var(--text);">'+fmtCurrency(t.entrouTotal||0)+'</b><br>'+
+            (pend.length ? '⚠ '+pend.length+' venda(s) ainda pendente(s) de pagamento: <b>'+fmtCurrency(pendValor)+'</b><br>' : '✓ Nenhuma venda pendente de pagamento<br>')+
+            (avisos ? '⚠ '+avisos+' venda(s) com problema na forma de pagamento (marcadas em amarelo na tabela)<br>' : '')+
+            (t.semForma>0.005 ? '⚠ '+fmtCurrency(t.semForma)+' em vendas sem forma de pagamento definida<br>' : '')+
+          '</div>'+
+        '</div>'+
+        '<div id="fcPaneCmp" style="display:none;">'+
+          '<p>Digite o que realmente entrou em cada forma de pagamento. O sistema compara com o que foi lançado e mostra quais vendas não batem.</p>'+
+          '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:10px;">'+
+            metodos.map(function(m){
+              return '<div><label style="font-size:13px;color:var(--text-dim);display:block;margin-bottom:4px;">'+escHtml(m==="Dinheiro" ? "Dinheiro (total da gaveta)" : m)+'</label>'+
+                '<input type="text" inputmode="decimal" class="fcIn" data-m="'+escAttr(m)+'" placeholder="0,00" value="'+valIn(m)+'" style="margin:0;text-align:right;letter-spacing:normal;"></div>';
+            }).join("")+
+            '<div><label style="font-size:13px;color:var(--text-dim);display:block;margin-bottom:4px;">Fundo de caixa</label>'+
+              '<input type="text" inputmode="decimal" class="fcFundoIn" placeholder="0,00" value="'+fundoVal+'" style="margin:0;text-align:right;letter-spacing:normal;"></div>'+
+          '</div>'+
+          '<div id="fcCmpOut"></div>'+
+        '</div>'+
+        '<div id="fcPaneExt" style="display:none;">'+
+          '<p>Cole os valores do extrato da maquininha e do Pix, <b>um por linha</b> (ex.: 400,00). O sistema cruza cada pagamento com o que foi lançado nas vendas e mostra o que não bate. Deixe em branco a forma que não quiser conferir.</p>'+
+          '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:10px;">'+
+            FC_EXT_METODOS.map(function(m){
+              return '<div><label style="font-size:13px;color:var(--text-dim);display:block;margin-bottom:4px;">'+escHtml(m)+' — valores do extrato</label>'+
+                '<textarea class="fcExtIn" data-m="'+escAttr(m)+'" rows="7" placeholder="400,00&#10;1.250,50&#10;89,90" style="width:100%;box-sizing:border-box;margin:0;letter-spacing:normal;font-family:\'IBM Plex Mono\',monospace;">'+escHtml(extSalvo[m]||"")+'</textarea></div>';
+            }).join("")+
+          '</div>'+
+          '<div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;"><label style="font-size:14px;color:var(--text-dim);">Aceitar diferença de até R$</label>'+
+            '<input type="text" inputmode="decimal" class="fcTolIn" placeholder="0,00" value="'+escAttr(salvo.tol!==undefined&&salvo.tol!==""?String(salvo.tol).replace(".",","):"")+'" style="margin:0;max-width:110px;text-align:right;letter-spacing:normal;">'+
+            '<span style="font-size:13px;color:var(--text-dim);">(útil quando o extrato mostra o valor já sem a taxa da maquininha)</span></div>'+
+          '<div id="fcExtOut"></div>'+
         '</div>'+
         '<div class="modal-actions"><button class="btn ghost small" id="fcVoltar">Voltar</button><button class="btn primary small" id="fcSalvar">Salvar conferência</button></div>'+
       '</div>';
     document.body.appendChild(div);
+    function fundoAtual(){ var f = div.querySelector(".fcFundoIn"); return f ? f.value : ""; }
+    function contadoAtual(){
+      var c = {};
+      div.querySelectorAll(".fcIn").forEach(function(inp){ c[inp.getAttribute("data-m")] = inp.value.trim(); });
+      return c;
+    }
+    function difHtml(v){ return '<span style="color:'+(Math.abs(v)<0.005 ? "var(--green)" : "var(--red)")+';">'+(v>0.004?"+":"")+fmtCurrency(v)+'</span>'; }
+    function desenharCmp(){
+      var cmp = fcComparar(d, contadoAtual(), parseNum(fundoAtual()));
+      var algum = cmp.metodos.some(function(x){ return x.entrou!==null; });
+      var todos = cmp.metodos.every(function(x){ return x.entrou!==null; });
+      var th = 'padding:8px;border-bottom:1px solid var(--border-soft);font-size:13px;color:var(--text-dim);';
+      var td = 'padding:8px;border-bottom:1px solid var(--border-soft);vertical-align:top;';
+      var mono = 'font-family:\'IBM Plex Mono\',monospace;text-align:right;white-space:nowrap;';
+      var totL = 0, totE = 0;
+      var h = '<table style="width:100%;border-collapse:collapse;margin-bottom:10px;"><thead><tr><th style="'+th+'text-align:left;">Forma</th><th style="'+th+'text-align:right;">Lançado</th><th style="'+th+'text-align:right;">Entrou</th><th style="'+th+'text-align:right;">Diferença</th></tr></thead><tbody>'+
+        cmp.metodos.map(function(x){
+          totL += x.lanc; if (x.entrou!==null) totE += x.entrou;
+          return '<tr><td style="'+td+'"><b>'+escHtml(x.m)+'</b></td><td style="'+td+mono+'">'+fmtCurrency(x.lanc)+'</td><td style="'+td+mono+'">'+(x.entrou===null ? "—" : fmtCurrency(x.entrou))+'</td><td style="'+td+mono+'">'+(x.dif===null ? "—" : difHtml(x.dif))+'</td></tr>';
+        }).join("")+
+        '<tr><td style="'+td+'"><b>Total</b></td><td style="'+td+mono+'"><b>'+fmtCurrency(totL)+'</b></td><td style="'+td+mono+'">'+(algum ? '<b>'+fmtCurrency(totE)+'</b>' : "—")+'</td><td style="'+td+mono+'">'+(todos ? '<b>'+difHtml(totE-totL)+'</b>' : "—")+'</td></tr>'+
+        '</tbody></table>';
+      if (!algum) h += '<p style="font-size:14px;color:var(--text-dim);">Preencha o que entrou para ver a comparação por forma de pagamento. Abaixo já aparecem as vendas com problema no lançamento.</p>';
+      var comNotas = cmp.metodos.filter(function(x){ return x.notas.length; });
+      if (comNotas.length){
+        h += '<div style="margin:0 0 12px;font-size:14px;line-height:1.55;">'+comNotas.map(function(x){
+          return '<div style="margin-bottom:8px;"><b>'+escHtml(x.m)+'</b> ('+(x.dif<0 ? "entrou a menos" : "entrou a mais")+' '+fmtCurrency(Math.abs(x.dif))+')<ul style="margin:4px 0 0 18px;padding:0;">'+
+            x.notas.map(function(n){ return '<li>'+escHtml(n)+'</li>'; }).join("")+'</ul></div>';
+        }).join("")+'</div>';
+      } else if (algum && cmp.metodos.every(function(x){ return x.dif===null || Math.abs(x.dif)<0.005; })){
+        h += '<p style="font-size:14px;color:var(--green);">✓ O que entrou bate com o que foi lançado nas formas preenchidas.</p>';
+      }
+      var problemas = cmp.vendas.filter(function(v){ return v.flags.length || v.suspeitas.length; }).length;
+      h += '<h4 style="margin:14px 0 6px;font-size:16px;">Vendas do dia'+(problemas ? ' — '+problemas+' com divergência' : '')+'</h4>';
+      if (!cmp.vendas.length){
+        h += '<p style="font-size:14px;color:var(--text-dim);">Nenhuma venda com valor neste dia.</p>';
+      } else {
+        h += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr><th style="'+th+'text-align:left;">Venda</th><th style="'+th+'text-align:right;">Valor</th><th style="'+th+'text-align:left;">Forma lançada</th><th style="'+th+'text-align:left;">Situação</th></tr></thead><tbody>'+
+          cmp.vendas.map(function(v){
+            var bg = v.suspeitas.length ? 'background:rgba(220,60,60,.10);' : (v.flags.length ? 'background:rgba(230,180,30,.12);' : '');
+            var sit = (v.suspeitas.length || v.flags.length)
+              ? v.suspeitas.map(function(x){ return '<div style="color:var(--red);">🔎 '+escHtml(x)+'</div>'; }).join("")+v.flags.map(function(x){ return '<div style="color:var(--yellow);">⚠ '+escHtml(x)+'</div>'; }).join("")
+              : '<span style="color:var(--green);">✓</span>';
+            return '<tr style="'+bg+'"><td style="'+td+'">'+escHtml(v.nome)+'</td><td style="'+td+mono+'">'+fmtCurrency(v.valor)+'</td><td style="'+td+'">'+escHtml(v.forma)+'</td><td style="'+td+'font-size:14px;">'+sit+'</td></tr>';
+          }).join("")+'</tbody></table></div>';
+      }
+      div.querySelector("#fcCmpOut").innerHTML = h;
+    }
+    function desenharExt(){
+      var textos = {};
+      div.querySelectorAll(".fcExtIn").forEach(function(a){ textos[a.getAttribute("data-m")] = a.value; });
+      var tolEl = div.querySelector(".fcTolIn");
+      var res = fcConferirExtrato(d, textos, parseNum(tolEl ? tolEl.value : ""));
+      var th = 'padding:6px 8px;border-bottom:1px solid var(--border-soft);font-size:13px;color:var(--text-dim);text-align:left;';
+      var td = 'padding:6px 8px;border-bottom:1px solid var(--border-soft);vertical-align:top;';
+      var mono = 'font-family:\'IBM Plex Mono\',monospace;text-align:right;white-space:nowrap;';
+      var algum = res.metodos.some(function(x){ return x.informado; });
+      var h = "";
+      if (!algum) h += '<p style="font-size:14px;color:var(--text-dim);">Cole os valores de pelo menos uma forma para conferir.</p>';
+      res.metodos.forEach(function(x){
+        if (!x.informado) return;
+        var ok = !x.soExtrato.length && !x.soSistema.length;
+        h += '<div style="border:1px solid var(--border-soft);border-radius:6px;padding:10px 12px;margin-bottom:12px;">'+
+          '<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px;"><b>'+escHtml(x.m)+'</b>'+
+            '<span style="font-size:14px;">Extrato: <b>'+fmtCurrency(x.somaExt/100)+'</b> · Vendas: <b>'+fmtCurrency(x.somaSys/100)+'</b> · Diferença: '+difHtml((x.somaExt-x.somaSys)/100)+'</span></div>'+
+          '<div style="font-size:14px;margin-bottom:6px;">'+(ok ? '<span style="color:var(--green);">✓ Todos os pagamentos batem</span> ' : '')+'<span style="color:var(--text-dim);">'+x.bateram+' pagamento(s) conferido(s)</span></div>';
+        if (x.ignoradas.length) h += '<div style="font-size:13px;color:var(--yellow);margin-bottom:6px;">⚠ Não consegui ler '+x.ignoradas.length+' linha(s): '+escHtml(x.ignoradas.slice(0,5).join(" | "))+(x.ignoradas.length>5 ? "…" : "")+'</div>';
+        if (x.comDif.length) h += '<div style="font-size:13px;color:var(--text-dim);margin-bottom:6px;">Conferidos com diferença aceita: '+x.comDif.map(function(c){ return escHtml(c.nome)+' (sistema '+fmtCurrency(c.sistema/100)+' × extrato '+fmtCurrency(c.extrato/100)+')'; }).join("; ")+'</div>';
+        if (x.soExtrato.length){
+          h += '<div style="font-size:14px;margin:8px 0 4px;"><b>Entrou, mas não está nas vendas</b> ('+x.soExtrato.length+')</div>'+
+            '<table style="width:100%;border-collapse:collapse;"><tbody>'+x.soExtrato.map(function(e){
+              return '<tr style="background:rgba(220,60,60,.10);"><td style="'+td+mono+'">'+fmtCurrency(e.c/100)+'</td><td style="'+td+'font-size:14px;">🔎 '+escHtml(e.dica)+'</td></tr>';
+            }).join("")+'</tbody></table>';
+        }
+        if (x.soSistema.length){
+          h += '<div style="font-size:14px;margin:8px 0 4px;"><b>Lançado nas vendas, mas não está no extrato</b> ('+x.soSistema.length+')</div>'+
+            '<table style="width:100%;border-collapse:collapse;"><tbody>'+x.soSistema.map(function(e){
+              return '<tr style="background:rgba(230,180,30,.12);"><td style="'+td+'">'+escHtml(e.nome)+'</td><td style="'+td+mono+'">'+fmtCurrency(e.c/100)+'</td><td style="'+td+'font-size:14px;">⚠ '+escHtml(e.dica)+'</td></tr>';
+            }).join("")+'</tbody></table>';
+        }
+        h += '</div>';
+      });
+      div.querySelector("#fcExtOut").innerHTML = h;
+    }
     function atualizar(){
-      var fundo = parseNum(div.querySelector("#fcFundo").value);
+      var fundo = parseNum(fundoAtual());
       div.querySelectorAll(".fcIn").forEach(function(inp){
         var m = inp.getAttribute("data-m"), cel = div.querySelector('.fcDif[data-m="'+m+'"]');
+        if (!cel) return;
         if (inp.value.trim()===""){ cel.textContent = "—"; cel.style.color = ""; return; }
         var dif = parseNum(inp.value) - (m==="Dinheiro" ? fundo : 0) - (t.porPagamento[m]||0);
         cel.textContent = (dif>0.004?"+":"")+fmtCurrency(dif);
         cel.style.color = Math.abs(dif)<0.005 ? "var(--green)" : "var(--red)";
       });
+      desenharCmp();
     }
-    div.querySelectorAll(".fcIn,#fcFundo").forEach(function(i){ i.addEventListener("input", atualizar); });
-    atualizar();
+    function mostrarAba(nome){
+      tab = nome; state.modal.tab = nome;
+      div.querySelector("#fcPaneCaixa").style.display = nome==="caixa" ? "" : "none";
+      div.querySelector("#fcPaneCmp").style.display = nome==="cmp" ? "" : "none";
+      div.querySelector("#fcPaneExt").style.display = nome==="ext" ? "" : "none";
+      div.querySelectorAll(".fcTab").forEach(function(b){ b.className = "btn small fcTab "+(b.getAttribute("data-tab")===nome ? "primary" : "ghost"); });
+    }
+    div.querySelectorAll(".fcTab").forEach(function(b){ b.addEventListener("click", function(){ mostrarAba(b.getAttribute("data-tab")); }); });
+    // os campos das duas abas são os mesmos dados: o que for digitado em uma aparece na outra
+    div.querySelectorAll(".fcIn").forEach(function(i){
+      i.addEventListener("input", function(){
+        var m = i.getAttribute("data-m");
+        div.querySelectorAll('.fcIn[data-m="'+m+'"]').forEach(function(o){ if (o!==i) o.value = i.value; });
+        atualizar();
+      });
+    });
+    div.querySelectorAll(".fcFundoIn").forEach(function(i){
+      i.addEventListener("input", function(){
+        div.querySelectorAll(".fcFundoIn").forEach(function(o){ if (o!==i) o.value = i.value; });
+        atualizar();
+      });
+    });
+    div.querySelectorAll(".fcExtIn,.fcTolIn").forEach(function(i){ i.addEventListener("input", desenharExt); });
+    mostrarAba(tab); atualizar(); desenharExt();
     div.querySelector("#fcSalvar").addEventListener("click", function(){
-      var c = {};
-      div.querySelectorAll(".fcIn").forEach(function(inp){ c[inp.getAttribute("data-m")] = inp.value.trim(); });
-      lsSetJSON(chave, {contado:c, fundo:div.querySelector("#fcFundo").value.trim(), ts:Date.now()});
+      var extrato = {};
+      div.querySelectorAll(".fcExtIn").forEach(function(a){ extrato[a.getAttribute("data-m")] = a.value; });
+      var tolS = div.querySelector(".fcTolIn");
+      lsSetJSON(chave, {contado:contadoAtual(), fundo:fundoAtual().trim(), extrato:extrato, tol:(tolS ? tolS.value.trim() : ""), ts:Date.now()});
       state.modal = null; render();
     });
     div.querySelector("#fcVoltar").addEventListener("click", function(){ state.modal = null; render(); });
