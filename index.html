@@ -372,7 +372,7 @@
   .cellval:disabled{color:var(--text-dim);}
   select.cellval{appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M0 0l5 6 5-6z' fill='%2398a3ad'/></svg>");background-repeat:no-repeat;background-position:right 6px center;padding-right:18px;}
   select.cellval:disabled{background-image:none;}
-  .cellval.computed{color:var(--yellow);font-family:'IBM Plex Mono',monospace;font-weight:500;background:transparent;border-color:transparent;}
+  .cellval.computed{color:var(--yellow);font-family:inherit;font-weight:400;background:transparent;border-color:transparent;}
   .rowactions{display:flex;align-items:center;justify-content:center;gap:4px;}
   .icon-btn{
     width:24px;height:24px;border-radius:3px;border:1px solid var(--border);background:transparent;
@@ -647,7 +647,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   .grid-row.data{border-bottom:1px solid var(--border);}
   .grid-row .cell{padding:8px 7px;}
   .cellval, .grid-row select, .medida-btn{font-size:16px;min-height:40px;}
-  .cellval.computed, .cellval.lucro-cell{font-size:14px;} /* campos só de leitura: não dão zoom, mantêm o R$ inteiro visível */
+  .cellval.computed{font-size:16px;}
+  .cellval.lucro-cell{font-size:14px;} /* campos só de leitura: não dão zoom, mantêm o R$ inteiro visível */
   .icon-btn{width:34px;height:34px;}
 }
 </style>
@@ -2363,7 +2364,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     downloadTextFile("vendas-"+month+".csv", linhas.join("\r\n"));
   }
 
-  // ======================= AVISO DE PAGAMENTO / DUPLICAR VENDA / ENTER =======================
+  // ======================= AVISO DE PAGAMENTO / ENTER =======================
   function pagamentoAviso(row, valor){
     if (!(valor>0)) return "";
     var fp = row.formaPagamento || "Nenhum";
@@ -2374,21 +2375,6 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       if (Math.abs(soma-valor)>0.005) return "Os pagamentos múltiplos somam "+fmtCurrency(soma)+", mas a venda vale "+fmtCurrency(valor)+".";
     }
     return "";
-  }
-  function dupRow(id){
-    var rws = tblRows(), idx = -1;
-    for (var i=0;i<rws.length;i++){ if (rws[i].id===id){ idx = i; break; } }
-    if (idx===-1) return;
-    if (isNovosTbl() && !novoEditable(tblDate())){ state.modal = {type:"auth", error:""}; render(); return; }
-    var c = JSON.parse(JSON.stringify(rws[idx]));
-    c.id = uid(); c.criadoEm = new Date().toISOString();
-    c.pago = "❌"; c.formaPagamento = "Nenhum";
-    ["pagamentosMultiplos","splitValor","descontos","desconto","grupoId","notaId","vendaNum"].forEach(function(k){ delete c[k]; });
-    c.medidaBaixa = 0;
-    try{ syncRowEstoque(c); }catch(e){}
-    rws.splice(idx+1, 0, c);
-    renderTable();
-    scheduleSave();
   }
   // Enter pula para o próximo campo da tabela (Shift+Enter volta)
   document.addEventListener("keydown", function(e){
@@ -4171,9 +4157,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     else if (act==="cmpmonth"){ state.cmpMode="month"; render(); }
     else if (act==="back"){ state.view="dashboard"; render(); }
     else if (act==="addrow"){ addRow(); }
-    else if (act==="duprow"){ dupRow(node.getAttribute("data-id")); }
     else if (act==="openferramentas"){ if (state.role==="master"){ state.modal = {type:"ferramentas"}; render(); } }
-    else if (act==="openfechamento"){ if (state.role==="master"){ state.modal = {type:"fechamento", date:tblDate()}; render(); } }
+    else if (act==="openfechamento"){ if (state.role==="master" || state.role==="vendedor"){ state.modal = {type:"fechamento", date:tblDate()}; render(); } }
     else if (act==="prevday" || act==="nextday"){
       var dd = act==="prevday" ? -1 : 1;
       if (isNovosTbl()){ flushNovos(); state.novosDate = addDays(tblDate(),dd); state.novosRows = null; state.openDetails = {}; render(); }
@@ -4385,7 +4370,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
                 return '<option value="'+escAttr(v)+'"'+(vendFilt===v?' selected':'')+'>'+escHtml(v)+'</option>';
               }).join("")+
             '</select>'+
-            (state.role==="master" ? '<button class="btn small ghost" data-act="openfechamento" title="Conferir o caixa do dia: o que foi lançado x o que está na gaveta/maquininha">💵 Fechamento</button>' : '')+
+            ((state.role==="master" || state.role==="vendedor") ? '<button class="btn small ghost" data-act="openfechamento" title="Conferir o caixa do dia: o que foi lançado x o que está na gaveta/maquininha">💵 Fechamento</button>' : '')+
             (state.role==="master" ? '<button class="btn small ghost" data-act="exportdiacsv" title="Baixar as vendas deste dia em planilha (CSV)">⇩ CSV</button>' : '')+
             '<button class="btn small ghost" data-act="toggletabletotals" title="'+(state.hideTableTotals?"Mostrar o valor total do dia e as somas das formas de pagamento":"Ocultar o valor total do dia e as somas das formas de pagamento")+'">'+(state.hideTableTotals?"🙈 Mostrar totais":"👁 Ocultar totais")+'</button>'+
           '</div>'
@@ -4537,7 +4522,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     var open = !!state.openDetails[row.id];
     var mainRow = '<div class="grid-row data" style="grid-template-columns:'+colTemplate+'" data-row="'+row.id+'">'+cells+'</div>';
     var toggleRow = '<div class="grid-row" style="grid-template-columns:'+colTemplate+'">'+
-      '<div class="detail-toggle-row"><button class="detail-toggle'+(open?' open':'')+'" data-act="toggledetail" data-id="'+row.id+'"><span class="car">▸</span> detalhes da venda</button>'+(editable ? '<button class="detail-toggle" data-act="duprow" data-id="'+row.id+'" title="Cria uma cópia desta venda logo abaixo (mesmo cliente), sem pagamento e sem desconto">⧉ duplicar venda</button>' : '')+'</div>'+
+      '<div class="detail-toggle-row"><button class="detail-toggle'+(open?' open':'')+'" data-act="toggledetail" data-id="'+row.id+'"><span class="car">▸</span> detalhes da venda</button>'+'</div>'+
       '</div>';
     var detailRow = "";
     if (open){
@@ -8079,7 +8064,8 @@ body{font-size:16px}
 .detail-toggle-row{display:flex;gap:6px;align-items:center}
 .grid-row .cell{padding:6px 5px!important}
 .cellval,.grid-row select,.medida-btn{font-size:16px!important;min-height:46px!important;padding:8px 5px!important}
-.cellval.computed,.cellval.lucro-cell{font-size:17px!important;font-weight:600}
+.cellval.computed{font-size:16px!important;font-weight:400!important}
+.cellval.lucro-cell{font-size:17px!important;font-weight:600}
 .icon-btn{width:30px!important;height:30px!important;font-size:15px!important}
 .tstat .k{font-size:12.5px!important}.tstat .v{font-size:19px!important}
 .parts-card .pc-label,.dt-label{font-size:13px!important}
