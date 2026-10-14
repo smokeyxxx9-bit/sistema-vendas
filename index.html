@@ -855,6 +855,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   var K_ESTOQUE_LOG = "vo_estoque_log";
   var K_ORCAMENTO = "vo_orcamento_draft";
   var K_ORC_SEQ = "vo_orcamento_seq";
+  var K_ORCAMENTOS = "vo_orcamentos_salvos"; // orçamentos salvos (lista), separados das notas
   var K_PROCURADOS = "vo_procurados";
   var K_LEMBRETES = "vo_lembretes";
   var K_NOVOS = "vo_novos:";          // pneus novos: uma chave por mês (vo_novos:AAAA-MM)
@@ -1274,6 +1275,21 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       addEstoqueLog("venda", estoqueLabel(item) || row.medida || "", Math.abs(moved));
     }
     row.medidaBaixa = jaBaixado - moved; // moved vem negativo quando saiu do estoque
+  }
+  // mudou a quantidade de pneus de uma linha com medida do estoque: recalcula o valor dos pneus (e o custo, nos novos).
+  // Mantém o valor unitário que já estava na linha (se foi negociado, continua negociado); se o campo estava vazio, usa o do estoque.
+  function reprecificaPorQuantidade(row, qtdAntiga){
+    var item = row.medidaId ? estoqueItem(row.medidaId) : null;
+    var q = parseNum(row.quantidade);
+    if (!item || q<=0) return;
+    function novo(atual, unitEstoque){
+      var a = parseNum(atual);
+      if (a>0 && qtdAntiga>0) return (a/qtdAntiga*q).toFixed(2);
+      if (!(a>0) && unitEstoque>0) return (unitEstoque*q).toFixed(2);
+      return atual;
+    }
+    row.valorPneus = novo(row.valorPneus, parseNum(item.preco));
+    if (isNovosTbl()) row.custoPneus = novo(row.custoPneus, parseNum(item.custo));
   }
   // ---------- avisos: clientes procurando uma medida ----------
   function loadProcurados(){ return lsGetJSON(K_PROCURADOS, []); }
@@ -2882,7 +2898,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     var data = {};
     for (var i=0;i<localStorage.length;i++){
       var k = localStorage.key(i);
-      if (k && (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS || k.indexOf(K_NOVOS)===0 || k===K_NOVOS_META)) data[k] = localStorage.getItem(k);
+      if (k && (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS || k===K_ORCAMENTOS || k.indexOf(K_NOVOS)===0 || k===K_NOVOS_META)) data[k] = localStorage.getItem(k);
     }
     var now = new Date();
     var stamp = today+"-"+pad(now.getHours())+"h"+pad(now.getMinutes());
@@ -2899,7 +2915,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     var data = {};
     for (var i=0;i<localStorage.length;i++){
       var k = localStorage.key(i);
-      if (k && (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS || k.indexOf(K_NOVOS)===0 || k===K_NOVOS_META)) data[k] = localStorage.getItem(k);
+      if (k && (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS || k===K_ORCAMENTOS || k.indexOf(K_NOVOS)===0 || k===K_NOVOS_META)) data[k] = localStorage.getItem(k);
     }
     try{
       localStorage.setItem(K_AUTOBACKUP, JSON.stringify({ts:Date.now(), data:data}));
@@ -2914,7 +2930,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         try{
           var n = 0;
           Object.keys(data).forEach(function(k){
-            if (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS || k.indexOf(K_NOVOS)===0 || k===K_NOVOS_META){
+            if (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS || k===K_ORCAMENTOS || k.indexOf(K_NOVOS)===0 || k===K_NOVOS_META){
               localStorage.setItem(k, data[k]); n++;
               try{ cloudPush(k, JSON.parse(data[k])); }catch(e2){}
             }
@@ -3088,6 +3104,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     else if (state.view==="avisos") renderAvisos();
     else if (state.view==="novos") renderNovos();
     else if (state.view==="orcamento") renderOrcamento();
+    else if (state.view==="orcamentos") renderOrcamentos();
     else if (state.view==="historico" && isMaster) renderHistorico();
     else if (state.view==="usuarios" && isMaster) renderUsuarios();
     else if (state.view==="dashboard") renderDashboard();
@@ -4110,6 +4127,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     var estoqueBtn = '<button class="btn ghost small" data-act="openestoque" title="Abrir o controle de estoque">📦 Estoque</button>';
     var clientesBtn = '<button class="btn ghost small" data-act="openclientes" title="Cadastrar e editar clientes">👥 Clientes</button>';
     var notasBtn = '<button class="btn ghost small" data-act="opennotas" title="Ver todas as notas emitidas, em ordem de emissão">🧾 Notas</button>';
+    var orcamentosBtn = '<button class="btn ghost small" data-act="openorcamentos" title="Orçamentos salvos (separados das notas)">📋 Orçamentos</button>';
     var novosBtn = '<button class="btn ghost small" data-act="opennovos" title="Vendas de pneus novos (o lucro dos pneus e o valor dos serviços/peças entram na meta do dashboard principal)">🆕 Pneus novos</button>';
     var avisosCount = avisosPendentesCount();
     var avisosBtn = '<button class="btn ghost small" data-act="openavisos" title="Clientes esperando medida, lembretes e estoque baixo">🔔 Avisos'+
@@ -4118,9 +4136,9 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     var usuariosBtn = isMaster ? '<button class="btn ghost small" data-act="openusuarios" title="Criar logins e alterar cargos">👤 Usuários</button>' : '';
     if (isMaster) usuariosBtn += '<button class="btn ghost small" data-act="openferramentas" title="Relatório do mês por pessoa, backups automáticos e migração de dados">🛠 Ferramentas</button>';
     if (state.authed){
-      return '<div class="auth-zone"><span class="pill on">✓ edição de dias anteriores liberada</span>'+estoqueBtn+clientesBtn+notasBtn+novosBtn+avisosBtn+historicoBtn+usuariosBtn+backupBtns+'<button class="btn ghost small" data-act="logout">Sair</button>'+acctLogout+'</div>';
+      return '<div class="auth-zone"><span class="pill on">✓ edição de dias anteriores liberada</span>'+estoqueBtn+clientesBtn+notasBtn+orcamentosBtn+novosBtn+avisosBtn+historicoBtn+usuariosBtn+backupBtns+'<button class="btn ghost small" data-act="logout">Sair</button>'+acctLogout+'</div>';
     }
-    return '<div class="auth-zone">'+estoqueBtn+clientesBtn+notasBtn+novosBtn+avisosBtn+historicoBtn+usuariosBtn+backupBtns+'<button class="btn small" data-act="login">Entrar com senha</button>'+acctLogout+'</div>';
+    return '<div class="auth-zone">'+estoqueBtn+clientesBtn+notasBtn+orcamentosBtn+novosBtn+avisosBtn+historicoBtn+usuariosBtn+backupBtns+'<button class="btn small" data-act="login">Entrar com senha</button>'+acctLogout+'</div>';
   }
 
   function bindBackupControls(){
@@ -4254,6 +4272,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     }
     else if (act==="openorcamento"){ state.orcReturn = state.view; state.view="orcamento"; render(); }
     else if (act==="orcback"){ state.view = state.orcReturn || "table"; render(); }
+    else if (act==="openorcamentos"){ state.view="orcamentos"; render(); }
+    else if (act==="orcnovo"){ state.orcamento = novoOrcamento(); saveOrcamentoDraft(); state.orcReturn = "orcamentos"; state.view="orcamento"; render(); }
     else if (act==="garantia"){
       state.modal = {type:"garantiaForm", medidaId:"", qtd:"", error:""};
       render();
@@ -5047,9 +5067,17 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         var row = findTblRow(id);
         if (!row) return;
         if (field==="formaPagamento") { delete row.splitValor; delete row.pagamentosMultiplos; } // forma mudou: descarta divisões manuais antigas
+        var qtdAntiga = parseNum(row.quantidade);
         row[field] = node.value;
-        // mudou a quantidade de uma linha que já tem medida escolhida: acerta a baixa no estoque
-        if (field==="quantidade" && row.medidaId) syncRowEstoque(row);
+        // mudou a quantidade de uma linha que já tem medida escolhida: acerta a baixa no estoque e o valor dos pneus
+        if (field==="quantidade" && row.medidaId){
+          syncRowEstoque(row);
+          reprecificaPorQuantidade(row, qtdAntiga);
+          ["valorPneus","custoPneus"].forEach(function(f){
+            var inp = document.querySelector('[data-field="'+f+'"][data-id="'+row.id+'"]');
+            if (inp && inp!==node) inp.value = row[f]===undefined ? "" : row[f];
+          });
+        }
         if (field==="formaPagamento"){
           // precisa redesenhar a linha pra mostrar (ou esconder) na hora o botão "÷"/"⚙" de dividir o pagamento
           scheduleSave();
@@ -5831,7 +5859,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       '<div class="topbar">'+
         '<div class="brand"><span class="mark"></span><h1>Orçamento</h1><span class="tag">MONTAR · IMPRIMIR</span>'+syncBadgeHtml()+'</div>'+
         '<div class="auth-zone">'+
-          '<button class="btn ghost small" data-act="orcback">‹ Voltar à tabela</button>'+
+          '<button class="btn ghost small" data-act="orcback">'+(state.orcReturn==="orcamentos" ? '‹ Voltar aos orçamentos' : '‹ Voltar à tabela')+'</button>'+
+          '<button class="btn ghost small" data-act="openorcamentos">📋 Orçamentos salvos</button>'+
           '<button class="btn ghost small" data-act="openclientes">👥 Clientes</button>'+
         '</div>'+
       '</div>'+
@@ -5903,8 +5932,11 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
           '<span class="lbl">Total</span><span class="val" id="orcTotal">'+fmtCurrency(t.total)+'</span>'+
         '</div>'+
 
-        '<div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;">'+
+        '<div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;align-items:center;">'+
+          (o.savedId ? '<span style="margin-right:auto;font-size:12px;color:var(--text-dim);">Orçamento salvo #'+escHtml(String(o.num||""))+' · clique em Salvar para atualizar</span>' : '')+
           '<button class="btn ghost small" id="orcLimpar">Limpar orçamento</button>'+
+          '<button class="btn ghost small" id="orcSalvar" title="Guarda este orçamento na lista de orçamentos salvos">💾 Salvar orçamento</button>'+
+          '<button class="btn ghost small" id="orcPdf" title="Baixar o orçamento em PDF">⇩ Baixar PDF</button>'+
           '<button class="btn primary" id="orcImprimir">🖨 Imprimir orçamento</button>'+
         '</div>'+
       '</div>';
@@ -6017,24 +6049,35 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       renderOrcamento();
     });
 
+    document.getElementById("orcSalvar").addEventListener("click", function(){
+      var rec = salvarOrcamentoAtual();
+      if (!rec) return;
+      toast("Orçamento #"+rec.num+" salvo em Orçamentos.");
+      renderOrcamento();
+    });
+
+    document.getElementById("orcPdf").addEventListener("click", function(){
+      var o2 = state.orcamento;
+      if (!orcItensValidos(o2).length){ alert("Adicione ao menos um item com descrição ou valor antes de baixar o PDF."); return; }
+      orcGarantirNumero(o2); saveOrcamentoDraft();
+      orcBaixarPdf(o2, document.getElementById("orcPdf"));
+    });
+
     document.getElementById("orcImprimir").addEventListener("click", function(){
-      var itensValidos = state.orcamento.items.filter(function(it){
-        return (it.desc||"").trim() !== "" || orcItemTotal(it) > 0;
-      });
+      var o2 = state.orcamento;
+      var itensValidos = orcItensValidos(o2);
       if (!itensValidos.length){
         alert("Adicione ao menos um item com descrição ou valor antes de imprimir.");
         return;
       }
-      var cliente = state.orcamento.clienteId
-        ? loadCustomers().filter(function(c){return c.id===state.orcamento.clienteId;})[0]
-        : {nome: state.orcamento.clienteNome, telefone: state.orcamento.clienteTelefone};
-      openPrintWindow(buildOrcamentoHtml(state.orcamento, itensValidos, cliente || {}, nextOrcNumber()));
+      orcGarantirNumero(o2); saveOrcamentoDraft();
+      openPrintWindow(buildOrcamentoHtml(o2, itensValidos, orcClienteDe(o2), o2.num));
     });
   }
 
   function buildOrcamentoHtml(o, itens, cliente, num){
     var t = orcTotals({items: itens, desconto: o.desconto});
-    var d = new Date();
+    var d = o.createdAt ? new Date(o.createdAt) : new Date();
     var emitido = pad(d.getDate())+"/"+pad(d.getMonth()+1)+"/"+d.getFullYear()+" "+pad(d.getHours())+":"+pad(d.getMinutes());
     var dias = parseInt(o.validade,10);
     if (isNaN(dias) || dias<0) dias = 0;
@@ -6125,6 +6168,242 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       '</body></html>';
   }
 
+  // ---------- orçamentos salvos (lista separada das notas) + PDF ----------
+  function loadOrcamentos(){ var l = lsGetJSON(K_ORCAMENTOS, []); return Array.isArray(l) ? l : []; }
+  function saveOrcamentos(list){ return lsSetJSON(K_ORCAMENTOS, list); }
+  function orcItensValidos(o){
+    return (o.items||[]).filter(function(it){ return (it.desc||"").trim() !== "" || orcItemTotal(it) > 0; });
+  }
+  // o número e a data de emissão ficam fixos desde a primeira vez que o orçamento é impresso, salvo ou baixado em PDF
+  function orcGarantirNumero(o){
+    if (!o.num){ o.num = nextOrcNumber(); o.createdAt = Date.now(); }
+  }
+  function orcClienteDe(o){
+    var c = o.clienteId ? loadCustomers().filter(function(x){ return x.id===o.clienteId; })[0] : null;
+    if (c) return c;
+    if (o.clienteId && o.cliente) return o.cliente;
+    return {nome: o.clienteNome, telefone: o.clienteTelefone};
+  }
+  function salvarOrcamentoAtual(){
+    var o = state.orcamento;
+    var itens = orcItensValidos(o);
+    if (!itens.length){ alert("Adicione ao menos um item com descrição ou valor antes de salvar."); return null; }
+    orcGarantirNumero(o);
+    var cli = orcClienteDe(o);
+    var cliSnap = {};
+    try{ cliSnap = JSON.parse(JSON.stringify(cli||{})); }catch(e){}
+    var list = loadOrcamentos();
+    var idx = -1;
+    if (o.savedId){ list.forEach(function(r, k){ if (r.id===o.savedId) idx = k; }); }
+    var rec = {
+      id: idx>-1 ? list[idx].id : uid(),
+      num: o.num, createdAt: o.createdAt, updatedAt: Date.now(),
+      clienteId: o.clienteId || "", cliente: cliSnap, clienteNome: cli.nome || "", clienteTelefone: cli.telefone || "",
+      veiculo: o.veiculo || "", placa: o.placa || "", validade: o.validade, obs: o.obs || "", desconto: o.desconto || "",
+      items: itens.map(function(it){ return {id: it.id, desc: it.desc, qty: it.qty, unit: it.unit}; }),
+      total: orcTotals({items: itens, desconto: o.desconto}).total
+    };
+    if (idx>-1) list[idx] = rec; else list.push(rec);
+    saveOrcamentos(list);
+    o.savedId = rec.id;
+    saveOrcamentoDraft();
+    return rec;
+  }
+  function abrirOrcamentoSalvo(rec){
+    var cust = rec.clienteId ? loadCustomers().filter(function(c){ return c.id===rec.clienteId; })[0] : null;
+    var snap = rec.cliente || {};
+    var itens = (rec.items||[]).map(function(it){ return {id: uid(), desc: it.desc||"", qty: it.qty, unit: it.unit}; });
+    if (!itens.length) itens = [novoOrcItem()];
+    state.orcamento = {
+      clienteId: cust ? rec.clienteId : "", cliente: snap,
+      clienteNome: cust ? "" : (snap.nome || rec.clienteNome || ""),
+      clienteTelefone: cust ? "" : (snap.telefone || rec.clienteTelefone || ""),
+      veiculo: rec.veiculo || "", placa: rec.placa || "", validade: rec.validade, obs: rec.obs || "", desconto: rec.desconto || "",
+      items: itens, num: rec.num, createdAt: rec.createdAt, savedId: rec.id
+    };
+    saveOrcamentoDraft();
+    state.orcReturn = "orcamentos";
+    state.view = "orcamento";
+    render();
+  }
+  function apagarOrcamentoSalvo(id){
+    var list = loadOrcamentos();
+    var rec = list.filter(function(r){ return r.id===id; })[0];
+    if (!rec) return;
+    if (!confirm("Apagar o orçamento #"+rec.num+(rec.clienteNome ? " de "+rec.clienteNome : "")+"? Isso não pode ser desfeito.")) return;
+    saveOrcamentos(list.filter(function(r){ return r.id!==id; }));
+    if (state.orcamento && state.orcamento.savedId===id){ delete state.orcamento.savedId; saveOrcamentoDraft(); }
+    render();
+  }
+
+  // ---------- PDF do orçamento (mesmo layout da impressão) ----------
+  function htmlParaPdfBlob(fullHtml, cb){
+    if (!window.html2canvas || !window.jspdf){ cb(null); return; }
+    var fr = document.createElement("iframe");
+    fr.setAttribute("aria-hidden", "true");
+    fr.style.cssText = "position:fixed;left:-10000px;top:0;width:794px;height:1123px;border:0;background:#fff;";
+    document.body.appendChild(fr);
+    var doc = fr.contentDocument || fr.contentWindow.document;
+    doc.open(); doc.write(fullHtml); doc.close();
+    function limpar(){ if (fr.parentNode) fr.parentNode.removeChild(fr); }
+    setTimeout(function(){
+      window.html2canvas(doc.body, {scale:2, backgroundColor:"#ffffff"}).then(function(canvas){
+        limpar();
+        try{ cb(canvasToPdfBlob(canvas)); }catch(e){ console.error("Erro ao montar o PDF", e); cb(null); }
+      }).catch(function(err){ limpar(); console.error("Erro ao gerar PDF", err); cb(null); });
+    }, 200);
+  }
+  function baixarBlobComo(nome, blob){
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url; a.download = nome;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+  }
+  function orcBaixarPdf(o, btn){
+    var itens = orcItensValidos(o);
+    if (!itens.length){ alert("Este orçamento não tem itens."); return; }
+    var cli = orcClienteDe(o);
+    var html = buildOrcamentoHtml(o, itens, cli, o.num);
+    var rotulo = btn ? btn.textContent : "";
+    if (btn){ btn.disabled = true; btn.textContent = "Gerando PDF…"; }
+    htmlParaPdfBlob(html, function(blob){
+      if (btn){ btn.disabled = false; btn.textContent = rotulo; }
+      if (!blob){
+        alert("Não foi possível gerar o PDF agora (a biblioteca de PDF pode não ter carregado). Use 'Imprimir' e escolha 'Salvar como PDF'.");
+        return;
+      }
+      var nomeCli = String((cli && cli.nome) || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 30);
+      baixarBlobComo("Orcamento-"+o.num+(nomeCli ? "-"+nomeCli : "")+".pdf", blob);
+      toast("PDF do orçamento #"+o.num+" baixado.");
+    });
+  }
+
+  // ---------- tela: orçamentos salvos ----------
+  function renderOrcamentos(){
+    var all = loadOrcamentos().slice().sort(function(a,b){ return (b.createdAt||0)-(a.createdAt||0); });
+    var q = (state.orcQuery||"").trim().toLowerCase();
+    var filtered = q ? all.filter(function(r){
+      return String(r.num).indexOf(q)>-1 ||
+             (r.clienteNome||"").toLowerCase().indexOf(q)>-1 ||
+             (r.veiculo||"").toLowerCase().indexOf(q)>-1 ||
+             (r.placa||"").toLowerCase().indexOf(q)>-1;
+    }) : all;
+    var totalValor = filtered.reduce(function(a,r){ return a+parseNum(r.total); }, 0);
+    var agora = Date.now();
+
+    function vencimento(r){
+      var dias = parseInt(r.validade,10); if (isNaN(dias) || dias<0) dias = 0;
+      return new Date((r.createdAt||0) + dias*86400000);
+    }
+    function rowHtml(r){
+      var d = new Date(r.createdAt);
+      var quando = isNaN(d.getTime()) ? "—" : fmtDateTimeBR(r.createdAt);
+      var venc = vencimento(r);
+      var vencido = venc.getTime() < agora;
+      var vencTxt = pad(venc.getDate())+"/"+pad(venc.getMonth()+1)+"/"+venc.getFullYear();
+      var resumo = (r.items||[]).map(function(it){ return it.desc; }).filter(Boolean).join(", ") || "—";
+      var veic = [r.veiculo, r.placa].filter(function(v){ return (v||"").trim(); }).join(" ");
+      return '<div class="nota-row" data-orcopen="'+escAttr(r.id)+'" role="button" tabindex="0" style="cursor:pointer;">'+
+          '<div>'+
+            '<span class="nota-num">ORÇAMENTO #'+escHtml(String(r.num))+'</span> · <span>'+escHtml(r.clienteNome || "(sem nome)")+'</span>'+
+            '<div class="nota-meta">'+escHtml(quando)+' · '+escHtml(resumo)+(veic ? ' · '+escHtml(veic) : '')+
+              ' · '+(vencido ? '<span style="color:var(--red);">vencido em '+vencTxt+'</span>' : '<span style="color:var(--green);">válido até '+vencTxt+'</span>')+
+            '</div>'+
+          '</div>'+
+          '<div style="display:flex;align-items:center;gap:10px;">'+
+            '<span class="nota-valor">'+fmtCurrency(r.total)+'</span>'+
+            '<button class="icon-btn" data-orcpdf="'+escAttr(r.id)+'" title="Baixar PDF">⇩</button>'+
+            '<button class="icon-btn" data-orcprint="'+escAttr(r.id)+'" title="Imprimir">🖨</button>'+
+            '<button class="icon-btn" data-orcdel="'+escAttr(r.id)+'" title="Apagar orçamento">✕</button>'+
+          '</div>'+
+        '</div>';
+    }
+    function mesKey(r){
+      var d = new Date(r.createdAt);
+      return isNaN(d.getTime()) ? "sem-data" : d.getFullYear()+"-"+pad(d.getMonth()+1);
+    }
+    var grupos = [], gIdx = {};
+    filtered.forEach(function(r){
+      var k = mesKey(r);
+      if (gIdx[k]===undefined){ gIdx[k] = grupos.length; grupos.push({key:k, itens:[], total:0}); }
+      var g = grupos[gIdx[k]]; g.itens.push(r); g.total += parseNum(r.total);
+    });
+    state.orcMesesFechados = state.orcMesesFechados || {};
+    var rowsHtml = grupos.length ? grupos.map(function(g){
+      var fechado = !q && !!state.orcMesesFechados[g.key];
+      return '<div class="nota-mes-head" data-orcmes="'+escAttr(g.key)+'" role="button" tabindex="0" title="Mostrar/esconder os orçamentos deste mês">'+
+          '<span class="nm-nome">'+(fechado?'▸ ':'▾ ')+escHtml(g.key==="sem-data" ? "Sem data" : monthLabel(g.key))+'</span>'+
+          '<span class="nm-info">'+g.itens.length+' orçamento(s) · '+fmtCurrency(g.total)+'</span>'+
+        '</div>'+
+        (fechado ? '' : g.itens.map(rowHtml).join(""));
+    }).join("") : '<div class="aviso-empty">Nenhum orçamento salvo ainda'+(q?' para "'+escHtml(state.orcQuery)+'"':'')+'. Monte um em 🧾 Orçamento e clique em 💾 Salvar orçamento.</div>';
+
+    root.innerHTML =
+      clientesTopbarHtml("Orçamentos", "ORÇAMENTOS SALVOS · SEPARADOS DAS NOTAS") +
+      '<div class="totals-bar">'+
+        tstat("Orçamentos salvos", filtered.length, true)+
+        tstat("Valor total", fmtCurrency(totalValor))+
+      '</div>'+
+      '<div class="tbl-head">'+
+        '<div class="tbl-head-left"><h2>Orçamentos salvos</h2></div>'+
+        '<button class="btn primary small" data-act="orcnovo">+ Novo orçamento</button>'+
+      '</div>'+
+      '<div class="card" style="padding:14px 16px;">'+
+        '<input type="text" id="orcSearch" class="dash-cust-search" placeholder="Buscar por número, cliente, veículo ou placa..." value="'+escAttr(state.orcQuery||"")+'">'+
+        '<div class="archive-list">'+rowsHtml+'</div>'+
+      '</div>';
+
+    root.querySelectorAll("[data-act]").forEach(function(node){
+      node.addEventListener("click", function(){ handleAction(node.getAttribute("data-act"), node); });
+    });
+    var search = document.getElementById("orcSearch");
+    if (search){
+      search.addEventListener("input", function(){
+        state.orcQuery = search.value;
+        var pos = search.selectionStart;
+        renderOrcamentos();
+        var again = document.getElementById("orcSearch");
+        if (again){ again.focus(); try{ again.setSelectionRange(pos,pos); }catch(e){} }
+      });
+    }
+    function porId(id){ return loadOrcamentos().filter(function(r){ return r.id===id; })[0]; }
+    root.querySelectorAll("[data-orcmes]").forEach(function(h){
+      function alternar(){
+        var k = h.getAttribute("data-orcmes");
+        state.orcMesesFechados[k] = !state.orcMesesFechados[k];
+        renderOrcamentos();
+      }
+      h.addEventListener("click", alternar);
+      h.addEventListener("keydown", function(e){ if (e.key==="Enter" || e.key===" "){ e.preventDefault(); alternar(); } });
+    });
+    root.querySelectorAll("[data-orcopen]").forEach(function(row){
+      function abrir(){ var r = porId(row.getAttribute("data-orcopen")); if (r) abrirOrcamentoSalvo(r); }
+      row.addEventListener("click", abrir);
+      row.addEventListener("keydown", function(e){ if (e.target===row && (e.key==="Enter" || e.key===" ")){ e.preventDefault(); abrir(); } });
+    });
+    root.querySelectorAll("[data-orcpdf]").forEach(function(b){
+      b.addEventListener("click", function(e){
+        e.stopPropagation();
+        var r = porId(b.getAttribute("data-orcpdf"));
+        if (r) orcBaixarPdf(r, null);
+      });
+    });
+    root.querySelectorAll("[data-orcprint]").forEach(function(b){
+      b.addEventListener("click", function(e){
+        e.stopPropagation();
+        var r = porId(b.getAttribute("data-orcprint"));
+        if (r) openPrintWindow(buildOrcamentoHtml(r, orcItensValidos(r), orcClienteDe(r), r.num));
+      });
+    });
+    root.querySelectorAll("[data-orcdel]").forEach(function(b){
+      b.addEventListener("click", function(e){
+        e.stopPropagation();
+        apagarOrcamentoSalvo(b.getAttribute("data-orcdel"));
+      });
+    });
+  }
+
   // ---------- clientes: área dedicada (cadastrar, editar, apagar, ver notas) ----------
   function clienteRowHtml(c, notasCount){
     var docLabel = customerDocLabel(c);
@@ -6152,6 +6431,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         '<button class="btn ghost small" data-act="openestoque">📦 Estoque</button>'+
         '<button class="btn ghost small" data-act="openclientes">👥 Clientes</button>'+
         '<button class="btn ghost small" data-act="opennotas">🧾 Notas</button>'+
+        '<button class="btn ghost small" data-act="openorcamentos">📋 Orçamentos</button>'+
         '<button class="btn ghost small" data-act="opennovos">🆕 Pneus novos</button>'+
         '<button class="btn ghost small" data-act="openavisos">🔔 Avisos'+(avisosCount>0?'<span class="nav-badge">'+avisosCount+'</span>':'')+'</button>'+
         (state.role==="master" ? '<button class="btn ghost small" data-act="openhistorico">🕘 Histórico'+histBadgeHtml()+'</button>' : '')+
