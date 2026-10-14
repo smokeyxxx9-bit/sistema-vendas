@@ -966,6 +966,20 @@ window.__voReady.then(function(){
     }
     return sbTemp;
   }
+  // ---- e-mail "qualquer": o Supabase recusa e-mails de domínios que ele considera inválidos
+  // (ex.: domínio sem registro MX). Nesses casos o login é criado com um e-mail-apelido interno
+  // (domínio válido, mas impossível de existir de verdade) e o e-mail digitado fica guardado em
+  // user_metadata.email_real — é ele que aparece no painel, nos históricos e na lista de usuários.
+  function aliasAuthEmail(email){
+    var e = String(email||"").trim().toLowerCase();
+    var h = 0; for (var i=0;i<e.length;i++){ h = ((h<<5)-h + e.charCodeAt(i)) | 0; }
+    var limpo = e.replace(/[^a-z0-9.\-]/g, "_").slice(0, 24);
+    // contém "_" e passa de 30 caracteres: não pode ser um Gmail real (então ninguém é dono desse endereço)
+    return "biguapneus.login.sem.email." + limpo + "_" + Math.abs(h).toString(36) + "@gmail.com";
+  }
+  function emailExibicao(user){
+    return (user && user.user_metadata && user.user_metadata.email_real) || (user && user.email) || "";
+  }
 
   function syncBadgeHtml(){
     if (!sb) return '<span id="syncBadge" class="sync-badge off" title="Configure o Supabase no início do arquivo para sincronizar entre aparelhos">○ somente local</span>';
@@ -4920,10 +4934,12 @@ window.__voReady.then(function(){
       state.usuariosLoading = true;
       sb.from("perfis").select("user_id,email,papel").then(function(res){
         state.usuariosLoading = false;
+        state.usuariosErro = (res && res.error) ? (res.error.message || "erro ao ler a tabela perfis") : "";
         state.usuariosList = (res && res.data) || [];
         render();
-      }).catch(function(){
+      }).catch(function(e){
         state.usuariosLoading = false;
+        state.usuariosErro = (e && e.message) || "erro ao ler a tabela perfis";
         state.usuariosList = [];
         render();
       });
@@ -4967,7 +4983,7 @@ window.__voReady.then(function(){
             (aberto ? permBoxHtml(u, cargo, ef) : '')+
           '</div>';
         }).join("")
-      : (state.usuariosLoading ? '<div class="arow-empty">Carregando usuários...</div>' : '<div class="arow-empty">Nenhum usuário cadastrado ainda.</div>');
+      : (state.usuariosLoading ? '<div class="arow-empty">Carregando usuários...</div>' : '<div class="arow-empty">Nenhum usuário aparece aqui ainda.'+(state.usuariosErro ? '<br><small>Erro do Supabase: '+escHtml(state.usuariosErro)+'</small>' : '<br><small>Se já existem logins criados direto no Supabase, rode o arquivo <b>supabase-usuarios.sql</b> no SQL Editor para liberar a lista.</small>')+'</div>');
 
     root.innerHTML =
       '<div class="topbar">'+
@@ -5020,7 +5036,14 @@ window.__voReady.then(function(){
         var temp = getTempClient();
         if (!temp){ errEl.textContent = "Não foi possível criar login agora."; return; }
         createBtn.disabled = true; createBtn.textContent = "Criando...";
-        temp.auth.signUp({email:email, password:senha}).then(function(res){
+        var metaEmail = {data:{email_real:email}};
+        temp.auth.signUp({email:email, password:senha, options:metaEmail}).then(function(res){
+          // e-mail recusado pelo Supabase (domínio sem MX etc.) → cria com o e-mail-apelido interno
+          if (res.error && (res.error.code==="email_address_invalid" || /invalid/i.test(res.error.message||""))){
+            return temp.auth.signUp({email:aliasAuthEmail(email), password:senha, options:metaEmail});
+          }
+          return res;
+        }).then(function(res){
           if (res.error){
             errEl.textContent = res.error.message || "Erro ao criar login.";
             createBtn.disabled = false; createBtn.textContent = "Criar login";
@@ -9712,10 +9735,16 @@ window.__voReady.then(function(){
       if (!email || !pass){ renderLoginScreen("Preencha e-mail e senha."); return; }
       btn.disabled = true; btn.textContent = "Entrando...";
       sb.auth.signInWithPassword({email:email, password:pass}).then(function(res){
+        if (!res.error) return res;
+        // não achou com o e-mail digitado → tenta o e-mail-apelido (logins criados com e-mail "inválido")
+        return sb.auth.signInWithPassword({email:aliasAuthEmail(email), password:pass}).then(function(res2){
+          return res2.error ? res : res2;
+        });
+      }).then(function(res){
         if (res.error){ renderLoginScreen((res.error && res.error.message) ? res.error.message : "E-mail ou senha inválidos."); }
         else {
           var u = res && res.data && res.data.user;
-          var emailLogado = u ? u.email : email;
+          var emailLogado = u ? emailExibicao(u) : email;
           // só registra o login DEPOIS de baixar a lista mais atual da nuvem,
           // senão a gente sobrescreve o histórico com uma versão desatualizada
           // (apagando por engano logins feitos em outros aparelhos)
@@ -9734,7 +9763,7 @@ window.__voReady.then(function(){
     sb.auth.getUser().then(function(res){
       var user = res && res.data && res.data.user;
       if (!user){ state.role = "vendedor"; return cb(); }
-      state.userEmail = user.email || "";
+      state.userEmail = emailExibicao(user);
       state.userId = user.id;
       state.userNome = (user.user_metadata && user.user_metadata.nome) || (function(){ try{ return localStorage.getItem("perfil_nome")||""; }catch(e){ return ""; } })();
       sb.from("perfis").select("papel").eq("user_id", user.id).limit(1).then(function(r){
