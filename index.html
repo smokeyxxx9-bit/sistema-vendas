@@ -5004,17 +5004,42 @@ window.__voReady.then(function(){
     var historicoBtn = isMaster ? '<button class="btn ghost small" data-act="openhistorico" title="Ver logins e movimentações de estoque">🕘 Histórico'+histBadgeHtml()+'</button>' : '';
     var usuariosBtn = isMaster ? '<button class="btn ghost small" data-act="openusuarios" title="Criar logins e alterar cargos">👤 Usuários</button>' : '';
     if (isMaster) usuariosBtn += '<button class="btn ghost small" data-act="openferramentas" title="Relatório do mês por pessoa, backups automáticos e migração de dados">🛠 Ferramentas</button>';
-    var loginBtn = state.authed ? '<button class="btn ghost small" data-act="logout">Sair</button>' : '<button class="btn small" data-act="login">Entrar com senha</button>';
     var pill = state.authed ? '<span class="pill on">✓ edição de dias anteriores liberada</span>' : '';
-    return '<div class="top-menu">'+pill+
-      '<button class="menu-toggle" data-menu-toggle="1" aria-label="Abrir menu de opções" aria-expanded="false" title="Opções">'+
-        '<span class="bars"><i></i><i></i><i></i></span>'+
-        (avisosCount>0 ? '<span class="nav-badge menu-dot">'+avisosCount+'</span>' : '')+
-      '</button>'+
-      '<div class="menu-panel" role="menu">'+
-        estoqueBtn+clientesBtn+notasBtn+orcamentosBtn+novosBtn+avisosBtn+historicoBtn+usuariosBtn+backupBtns+loginBtn+acctLogout+
+    var papelRot = state.role==="master" ? "Master" : (state.role==="estoquista" ? "Estoquista" : "Vendedor");
+    var editBtn = state.authed
+      ? '<button class="btn ghost small" data-act="logout" title="Bloquear de novo a edição de dias anteriores">🔒 Sair da edição</button>'
+      : '<button class="btn small" data-act="login" title="Liberar a edição de dias anteriores">🔑 Entrar com senha</button>';
+    return '<div class="top-actions">'+pill+
+      '<div class="top-menu">'+
+        '<button class="menu-toggle" data-menu-toggle="1" aria-label="Abrir menu de opções" aria-expanded="false" title="Opções">'+
+          '<span class="bars"><i></i><i></i><i></i></span>'+
+          (avisosCount>0 ? '<span class="nav-badge menu-dot">'+avisosCount+'</span>' : '')+
+        '</button>'+
+        '<div class="menu-panel" role="menu">'+
+          estoqueBtn+clientesBtn+notasBtn+orcamentosBtn+novosBtn+avisosBtn+historicoBtn+usuariosBtn+backupBtns+
+        '</div>'+
+      '</div>'+
+      '<div class="top-menu user-menu">'+
+        '<button class="menu-toggle user-toggle" data-menu-toggle="1" aria-label="Menu do usuário" aria-expanded="false" title="'+escAttr(userDisplayName())+'">'+
+          '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.2 3.6-7 8-7s8 2.8 8 7"/></svg>'+
+        '</button>'+
+        '<div class="menu-panel" role="menu">'+
+          '<div class="user-head"><b>'+escHtml(userDisplayName())+'</b>'+
+            (state.userEmail ? '<span>'+escHtml(state.userEmail)+'</span>' : '')+
+            '<span class="user-role">'+papelRot+'</span></div>'+
+          '<button class="btn ghost small" data-act="openperfil">👤 Perfil</button>'+
+          editBtn+acctLogout+
+        '</div>'+
       '</div>'+
     '</div>';
+  }
+
+  // nome de exibição do usuário (o que ele escolheu no Perfil; senão a parte do e-mail antes do @)
+  function userDisplayName(){
+    var n = (state.userNome || "").trim();
+    if (n) return n;
+    var em = state.userEmail || "";
+    return em ? em.split("@")[0] : "Usuário";
   }
 
   // abre/fecha o menu de opções (hambúrguer) — um único listener, fora do render
@@ -5170,6 +5195,7 @@ window.__voReady.then(function(){
       var n = pushAllLocalToCloud();
       alert(n>0 ? "Enviando "+n+" registro(s) deste navegador para a nuvem…" : "Não há dados salvos neste navegador para enviar.");
     }
+    else if (act==="openperfil"){ state.modal = {type:"perfil", error:""}; render(); }
     else if (act==="accountlogout"){
       if (sb) sb.auth.signOut().then(function(){ location.reload(); });
     }
@@ -6204,6 +6230,7 @@ window.__voReady.then(function(){
     else if (state.modal.type==="ferramentas") renderFerramentasModal();
     else if (state.modal.type==="importTabelas") renderImportTabelasModal();
     else if (state.modal.type==="fechamento") renderFechamentoModal();
+    else if (state.modal.type==="perfil") renderPerfilModal();
     else renderAuthModal();
   }
 
@@ -6263,6 +6290,41 @@ window.__voReady.then(function(){
     div.addEventListener("click", function(e){ if (e.target===div){ state.modal=null; renderModal(); } });
     document.body.appendChild(div);
     draw();
+  }
+
+  // ---------- modal: perfil do usuário (alterar o nome de usuário) ----------
+  function renderPerfilModal(){
+    var div = document.createElement("div");
+    div.className = "overlay";
+    div.innerHTML =
+      '<div class="modal">'+
+        '<h3>Perfil</h3>'+
+        '<p>Escolha o nome que aparece para você no sistema.</p>'+
+        '<div class="field-group"><label>Nome de usuário</label><input type="text" id="pfNome" maxlength="40" placeholder="Seu nome" value="'+escAttr(state.userNome || userDisplayName())+'"></div>'+
+        (state.userEmail ? '<div class="field-group"><label>E-mail de acesso</label><input type="text" value="'+escAttr(state.userEmail)+'" disabled></div>' : '')+
+        '<div class="err" id="pfErr">'+escHtml(state.modal.error||"")+'</div>'+
+        '<div class="modal-actions"><button class="btn ghost small" id="pfCancel">Cancelar</button><button class="btn primary small" id="pfSave">Salvar</button></div>'+
+      '</div>';
+    document.body.appendChild(div);
+    var input = document.getElementById("pfNome");
+    input.focus(); input.select();
+    function close(){ state.modal = null; render(); }
+    function salvar(){
+      var nome = input.value.trim().replace(/\s+/g," ");
+      if (!nome){ document.getElementById("pfErr").textContent = "Digite um nome."; return; }
+      var btn = document.getElementById("pfSave"); btn.disabled = true; btn.textContent = "Salvando...";
+      function ok(){ state.userNome = nome; try{ localStorage.setItem("vo_user_nome", nome); }catch(e){} close(); }
+      if (sb && sb.auth && sb.auth.updateUser){
+        sb.auth.updateUser({data:{nome:nome}}).then(function(res){
+          if (res && res.error){ btn.disabled = false; btn.textContent = "Salvar"; document.getElementById("pfErr").textContent = "Não foi possível salvar: "+(res.error.message||"erro"); }
+          else ok();
+        }).catch(function(){ btn.disabled = false; btn.textContent = "Salvar"; document.getElementById("pfErr").textContent = "Não foi possível salvar agora. Tente de novo."; });
+      } else ok();
+    }
+    document.getElementById("pfCancel").addEventListener("click", close);
+    document.getElementById("pfSave").addEventListener("click", salvar);
+    input.addEventListener("keydown", function(e){ if (e.key==="Enter") salvar(); });
+    div.addEventListener("click", function(e){ if (e.target===div) close(); });
   }
 
   function renderAuthModal(){
@@ -9271,6 +9333,7 @@ window.__voReady.then(function(){
       var user = res && res.data && res.data.user;
       if (!user){ state.role = "vendedor"; return cb(); }
       state.userEmail = user.email || "";
+      state.userNome = (user.user_metadata && user.user_metadata.nome) || (function(){ try{ return localStorage.getItem("vo_user_nome")||""; }catch(e){ return ""; } })();
       sb.from("perfis").select("papel").eq("user_id", user.id).limit(1).then(function(r){
         var row = r && r.data && r.data[0];
         var papel = row && row.papel;
@@ -9431,6 +9494,14 @@ body{font-size:16px}
 
 .login-card .remember-row{display:flex;align-items:center;gap:8px;margin:2px 0 10px;font-size:13px;color:var(--text-dim);cursor:pointer;user-select:none;}
 .login-card .remember-row input{width:auto;margin:0;padding:0;accent-color:var(--yellow);cursor:pointer;}
+
+.top-actions{display:flex;align-items:center;gap:10px;justify-content:flex-end;margin-left:auto;}
+.top-actions .top-menu{margin-left:0;}
+.user-toggle svg{display:block;}
+.user-head{display:flex;flex-direction:column;gap:2px;padding:6px 8px 10px;margin-bottom:4px;border-bottom:1px solid var(--border-soft);min-width:0;}
+.user-head b{font-size:14px;color:var(--text);overflow-wrap:anywhere;}
+.user-head span{font-size:12px;color:var(--text-dim);overflow-wrap:anywhere;}
+.user-head .user-role{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--yellow);margin-top:2px;}
 </style>
 <script>
 window.__voReady.then(function(){
