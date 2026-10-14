@@ -5373,6 +5373,11 @@ window.__voReady.then(function(){
       state.modal = {type:"maoDeObraForm", rowId: node.getAttribute("data-id")};
       render();
     }
+    else if (act==="rowos"){
+      var roId = node.getAttribute("data-id"), roRow = findTblRow(roId), roOs = roRow ? osDaLinha(roRow) : null;
+      state.modal = roOs ? {type:"osForm", osId:roOs.id, rowId:roId, origem:"tabela"} : {type:"osForm", osId:null, rowId:roId, origem:"tabela"};
+      render();
+    }
     else if (act==="desconto"){
       state.modal = {type:"descontoForm", rowId: node.getAttribute("data-id"), error:""};
       render();
@@ -5694,6 +5699,7 @@ window.__voReady.then(function(){
       '<button class="icon-btn cli-btn'+(custName?' has':'')+'" data-act="linkcustomer" data-id="'+row.id+'" title="'+(custName?('Cliente: '+escAttr(custName)+' — clique para ver os dados'):'Vincular cliente a esta linha')+'">👤</button>'+
       '<button class="icon-btn'+(hasDesc?' has':'')+'" data-act="desconto" data-id="'+row.id+'" title="'+(hasDesc?('Descontos ('+descontosList(row).length+'): -'+escAttr(fmtCurrency(descontoValor(row)))):'Dar desconto nesta venda')+'">🏷</button>'+
       '<button class="icon-btn'+(groupRows(row).length>1?' has':'')+'" data-act="linksales" data-id="'+row.id+'" title="'+(groupRows(row).length>1?('Vinculada a mais '+(groupRows(row).length-1)+' venda(s) — imprime numa nota só. Clique para alterar'):'Vincular a outra venda do mesmo cliente (nota e garantia únicas)')+'">🔗</button>'+
+      (can("os_gerir") && !isNovosTbl() ? '<button class="icon-btn'+(osDaLinha(row)?' has':'')+'" data-act="rowos" data-id="'+row.id+'" title="'+(osDaLinha(row)?('O.S. #'+osDaLinha(row).num+' desta linha — clique para editar'):'Abrir O.S. para esta linha')+'">🔧</button>' : '')+
       '<button class="icon-btn print-btn" data-act="printnote" data-id="'+row.id+'" title="Imprimir nota">🖨</button>'+
       (editable ? '<button class="icon-btn" data-act="delrow" data-id="'+row.id+'" title="Remover linha">✕</button>' : '')+
       (editable ? '<button class="icon-btn drag-btn" data-drag="'+row.id+'" title="Segure e arraste para mover a venda para cima ou para baixo">⣿</button>' : '')+
@@ -6383,6 +6389,7 @@ window.__voReady.then(function(){
     else if (state.modal.type==="importTabelas") renderImportTabelasModal();
     else if (state.modal.type==="fechamento") renderFechamentoModal();
     else if (state.modal.type==="perfil") renderPerfilModal();
+    else if (state.modal.type==="osPickRow") renderOSPickRowModal();
     else if (state.modal.type==="osForm") renderOSFormModal();
     else if (state.modal.type==="osServico") renderOSServicoModal();
     else renderAuthModal();
@@ -6458,6 +6465,21 @@ window.__voReady.then(function(){
     if (h<24) return "há "+h+" h";
     var d = Math.round(h/24);
     return d===1 ? "ontem" : "há "+d+" dias";
+  }
+  // O.S. aberta ligada a uma linha da tabela (a linha guarda o id da O.S. em row.osId)
+  function osDaLinha(row){
+    if (!row || !row.osId) return null;
+    return loadOS().filter(function(o){ return o.id===row.osId && o.status==="aberta"; })[0] || null;
+  }
+  // liga a O.S. à linha: os serviços lançados depois somam NESSA linha (e não numa linha nova)
+  function osVincularLinha(dia, rowId, os, origemTabela){
+    var rows = (origemTabela && dia===state.date) ? state.rows : lsGetJSON(K_ROWS+dia, []);
+    if (!Array.isArray(rows)) rows = [];
+    var r = rows.filter(function(x){ return x && x.id===rowId; })[0];
+    if (!r) return;
+    r.osId = os.id; r.osNum = os.num;
+    if (origemTabela && dia===state.date){ scheduleSave(); }
+    else { saveRows(dia, rows).catch(function(){}); if (dia===state.date) state.rows = rows; }
   }
   function osHora(ts){ var d = new Date(ts); return ("0"+d.getHours()).slice(-2)+":"+("0"+d.getMinutes()).slice(-2); }
 
@@ -6560,7 +6582,7 @@ window.__voReady.then(function(){
         ((gerir||meu) ? '<button class="icon-btn" data-os="'+escAttr(o.id)+'" data-delserv="'+escAttr(x.id)+'" title="Remover este lançamento">✕</button>' : '')+
         '</span></div>';
     }).join("");
-    var chips = '<span class="os-chip">🛞 '+(parseInt(o.qtdPneus,10)||0)+' pneu(s)</span>'+
+    var chips = (o.linhaCarro ? '<span class="os-chip">📌 '+escHtml(o.linhaCarro)+'</span>' : '')+'<span class="os-chip">🛞 '+(parseInt(o.qtdPneus,10)||0)+' pneu(s)</span>'+
       (o.medida ? '<span class="os-chip">'+escHtml(o.medida)+'</span>' : '')+
       '<span class="os-chip dim">'+osHa(o.criadaEm)+'</span>';
     return '<div class="os-card">'+
@@ -6597,7 +6619,7 @@ window.__voReady.then(function(){
       node.addEventListener("click", function(){ handleAction(node.getAttribute("data-act"), node); });
     });
     var nova = document.getElementById("osNova");
-    if (nova) nova.addEventListener("click", function(){ state.modal = {type:"osForm", osId:null}; render(); });
+    if (nova) nova.addEventListener("click", function(){ state.modal = {type:"osPickRow"}; render(); });
     root.querySelectorAll("[data-os-add]").forEach(function(b){
       b.addEventListener("click", function(){ state.modal = {type:"osServico", osId:b.getAttribute("data-os-add")}; render(); });
     });
@@ -6636,13 +6658,51 @@ window.__voReady.then(function(){
     });
   }
 
-  function renderOSFormModal(){
-    var l = loadOS(), o = state.modal.osId ? l.filter(function(x){ return x.id===state.modal.osId; })[0] : null;
+  // "+ Nova O.S.": a O.S. nasce de uma linha da tabela de hoje
+  function renderOSPickRowModal(){
+    var dia = today, rows = lsGetJSON(K_ROWS+dia, []);
+    if (!Array.isArray(rows)) rows = [];
+    var livres = rows.filter(function(r){ return r && !osDaLinha(r); });
     var div = document.createElement("div");
     div.className = "overlay";
     div.innerHTML =
       '<div class="modal">'+
-        '<h3>'+(o ? 'Editar O.S. #'+o.num : 'Nova O.S.')+'</h3>'+
+        '<h3>Nova O.S.</h3>'+
+        '<p>Escolha a linha da tabela de hoje para abrir a O.S.</p>'+
+        (livres.length
+          ? '<div style="display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow:auto;">'+livres.map(function(r){
+              return '<button class="btn ghost" style="text-align:left;" data-pickrow="'+escAttr(r.id)+'">'+escHtml(r.carro||"Carro")+
+                (r.medida ? ' — '+(parseNum(r.quantidade)>0?parseNum(r.quantidade)+'x ':'')+escHtml(r.medida) : '')+
+                (customerNameById(r.clienteId) ? ' · '+escHtml(customerNameById(r.clienteId)) : '')+'</button>';
+            }).join("")+'</div>'
+          : '<p style="color:var(--text-dim);">'+(rows.length ? 'Todas as linhas de hoje já têm O.S. aberta.' : 'Hoje ainda não tem nenhuma linha na tabela de vendas. Crie a linha do carro primeiro.')+'</p>')+
+        '<div class="modal-actions"><button class="btn ghost small" id="osPickSemLinha" title="Abre uma O.S. que não fica ligada a nenhuma linha">Sem linha</button><button class="btn ghost small" id="osPickCancel">Cancelar</button></div>'+
+      '</div>';
+    document.body.appendChild(div);
+    function close(){ state.modal = null; render(); }
+    document.getElementById("osPickCancel").addEventListener("click", close);
+    document.getElementById("osPickSemLinha").addEventListener("click", function(){ state.modal = {type:"osForm", osId:null}; render(); });
+    div.addEventListener("click", function(e){ if (e.target===div) close(); });
+    div.querySelectorAll("[data-pickrow]").forEach(function(b){
+      b.addEventListener("click", function(){ state.modal = {type:"osForm", osId:null, rowId:b.getAttribute("data-pickrow"), dia:dia, origem:"os"}; render(); });
+    });
+  }
+
+  function renderOSFormModal(){
+    var l = loadOS(), o = state.modal.osId ? l.filter(function(x){ return x.id===state.modal.osId; })[0] : null;
+    // O.S. nova aberta a partir de uma linha: já vem preenchida com os dados dela
+    var linha = null;
+    if (!o && state.modal.rowId){
+      var _dia = state.modal.dia || state.date;
+      var _rows = (state.modal.origem==="tabela" && _dia===state.date) ? state.rows : lsGetJSON(K_ROWS+_dia, []);
+      linha = (_rows||[]).filter(function(x){ return x && x.id===state.modal.rowId; })[0] || null;
+      if (linha) o = {carro:linha.carro||"", placa:"", cliente:customerNameById(linha.clienteId), qtdPneus:(parseNum(linha.quantidade)>0?parseNum(linha.quantidade):4), medida:linha.medida||"", obs:"", _nova:true};
+    }
+    var div = document.createElement("div");
+    div.className = "overlay";
+    div.innerHTML =
+      '<div class="modal">'+
+        '<h3>'+((o && !o._nova) ? 'Editar O.S. #'+o.num : 'Nova O.S.'+(linha ? ' — '+escHtml(linha.carro||'linha') : ''))+'</h3>'+
         '<div class="field-group"><label>Carro (modelo)</label><input type="text" id="osCarro" maxlength="40" placeholder="Ex.: Gol branco" value="'+escAttr(o?o.carro:"")+'"></div>'+
         '<div class="field-group"><label>Placa</label><input type="text" id="osPlaca" maxlength="10" placeholder="ABC1D23" value="'+escAttr(o?o.placa:"")+'"></div>'+
         '<div class="field-group"><label>Cliente (opcional)</label><input type="text" id="osCliente" list="osClientes" maxlength="60" value="'+escAttr(o?o.cliente:"")+'">'+
@@ -6664,8 +6724,10 @@ window.__voReady.then(function(){
       if (!carro){ document.getElementById("osErr").textContent = "Informe o carro."; return; }
       if (isNaN(pneus) || pneus<0){ document.getElementById("osErr").textContent = "Informe a quantidade de pneus."; return; }
       var lista = loadOS();
-      var alvo = o ? lista.filter(function(x){ return x.id===o.id; })[0] : null;
+      var alvo = (o && !o._nova) ? lista.filter(function(x){ return x.id===o.id; })[0] : null;
+      var novaOS = false;
       if (!alvo){
+        novaOS = true;
         var prox = lista.reduce(function(m,x){ return Math.max(m, x.num||0); }, 0)+1;
         alvo = {id:uid(), num:prox, status:"aberta", criadaEm:Date.now(), criadaPor:userDisplayName(), servicos:[]};
         lista.push(alvo);
@@ -6676,7 +6738,11 @@ window.__voReady.then(function(){
       alvo.qtdPneus = pneus;
       alvo.medida = document.getElementById("osMedida").value.trim();
       alvo.obs = document.getElementById("osObs").value.trim();
+      if (novaOS && linha){
+        alvo.rowId = linha.id; alvo.dia = state.modal.dia || state.date; alvo.linhaCarro = linha.carro || "";
+      }
       saveOS(lista);
+      if (novaOS && linha) osVincularLinha(alvo.dia, linha.id, alvo, state.modal.origem==="tabela");
       close();
     });
   }
