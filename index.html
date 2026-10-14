@@ -5375,7 +5375,7 @@ window.__voReady.then(function(){
     }
     else if (act==="rowos"){
       var roId = node.getAttribute("data-id"), roRow = findTblRow(roId), roOs = roRow ? osDaLinha(roRow) : null;
-      state.modal = roOs ? {type:"osForm", osId:roOs.id, rowId:roId, origem:"tabela"} : {type:"osForm", osId:null, rowId:roId, origem:"tabela"};
+      state.modal = roOs ? {type:"osLinha", osId:roOs.id, rowId:roId} : {type:"osForm", osId:null, rowId:roId, origem:"tabela"};
       render();
     }
     else if (act==="desconto"){
@@ -5531,10 +5531,6 @@ window.__voReady.then(function(){
             '<span class="save-flag" id="saveFlag">salvo</span>'+
           '</div>'+
           '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">'+
-            (editable
-              ? ''
-              : '<span style="display:flex;align-items:center;gap:8px;"><span class="pill">somente leitura</span><button class="btn small" data-act="login">Entrar com senha para editar</button></span>'
-            )+
             '<button class="btn ghost small" data-act="openorcamento" title="Montar e imprimir um orçamento para o cliente">🧾 Orçamento</button>'+
           '</div>'+
         '</div>'+
@@ -6389,6 +6385,7 @@ window.__voReady.then(function(){
     else if (state.modal.type==="importTabelas") renderImportTabelasModal();
     else if (state.modal.type==="fechamento") renderFechamentoModal();
     else if (state.modal.type==="perfil") renderPerfilModal();
+    else if (state.modal.type==="osLinha") renderOSLinhaModal();
     else if (state.modal.type==="osPickRow") renderOSPickRowModal();
     else if (state.modal.type==="osForm") renderOSFormModal();
     else if (state.modal.type==="osServico") renderOSServicoModal();
@@ -6655,6 +6652,45 @@ window.__voReady.then(function(){
       '<div class="card" style="padding:18px 16px;">Seu usuário ainda não tem nenhuma tela liberada. Peça para o master liberar o acesso.</div>';
     root.querySelectorAll("[data-act]").forEach(function(node){
       node.addEventListener("click", function(){ handleAction(node.getAttribute("data-act"), node); });
+    });
+  }
+
+  // 🔧 de uma linha que já tem O.S. aberta: resumo + editar ou encerrar direto da tabela
+  function renderOSLinhaModal(){
+    var l = loadOS(), o = l.filter(function(x){ return x.id===state.modal.osId; })[0];
+    if (!o || o.status!=="aberta"){ state.modal = null; return render(); }
+    var servs = o.servicos || [];
+    var total = servs.reduce(function(t,x){ return t+(Number(x.valor)||0); }, 0);
+    var div = document.createElement("div");
+    div.className = "overlay";
+    div.innerHTML =
+      '<div class="modal">'+
+        '<h3>O.S. #'+o.num+' — '+escHtml(o.carro||"Carro")+(o.placa?' · '+escHtml(String(o.placa).toUpperCase()):'')+'</h3>'+
+        '<p>'+(parseInt(o.qtdPneus,10)||0)+' pneu(s)'+(o.medida?' · '+escHtml(o.medida):'')+' · aberta '+osHa(o.criadaEm)+'</p>'+
+        (servs.length ? '<p>'+servs.length+' serviço(s) lançado(s) · total <b>'+fmtCurrency(total)+'</b></p>' : '<p style="color:var(--text-dim);">Nenhum serviço lançado ainda.</p>')+
+        (o.obs ? '<p style="color:var(--text-dim);">'+escHtml(o.obs)+'</p>' : '')+
+        '<div class="modal-actions" style="flex-wrap:wrap;">'+
+          '<button class="btn ghost small" id="olCancel">Voltar</button>'+
+          '<button class="btn ghost small" id="olEdit">Editar</button>'+
+          '<button class="btn primary small" id="olClose">Encerrar O.S.</button>'+
+        '</div>'+
+      '</div>';
+    document.body.appendChild(div);
+    function fechar(){ state.modal = null; render(); }
+    document.getElementById("olCancel").addEventListener("click", fechar);
+    div.addEventListener("click", function(e){ if (e.target===div) fechar(); });
+    document.getElementById("olEdit").addEventListener("click", function(){
+      state.modal = {type:"osForm", osId:o.id, rowId:state.modal.rowId, origem:"tabela"}; render();
+    });
+    document.getElementById("olClose").addEventListener("click", function(){
+      if (!confirm("Encerrar a O.S. #"+o.num+" ("+(o.carro||"carro")+")? Ela some da lista dos montadores.")) return;
+      var lista = loadOS(), alvo = lista.filter(function(x){ return x.id===o.id; })[0];
+      if (alvo){
+        alvo.status = "fechada"; alvo.fechadaEm = Date.now(); alvo.fechadaPor = userDisplayName();
+        saveOS(lista);
+      }
+      if (window.uiToast) window.uiToast("O.S. #"+o.num+" encerrada.", "ok");
+      fechar();
     });
   }
 
