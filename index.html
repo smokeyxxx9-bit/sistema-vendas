@@ -3816,6 +3816,7 @@ window.__voReady.then(function(){
     usuariosLoading: false,
     onlyPending: false,
     orcamento: null,
+    evoMode: (function(){ try{ return localStorage.getItem("vo_evo_mode")==="day" ? "day" : "year"; }catch(e){ return "year"; } })(), // gráfico do painel
     cmpMode: "day", // "day" (comparativo por dia), "month" (por mês) ou "year" (por ano)
     showAdvancedCols: (function(){ try{ return localStorage.getItem("vo_show_advanced")==="1"; }catch(e){ return false; } })(),
     notasQuery: "",
@@ -3962,6 +3963,7 @@ window.__voReady.then(function(){
       var pct1 = Math.min(100, (monthTotal/GOAL_1)*100);
       var pct2 = Math.min(100, (monthTotal/GOAL_2)*100);
 
+      var evoAno = state.evoMode !== "day"; // gráfico do painel: "year" (padrão) ou "day"
       // faturamento e evolução do ano exibido (visível para todos os papéis)
       var yearKey = state.dashMonth.slice(0,4), yearPoints = [], yearTotal = 0;
       for (var ym=1; ym<=12; ym++){
@@ -4072,8 +4074,14 @@ window.__voReady.then(function(){
             '</div>'+
           '</div>'+
           '<div class="hero-right">'+
-            '<h2>Evolução do ano <span style="color:var(--text-faint);font-size:11.5px;">· '+yearKey+' · toque em um mês do gráfico para ver os detalhes</span></h2>'+
-            '<div class="chart-wrap">'+buildYearChartSvg(yearPoints, state.dashMonth)+'</div>'+
+            '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px;">'+
+              '<h2 style="margin:0;">'+(evoAno ? 'Evolução do ano' : 'Evolução diária')+' <span style="color:var(--text-faint);font-size:11.5px;">· '+(evoAno ? yearKey+' · toque em um mês' : 'toque em um dia')+' do gráfico para ver os detalhes</span></h2>'+
+              '<div class="dd-cmp-toggle">'+
+                '<button class="seg'+(evoAno?'':' on')+'" data-act="evodia">Diária</button>'+
+                '<button class="seg'+(evoAno?' on':'')+'" data-act="evoano">Anual</button>'+
+              '</div>'+
+            '</div>'+
+            '<div class="chart-wrap">'+(evoAno ? buildYearChartSvg(yearPoints, state.dashMonth) : buildChartSvg(points, selDay))+'</div>'+
           '</div>'+
         '</div>'+
 
@@ -5110,6 +5118,8 @@ window.__voReady.then(function(){
     else if (act==="opentoday"){ openDate(today); }
     else if (act==="login"){ state.modal = {type:"auth", error:""}; render(); }
     else if (act==="logout"){ state.authed=false; sessionStorage.removeItem("vf_auth"); render(); }
+    else if (act==="evodia"){ state.evoMode="day"; try{ localStorage.setItem("vo_evo_mode","day"); }catch(e){} render(); }
+    else if (act==="evoano"){ state.evoMode="year"; try{ localStorage.setItem("vo_evo_mode","year"); }catch(e){} render(); }
     else if (act==="cmpday"){ state.cmpMode="day"; render(); }
     else if (act==="cmpmonth"){ state.cmpMode="month"; render(); }
     else if (act==="cmpyear"){ state.cmpMode="year"; render(); }
