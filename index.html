@@ -5045,7 +5045,9 @@ window.__voReady.then(function(){
           return res;
         }).then(function(res){
           if (res.error){
-            errEl.textContent = res.error.message || "Erro ao criar login.";
+            errEl.textContent = (/rate limit/i.test(res.error.message||"") || res.error.code==="over_email_send_rate_limit")
+              ? "O Supabase bloqueou por excesso de e-mails de confirmação. Desligue \"Confirm email\" em Authentication → Providers → Email (ou espere cerca de 1 hora) e tente de novo."
+              : (res.error.message || "Erro ao criar login.");
             createBtn.disabled = false; createBtn.textContent = "Criar login";
             return;
           }
