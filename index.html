@@ -925,6 +925,8 @@ window.__voReady.then(function(){
   var K_VENDA_SEQ = "vo_venda_seq";
   var K_NOTAS = "vo_notas";
   var K_ESTOQUE = "vo_estoque";
+  var K_PERMS = "vo_permissoes"; // permissões extras/retiradas por usuário (sincroniza com a nuvem)
+  var K_OS = "vo_os";            // ordens de serviço (O.S.) dos carros em loja
   var K_LOGIN_LOG = "vo_login_log";
   var K_EDICOES_LOG = "vo_edicoes_vendas"; // registro (só o master vê) de alterações em vendas já existentes
   var K_LINHAS_APAGADAS = "vo_linhas_apagadas"; // registro (só o master vê) das linhas de venda apagadas
@@ -3842,8 +3844,15 @@ window.__voReady.then(function(){
     var estoquista = state.role === "estoquista";
     var isMaster = state.role === "master";
     if (!(state.view==="novos" && state.novosTab==="vendas")) state.novosRows = null;
-    root.classList.toggle("wide", (state.view==="table" || (state.view==="novos" && state.novosTab==="vendas")) && !estoquista);
-    if (estoquista) renderEstoque();
+    var restrito = !!sb && !can("vendas"); // sem painel de vendas: só vê as telas liberadas (ex.: montador → O.S.)
+    root.classList.toggle("wide", (state.view==="table" || (state.view==="novos" && state.novosTab==="vendas")) && !restrito);
+    if (restrito){
+      var alvo = (state.view==="os" && can("os")) ? "os" : ((state.view==="estoque" && can("estoque")) ? "estoque" : (can("os") ? "os" : (can("estoque") ? "estoque" : "")));
+      state.view = alvo || "dashboard";
+      if (alvo==="os") renderOS(); else if (alvo==="estoque") renderEstoque(); else renderSemAcesso();
+    }
+    else if (!viewPermitida(state.view)){ state.view = "dashboard"; renderDashboard(); }
+    else if (state.view==="os") renderOS();
     else if (state.view==="estoque") renderEstoque();
     else if (state.view==="clientes") renderClientes();
     else if (state.view==="notas") renderNotas();
@@ -4847,8 +4856,52 @@ window.__voReady.then(function(){
   }
 
   // ---------- usuários: criar logins e alterar cargos (somente master) ----------
-  var PAPEIS = ["vendedor","estoquista","master"];
-  function papelLabel(p){ return p==="master" ? "Master" : (p==="estoquista" ? "Estoquista" : "Vendedor"); }
+  var PAPEIS = ["vendedor","estoquista","montador","master"];
+  function papelLabel(p){ return p==="master" ? "Master" : (p==="estoquista" ? "Estoquista" : (p==="montador" ? "Montador" : "Vendedor")); }
+
+  // ---------- permissões: cada cargo tem um padrão; o master pode liberar a mais ou retirar por usuário ----------
+  var PERMS = [
+    {key:"vendas",     label:"Painel de vendas e tabelas do dia", short:"Vendas"},
+    {key:"fechamento", label:"Fechamento de caixa",               short:"Fechamento"},
+    {key:"estoque",    label:"Estoque",                           short:"Estoque"},
+    {key:"clientes",   label:"Clientes",                          short:"Clientes"},
+    {key:"notas",      label:"Notas e orçamentos",                short:"Notas"},
+    {key:"novos",      label:"Pneus novos",                       short:"Pneus novos"},
+    {key:"avisos",     label:"Avisos",                            short:"Avisos"},
+    {key:"os",         label:"O.S. — ver carros em loja e lançar serviços", short:"O.S."},
+    {key:"os_gerir",   label:"O.S. — abrir, editar e fechar",     short:"Gerir O.S."}
+  ];
+  var PERMS_PADRAO = {
+    vendedor:   ["vendas","fechamento","estoque","clientes","notas","novos","avisos","os","os_gerir"],
+    estoquista: ["estoque"],
+    montador:   ["os"]
+  };
+  function loadPerms(){ return lsGetJSON(K_PERMS, {}); }
+  function savePerms(o){ return lsSetJSON(K_PERMS, o); }
+  function permsEfetivas(cargo, ov){
+    if (cargo==="master") return PERMS.map(function(x){ return x.key; });
+    var base = (PERMS_PADRAO[cargo]||[]).slice();
+    ov = ov || {};
+    (ov.add||[]).forEach(function(k){ if (base.indexOf(k)<0) base.push(k); });
+    return base.filter(function(k){ return (ov.remove||[]).indexOf(k)<0; });
+  }
+  function can(perm){
+    if (!sb) return true; // sem login configurado, tudo liberado (como antes)
+    return permsEfetivas(state.role, loadPerms()[state.userId]).indexOf(perm)>-1;
+  }
+  // cargo "montador" fica guardado nas permissões (o cargo-base no banco é "estoquista", o mais restrito)
+  function cargoEfetivo(u){
+    var o = loadPerms()[u.user_id];
+    return (u.papel!=="master" && o && o.cargo==="montador") ? "montador" : u.papel;
+  }
+  function aplicarPermissoes(){
+    if (!sb || !state.baseRole) return;
+    var o = loadPerms()[state.userId];
+    state.role = (state.baseRole!=="master" && o && o.cargo==="montador") ? "montador" : state.baseRole;
+  }
+  var VIEW_PERM = {dashboard:"vendas", table:"vendas", estoque:"estoque", clientes:"clientes", notas:"notas",
+    orcamento:"notas", orcamentos:"notas", novos:"novos", avisos:"avisos", os:"os"};
+  function viewPermitida(v){ var k = VIEW_PERM[v]; return !k || can(k); }
   function renderUsuarios(){
     if (!sb){
       root.innerHTML =
@@ -4877,16 +4930,41 @@ window.__voReady.then(function(){
     }
 
     var list = state.usuariosList || [];
+    var permsAll = loadPerms();
+    function permBoxHtml(u, cargo, ef){
+      if (cargo==="master") return '<div class="perm-box"><p class="perm-note">Master tem acesso a tudo. Não precisa de permissões extras.</p></div>';
+      var padrao = permsEfetivas(cargo, null);
+      return '<div class="perm-box" data-uid="'+escAttr(u.user_id)+'">'+
+        '<p class="perm-note">Marque o que este usuário pode usar. O padrão do cargo <b>'+papelLabel(cargo)+'</b> vem marcado.</p>'+
+        PERMS.map(function(pm){
+          var on = ef.indexOf(pm.key)>-1, isPad = padrao.indexOf(pm.key)>-1;
+          var tag = (isPad && !on) ? '<em class="tirado">retirado</em>' : ((!isPad && on) ? '<em class="extra">liberado a mais</em>' : (isPad ? '<em>padrão do cargo</em>' : ''));
+          return '<label class="perm-item"><input type="checkbox" data-perm="'+pm.key+'"'+(on?' checked':'')+'><span>'+escHtml(pm.label)+'</span>'+tag+'</label>';
+        }).join("")+
+        '<div class="perm-actions"><button class="btn small primary" data-saveperms="'+escAttr(u.user_id)+'">Salvar permissões</button>'+
+        '<button class="btn small ghost" data-resetperms="'+escAttr(u.user_id)+'">Voltar ao padrão do cargo</button></div>'+
+      '</div>';
+    }
     var rowsHtml = list.length
       ? list.map(function(u){
-          return '<div class="arow">'+
-            '<span class="d">'+escHtml(u.email || u.user_id)+'</span>'+
-            '<span class="stats" style="gap:8px;">'+
-              '<select class="sel-papel" data-uid="'+escAttr(u.user_id)+'" style="background:var(--panel-alt);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:5px 8px;font-size:12.5px;">'+
-                PAPEIS.map(function(p){ return '<option value="'+p+'"'+(u.papel===p?' selected':'')+'>'+papelLabel(p)+'</option>'; }).join("")+
-              '</select>'+
-              '<button class="btn small primary" data-savepapel="'+escAttr(u.user_id)+'">Salvar</button>'+
-            '</span>'+
+          var cargo = cargoEfetivo(u);
+          var ov = permsAll[u.user_id];
+          var ef = permsEfetivas(cargo, ov);
+          var resumo = cargo==="master" ? "Acesso total" : (PERMS.filter(function(pm){ return ef.indexOf(pm.key)>-1; }).map(function(pm){ return pm.short; }).join(" · ") || "Nenhuma tela liberada");
+          var custom = ov && ((ov.add||[]).length || (ov.remove||[]).length);
+          var aberto = state.usuariosPermOpen===u.user_id;
+          return '<div class="user-block">'+
+            '<div class="arow">'+
+              '<span class="d">'+escHtml(u.email || u.user_id)+'<small class="perm-resumo">'+escHtml(resumo)+(custom?' · <b>personalizado</b>':'')+'</small></span>'+
+              '<span class="stats" style="gap:8px;">'+
+                '<select class="sel-papel" data-uid="'+escAttr(u.user_id)+'" style="background:var(--panel-alt);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:5px 8px;font-size:12.5px;">'+
+                  PAPEIS.map(function(pp){ return '<option value="'+pp+'"'+(cargo===pp?' selected':'')+'>'+papelLabel(pp)+'</option>'; }).join("")+
+                '</select>'+
+                '<button class="btn small primary" data-savepapel="'+escAttr(u.user_id)+'">Salvar</button>'+
+                '<button class="btn small ghost" data-permopen="'+escAttr(u.user_id)+'">'+(aberto?'Fechar':'Permissões')+'</button>'+
+              '</span>'+
+            '</div>'+
+            (aberto ? permBoxHtml(u, cargo, ef) : '')+
           '</div>';
         }).join("")
       : (state.usuariosLoading ? '<div class="arow-empty">Carregando usuários...</div>' : '<div class="arow-empty">Nenhum usuário cadastrado ainda.</div>');
@@ -4954,11 +5032,12 @@ window.__voReady.then(function(){
             createBtn.disabled = false; createBtn.textContent = "Criar login";
             return;
           }
-          sb.from("perfis").upsert({user_id:novo.id, email:email, papel:papel}).then(function(r2){
+          sb.from("perfis").upsert({user_id:novo.id, email:email, papel:(papel==="montador"?"estoquista":papel)}).then(function(r2){
             createBtn.disabled = false; createBtn.textContent = "Criar login";
             if (r2.error){
               errEl.textContent = "Login criado, mas não foi possível salvar o cargo: "+r2.error.message;
             } else {
+              if (papel==="montador"){ var pm0 = loadPerms(); pm0[novo.id] = {cargo:"montador", add:[], remove:[]}; savePerms(pm0); }
               state.usuariosList = null;
               render();
             }
@@ -4969,16 +5048,57 @@ window.__voReady.then(function(){
 
     root.querySelectorAll("[data-savepapel]").forEach(function(btn){
       btn.addEventListener("click", function(){
-        var uid = btn.getAttribute("data-savepapel");
-        var sel = root.querySelector('select[data-uid="'+uid+'"]');
+        var usrId = btn.getAttribute("data-savepapel");
+        var sel = root.querySelector('select[data-uid="'+usrId+'"]');
         var novoPapel = sel ? sel.value : null;
         if (!novoPapel) return;
+        var antes = (state.usuariosList||[]).filter(function(x){ return x.user_id===usrId; })[0];
+        var cargoAntes = antes ? cargoEfetivo(antes) : null;
+        var basePapel = novoPapel==="montador" ? "estoquista" : novoPapel;
         btn.disabled = true; btn.textContent = "Salvando...";
-        sb.from("perfis").update({papel:novoPapel}).eq("user_id", uid).then(function(r){
+        sb.from("perfis").update({papel:basePapel}).eq("user_id", usrId).then(function(r){
           btn.disabled = false; btn.textContent = "Salvar";
-          if (r.error){ alert("Não foi possível salvar o cargo: "+r.error.message); }
-          else { state.usuariosList = null; render(); }
+          if (r.error){ alert("Não foi possível salvar o cargo: "+r.error.message); return; }
+          var pm = loadPerms(), o = pm[usrId] || {};
+          if (novoPapel==="montador") o.cargo = "montador"; else delete o.cargo;
+          if (cargoAntes!==novoPapel){ o.add = []; o.remove = []; } // cargo novo: volta ao padrão dele
+          pm[usrId] = o; savePerms(pm);
+          state.usuariosList = null; render();
         });
+      });
+    });
+
+    root.querySelectorAll("[data-permopen]").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        var usrId = btn.getAttribute("data-permopen");
+        state.usuariosPermOpen = (state.usuariosPermOpen===usrId) ? null : usrId;
+        render();
+      });
+    });
+    root.querySelectorAll("[data-saveperms]").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        var usrId = btn.getAttribute("data-saveperms");
+        var u = (state.usuariosList||[]).filter(function(x){ return x.user_id===usrId; })[0];
+        if (!u) return;
+        var cargo = cargoEfetivo(u), padrao = permsEfetivas(cargo, null);
+        var box = btn.closest(".perm-box"), add = [], remove = [];
+        box.querySelectorAll("input[data-perm]").forEach(function(cb){
+          var k = cb.getAttribute("data-perm"), isPad = padrao.indexOf(k)>-1;
+          if (cb.checked && !isPad) add.push(k);
+          if (!cb.checked && isPad) remove.push(k);
+        });
+        var pm = loadPerms(), o = pm[usrId] || {};
+        o.add = add; o.remove = remove; pm[usrId] = o; savePerms(pm);
+        if (window.uiToast) window.uiToast("Permissões salvas.", "ok");
+        render();
+      });
+    });
+    root.querySelectorAll("[data-resetperms]").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        var usrId = btn.getAttribute("data-resetperms");
+        var pm = loadPerms(), o = pm[usrId];
+        if (o){ o.add = []; o.remove = []; pm[usrId] = o; savePerms(pm); }
+        render();
       });
     });
   }
@@ -5004,21 +5124,27 @@ window.__voReady.then(function(){
     var historicoBtn = isMaster ? '<button class="btn ghost small" data-act="openhistorico" title="Ver logins e movimentações de estoque">🕘 Histórico'+histBadgeHtml()+'</button>' : '';
     var usuariosBtn = isMaster ? '<button class="btn ghost small" data-act="openusuarios" title="Criar logins e alterar cargos">👤 Usuários</button>' : '';
     if (isMaster) usuariosBtn += '<button class="btn ghost small" data-act="openferramentas" title="Relatório do mês por pessoa, backups automáticos e migração de dados">🛠 Ferramentas</button>';
+    if (!can("estoque")) estoqueBtn = "";
+    if (!can("clientes")) clientesBtn = "";
+    if (!can("notas")){ notasBtn = ""; orcamentosBtn = ""; }
+    if (!can("novos")) novosBtn = "";
+    if (!can("avisos")) avisosBtn = "";
+    if (!(isMaster || can("vendas"))) backupBtns = "";
+    var osBtn = can("os") ? '<button class="btn ghost small" data-act="openos" title="Carros em loja com O.S. aberta">🔧 O.S.</button>' : '';
+    var menuItems = osBtn+estoqueBtn+clientesBtn+notasBtn+orcamentosBtn+novosBtn+avisosBtn+historicoBtn+usuariosBtn+backupBtns;
     var pill = state.authed ? '<span class="pill on">✓ edição de dias anteriores liberada</span>' : '';
-    var papelRot = state.role==="master" ? "Master" : (state.role==="estoquista" ? "Estoquista" : "Vendedor");
+    var papelRot = papelLabel(state.role);
     var editBtn = state.authed
       ? '<button class="btn ghost small" data-act="logout" title="Bloquear de novo a edição de dias anteriores">🔒 Sair da edição</button>'
       : '<button class="btn small" data-act="login" title="Liberar a edição de dias anteriores">🔑 Entrar com senha</button>';
     return '<div class="top-actions">'+pill+
-      '<div class="top-menu">'+
+      (menuItems ? '<div class="top-menu">'+
         '<button class="menu-toggle" data-menu-toggle="1" aria-label="Abrir menu de opções" aria-expanded="false" title="Opções">'+
           '<span class="bars"><i></i><i></i><i></i></span>'+
-          (avisosCount>0 ? '<span class="nav-badge menu-dot">'+avisosCount+'</span>' : '')+
+          (avisosCount>0 && avisosBtn ? '<span class="nav-badge menu-dot">'+avisosCount+'</span>' : '')+
         '</button>'+
-        '<div class="menu-panel" role="menu">'+
-          estoqueBtn+clientesBtn+notasBtn+orcamentosBtn+novosBtn+avisosBtn+historicoBtn+usuariosBtn+backupBtns+
-        '</div>'+
-      '</div>'+
+        '<div class="menu-panel" role="menu">'+menuItems+'</div>'+
+      '</div>' : '')+
       '<div class="top-menu user-menu">'+
         '<button class="menu-toggle user-toggle" data-menu-toggle="1" aria-label="Menu do usuário" aria-expanded="false" title="'+escAttr(userDisplayName())+'">'+
           '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.2 3.6-7 8-7s8 2.8 8 7"/></svg>'+
@@ -5195,6 +5321,7 @@ window.__voReady.then(function(){
       var n = pushAllLocalToCloud();
       alert(n>0 ? "Enviando "+n+" registro(s) deste navegador para a nuvem…" : "Não há dados salvos neste navegador para enviar.");
     }
+    else if (act==="openos"){ if (can("os")){ state.view="os"; render(); } }
     else if (act==="openperfil"){ state.modal = {type:"perfil", error:""}; render(); }
     else if (act==="accountlogout"){
       if (sb) sb.auth.signOut().then(function(){ location.reload(); });
@@ -6231,6 +6358,8 @@ window.__voReady.then(function(){
     else if (state.modal.type==="importTabelas") renderImportTabelasModal();
     else if (state.modal.type==="fechamento") renderFechamentoModal();
     else if (state.modal.type==="perfil") renderPerfilModal();
+    else if (state.modal.type==="osForm") renderOSFormModal();
+    else if (state.modal.type==="osServico") renderOSServicoModal();
     else renderAuthModal();
   }
 
@@ -6290,6 +6419,187 @@ window.__voReady.then(function(){
     div.addEventListener("click", function(e){ if (e.target===div){ state.modal=null; renderModal(); } });
     document.body.appendChild(div);
     draw();
+  }
+
+  // ---------- O.S.: carros em loja (montadores veem só as abertas e lançam serviços pelo celular) ----------
+  var OS_SERVICOS = ["Bicos","Cambagem","Alinhamento","Conserto de rodas"];
+  function loadOS(){ return lsGetJSON(K_OS, []); }
+  function saveOS(l){ return lsSetJSON(K_OS, l); }
+  function osHa(ts){
+    var m = Math.max(0, Math.round((Date.now()-ts)/60000));
+    if (m<2) return "agora";
+    if (m<60) return "há "+m+" min";
+    var h = Math.round(m/60);
+    if (h<24) return "há "+h+" h";
+    var d = Math.round(h/24);
+    return d===1 ? "ontem" : "há "+d+" dias";
+  }
+  function osHora(ts){ var d = new Date(ts); return ("0"+d.getHours()).slice(-2)+":"+("0"+d.getMinutes()).slice(-2); }
+
+  function osCardHtml(o){
+    var gerir = can("os_gerir");
+    var servs = o.servicos || [];
+    var total = servs.reduce(function(t,x){ return t+(Number(x.valor)||0); }, 0);
+    var servHtml = servs.map(function(x){
+      var meu = x.porId && x.porId===state.userId;
+      return '<div class="os-serv"><span class="os-serv-t"><b>'+escHtml(x.tipo)+'</b>'+((x.qtd||1)>1?' ×'+x.qtd:'')+
+        '<em>'+escHtml(x.por||"")+' · '+osHora(x.ts)+'</em></span>'+
+        '<span class="os-serv-v">'+fmtCurrency(Number(x.valor)||0)+
+        ((gerir||meu) ? '<button class="icon-btn" data-os="'+escAttr(o.id)+'" data-delserv="'+escAttr(x.id)+'" title="Remover este lançamento">✕</button>' : '')+
+        '</span></div>';
+    }).join("");
+    var chips = '<span class="os-chip">🛞 '+(parseInt(o.qtdPneus,10)||0)+' pneu(s)</span>'+
+      (o.medida ? '<span class="os-chip">'+escHtml(o.medida)+'</span>' : '')+
+      '<span class="os-chip dim">'+osHa(o.criadaEm)+'</span>';
+    return '<div class="os-card">'+
+      '<div class="os-head"><span class="os-num">#'+o.num+'</span><span class="os-carro">'+escHtml(o.carro||"Carro")+(o.placa?' <small>'+escHtml(String(o.placa).toUpperCase())+'</small>':'')+'</span></div>'+
+      '<div class="os-chips">'+chips+'</div>'+
+      ((gerir && o.cliente) ? '<div class="os-line">Cliente: <b>'+escHtml(o.cliente)+'</b></div>' : '')+
+      (o.obs ? '<div class="os-obs">'+escHtml(o.obs)+'</div>' : '')+
+      (servs.length ? '<div class="os-servs">'+servHtml+'<div class="os-total"><span>Total lançado</span><b>'+fmtCurrency(total)+'</b></div></div>' : '')+
+      '<div class="os-actions">'+
+        '<button class="btn primary os-add" data-os-add="'+escAttr(o.id)+'">+ Serviço</button>'+
+        (gerir ? '<button class="btn ghost small" data-os-edit="'+escAttr(o.id)+'">Editar</button><button class="btn ghost small" data-os-close="'+escAttr(o.id)+'">Fechar O.S.</button>' : '')+
+      '</div>'+
+    '</div>';
+  }
+
+  function renderOS(){
+    root.classList.remove("wide");
+    var gerir = can("os_gerir");
+    var abertas = loadOS().filter(function(o){ return o.status==="aberta"; }).sort(function(a,b){ return a.criadaEm-b.criadaEm; });
+    var pneus = abertas.reduce(function(t,o){ return t+(parseInt(o.qtdPneus,10)||0); }, 0);
+    root.innerHTML =
+      '<div class="topbar">'+
+        (can("vendas") ? '<button class="btn ghost small" data-act="back">‹ Painel de vendas</button>' : '<div class="brand"><span class="mark"></span><h1>O.S.</h1></div>')+
+        authZoneHtml()+
+      '</div>'+
+      '<div class="os-resumo">'+
+        '<div><b>'+abertas.length+'</b><span>carro(s) em loja</span></div>'+
+        '<div><b>'+pneus+'</b><span>pneu(s) para montar</span></div>'+
+        (gerir ? '<button class="btn primary" id="osNova">+ Nova O.S.</button>' : '')+
+      '</div>'+
+      '<div class="os-lista">'+(abertas.length ? abertas.map(osCardHtml).join("") : '<div class="os-vazio">Nenhum carro em loja com O.S. aberta.</div>')+'</div>';
+
+    root.querySelectorAll("[data-act]").forEach(function(node){
+      node.addEventListener("click", function(){ handleAction(node.getAttribute("data-act"), node); });
+    });
+    var nova = document.getElementById("osNova");
+    if (nova) nova.addEventListener("click", function(){ state.modal = {type:"osForm", osId:null}; render(); });
+    root.querySelectorAll("[data-os-add]").forEach(function(b){
+      b.addEventListener("click", function(){ state.modal = {type:"osServico", osId:b.getAttribute("data-os-add")}; render(); });
+    });
+    root.querySelectorAll("[data-os-edit]").forEach(function(b){
+      b.addEventListener("click", function(){ state.modal = {type:"osForm", osId:b.getAttribute("data-os-edit")}; render(); });
+    });
+    root.querySelectorAll("[data-os-close]").forEach(function(b){
+      b.addEventListener("click", function(){
+        var id = b.getAttribute("data-os-close");
+        var l = loadOS(), o = l.filter(function(x){ return x.id===id; })[0];
+        if (!o) return;
+        if (!confirm("Fechar a O.S. #"+o.num+" ("+(o.carro||"carro")+")? Ela some da lista dos montadores.")) return;
+        o.status = "fechada"; o.fechadaEm = Date.now(); o.fechadaPor = userDisplayName();
+        saveOS(l); render();
+      });
+    });
+    root.querySelectorAll("[data-delserv]").forEach(function(b){
+      b.addEventListener("click", function(){
+        var l = loadOS(), o = l.filter(function(x){ return x.id===b.getAttribute("data-os"); })[0];
+        if (!o) return;
+        o.servicos = (o.servicos||[]).filter(function(x){ return x.id!==b.getAttribute("data-delserv"); });
+        saveOS(l); render();
+      });
+    });
+  }
+
+  function renderSemAcesso(){
+    root.classList.remove("wide");
+    root.innerHTML =
+      '<div class="topbar"><div class="brand"><span class="mark"></span><h1>Painel de Vendas</h1></div>'+authZoneHtml()+'</div>'+
+      '<div class="card" style="padding:18px 16px;">Seu usuário ainda não tem nenhuma tela liberada. Peça para o master liberar o acesso.</div>';
+    root.querySelectorAll("[data-act]").forEach(function(node){
+      node.addEventListener("click", function(){ handleAction(node.getAttribute("data-act"), node); });
+    });
+  }
+
+  function renderOSFormModal(){
+    var l = loadOS(), o = state.modal.osId ? l.filter(function(x){ return x.id===state.modal.osId; })[0] : null;
+    var div = document.createElement("div");
+    div.className = "overlay";
+    div.innerHTML =
+      '<div class="modal">'+
+        '<h3>'+(o ? 'Editar O.S. #'+o.num : 'Nova O.S.')+'</h3>'+
+        '<div class="field-group"><label>Carro (modelo)</label><input type="text" id="osCarro" maxlength="40" placeholder="Ex.: Gol branco" value="'+escAttr(o?o.carro:"")+'"></div>'+
+        '<div class="field-group"><label>Placa</label><input type="text" id="osPlaca" maxlength="10" placeholder="ABC1D23" value="'+escAttr(o?o.placa:"")+'"></div>'+
+        '<div class="field-group"><label>Cliente (opcional)</label><input type="text" id="osCliente" list="osClientes" maxlength="60" value="'+escAttr(o?o.cliente:"")+'">'+
+          '<datalist id="osClientes">'+loadCustomers().map(function(c){ return '<option value="'+escAttr(c.nome||"")+'"></option>'; }).join("")+'</datalist></div>'+
+        '<div class="field-group"><label>Quantidade de pneus</label><input type="text" inputmode="numeric" id="osPneus" value="'+escAttr(o?o.qtdPneus:4)+'"></div>'+
+        '<div class="field-group"><label>Medida (opcional)</label><input type="text" id="osMedida" maxlength="30" placeholder="Ex.: 175/70 R14" value="'+escAttr(o?o.medida:"")+'"></div>'+
+        '<div class="field-group"><label>Observações para o montador</label><textarea id="osObs" rows="3" maxlength="300" style="width:100%;">'+escHtml(o?o.obs||"":"")+'</textarea></div>'+
+        '<div class="err" id="osErr"></div>'+
+        '<div class="modal-actions"><button class="btn ghost small" id="osCancel">Cancelar</button><button class="btn primary small" id="osSave">Salvar</button></div>'+
+      '</div>';
+    document.body.appendChild(div);
+    document.getElementById("osCarro").focus();
+    function close(){ state.modal = null; render(); }
+    document.getElementById("osCancel").addEventListener("click", close);
+    div.addEventListener("click", function(e){ if (e.target===div) close(); });
+    document.getElementById("osSave").addEventListener("click", function(){
+      var carro = document.getElementById("osCarro").value.trim();
+      var pneus = parseInt(document.getElementById("osPneus").value,10);
+      if (!carro){ document.getElementById("osErr").textContent = "Informe o carro."; return; }
+      if (isNaN(pneus) || pneus<0){ document.getElementById("osErr").textContent = "Informe a quantidade de pneus."; return; }
+      var lista = loadOS();
+      var alvo = o ? lista.filter(function(x){ return x.id===o.id; })[0] : null;
+      if (!alvo){
+        var prox = lista.reduce(function(m,x){ return Math.max(m, x.num||0); }, 0)+1;
+        alvo = {id:uid(), num:prox, status:"aberta", criadaEm:Date.now(), criadaPor:userDisplayName(), servicos:[]};
+        lista.push(alvo);
+      }
+      alvo.carro = carro;
+      alvo.placa = document.getElementById("osPlaca").value.trim();
+      alvo.cliente = document.getElementById("osCliente").value.trim();
+      alvo.qtdPneus = pneus;
+      alvo.medida = document.getElementById("osMedida").value.trim();
+      alvo.obs = document.getElementById("osObs").value.trim();
+      saveOS(lista);
+      close();
+    });
+  }
+
+  function renderOSServicoModal(){
+    var l = loadOS(), o = l.filter(function(x){ return x.id===state.modal.osId; })[0];
+    if (!o || o.status!=="aberta"){ state.modal = null; return render(); }
+    var div = document.createElement("div");
+    div.className = "overlay";
+    div.innerHTML =
+      '<div class="modal">'+
+        '<h3>Lançar serviço</h3>'+
+        '<p>'+escHtml(o.carro||"Carro")+(o.placa?' · '+escHtml(String(o.placa).toUpperCase()):'')+' · O.S. #'+o.num+'</p>'+
+        '<div class="field-group"><label>Serviço</label><select id="svTipo" style="width:100%;background:var(--panel-alt);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:10px 8px;font-size:14px;">'+
+          OS_SERVICOS.map(function(t){ return '<option value="'+escAttr(t)+'">'+escHtml(t)+'</option>'; }).join("")+'</select></div>'+
+        '<div class="field-group"><label>Quantidade</label><input type="text" inputmode="numeric" id="svQtd" value="1"></div>'+
+        '<div class="field-group"><label>Valor total (R$)</label><input type="text" inputmode="decimal" id="svValor" placeholder="0,00"></div>'+
+        '<div class="err" id="svErr"></div>'+
+        '<div class="modal-actions"><button class="btn ghost small" id="svCancel">Cancelar</button><button class="btn primary small" id="svSave">Lançar</button></div>'+
+      '</div>';
+    document.body.appendChild(div);
+    function close(){ state.modal = null; render(); }
+    document.getElementById("svCancel").addEventListener("click", close);
+    div.addEventListener("click", function(e){ if (e.target===div) close(); });
+    document.getElementById("svSave").addEventListener("click", function(){
+      var qtd = parseInt(document.getElementById("svQtd").value,10);
+      var valor = parseNum(document.getElementById("svValor").value);
+      if (isNaN(qtd) || qtd<1){ document.getElementById("svErr").textContent = "Informe a quantidade."; return; }
+      if (!(valor>0)){ document.getElementById("svErr").textContent = "Informe o valor."; return; }
+      var lista = loadOS(), alvo = lista.filter(function(x){ return x.id===o.id; })[0];
+      if (!alvo || alvo.status!=="aberta"){ close(); return; }
+      alvo.servicos = alvo.servicos || [];
+      alvo.servicos.push({id:uid(), tipo:document.getElementById("svTipo").value, qtd:qtd, valor:valor, porId:state.userId||"", por:userDisplayName(), ts:Date.now()});
+      saveOS(lista);
+      if (window.uiToast) window.uiToast("Serviço lançado.", "ok");
+      close();
+    });
   }
 
   // ---------- modal: perfil do usuário (alterar o nome de usuário) ----------
@@ -9260,6 +9570,9 @@ window.__voReady.then(function(){
 
   // ---------- reage a mudanças feitas em outro aparelho ----------
   function handleRemoteChange(key){
+    if (key===K_PERMS) aplicarPermissoes();
+    // não atropela quem está preenchendo um formulário de O.S. no celular
+    if (key===K_OS && state.modal && (state.modal.type==="osForm" || state.modal.type==="osServico")) return;
     if (key.indexOf(K_ROWS)===0){
       var date = key.slice(K_ROWS.length);
       var month = date.slice(0,7);
@@ -9333,11 +9646,13 @@ window.__voReady.then(function(){
       var user = res && res.data && res.data.user;
       if (!user){ state.role = "vendedor"; return cb(); }
       state.userEmail = user.email || "";
+      state.userId = user.id;
       state.userNome = (user.user_metadata && user.user_metadata.nome) || (function(){ try{ return localStorage.getItem("vo_user_nome")||""; }catch(e){ return ""; } })();
       sb.from("perfis").select("papel").eq("user_id", user.id).limit(1).then(function(r){
         var row = r && r.data && r.data[0];
         var papel = row && row.papel;
         state.role = (papel === "estoquista" || papel === "master") ? papel : "vendedor";
+        state.baseRole = state.role;
         cb();
       }).catch(function(){ state.role = "vendedor"; cb(); });
     }).catch(function(){ state.role = "vendedor"; cb(); });
@@ -9346,6 +9661,7 @@ window.__voReady.then(function(){
   function bootApp(afterPull){
     loadRole(function(){
       cloudPullAll(function(hadRemoteData){
+        aplicarPermissoes(); // já com as permissões mais recentes da nuvem
         migrarBalanceamentoAuto(function(){
           if (typeof afterPull === "function") afterPull(); // ex: registrar o login já com os dados mais recentes em mãos
           render();
@@ -9359,6 +9675,7 @@ window.__voReady.then(function(){
 
   // avisa uma vez por dia, ao abrir o app, se há lembretes vencidos ou clientes cuja medida chegou
   function avisarPendenciasNoBoot(){
+    if (sb && !can("avisos")) return;
     try{
       var chave = "vo_last_avisos_toast";
       if (localStorage.getItem(chave) === today) return;
@@ -9384,6 +9701,7 @@ window.__voReady.then(function(){
 
   // ---------- pontes para o script de melhorias no rodapé (atalhos de teclado, tema) ----------
   window.__appOpenSearch = function(){
+    if (sb && !(can("clientes") || can("notas"))) return; // a busca global mostra clientes/notas
     if (!state.authed && state.view!=="table" && !state.modal){ /* segue liberado, busca não exige login */ }
     state.modal = {type:"globalSearch", query:""};
     renderModal();
@@ -9502,6 +9820,46 @@ body{font-size:16px}
 .user-head b{font-size:14px;color:var(--text);overflow-wrap:anywhere;}
 .user-head span{font-size:12px;color:var(--text-dim);overflow-wrap:anywhere;}
 .user-head .user-role{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--yellow);margin-top:2px;}
+
+/* ---- O.S. e permissões ---- */
+.os-resumo{display:flex;align-items:center;gap:22px;flex-wrap:wrap;margin:4px 0 16px;}
+.os-resumo > div{display:flex;flex-direction:column;}
+.os-resumo b{font-size:26px;line-height:1;color:var(--text);}
+.os-resumo span{font-size:12px;color:var(--text-dim);margin-top:4px;}
+.os-resumo .btn{margin-left:auto;}
+.os-lista{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;}
+.os-vazio{padding:26px 16px;text-align:center;color:var(--text-dim);border:1px dashed var(--border);border-radius:8px;grid-column:1/-1;}
+.os-card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px;}
+.os-head{display:flex;align-items:baseline;gap:10px;}
+.os-num{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--yellow);}
+.os-carro{font-size:17px;font-weight:600;color:var(--text);}
+.os-carro small{font-size:12px;font-weight:500;color:var(--text-dim);margin-left:6px;font-family:'IBM Plex Mono',monospace;}
+.os-chips{display:flex;flex-wrap:wrap;gap:6px;}
+.os-chip{font-size:13px;padding:4px 10px;border-radius:99px;background:var(--panel-alt);border:1px solid var(--border-soft);color:var(--text);}
+.os-chip.dim{color:var(--text-dim);}
+.os-line{font-size:13px;color:var(--text-dim);}
+.os-obs{font-size:13px;color:var(--text);background:var(--panel-alt);border-left:3px solid var(--yellow);padding:8px 10px;border-radius:4px;white-space:pre-wrap;}
+.os-servs{border-top:1px solid var(--border-soft);padding-top:8px;display:flex;flex-direction:column;gap:6px;}
+.os-serv{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13.5px;}
+.os-serv-t em{display:block;font-style:normal;font-size:11.5px;color:var(--text-faint);}
+.os-serv-v{display:flex;align-items:center;gap:6px;white-space:nowrap;}
+.os-total{display:flex;justify-content:space-between;font-size:13px;color:var(--text-dim);padding-top:6px;border-top:1px dashed var(--border-soft);}
+.os-total b{color:var(--text);}
+.os-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+.os-actions .os-add{flex:1 1 140px;min-height:46px;font-size:15px;justify-content:center;}
+.user-block{border-bottom:1px solid var(--border-soft);}
+.user-block .arow{border-bottom:0;}
+.perm-resumo{display:block;font-size:11.5px;color:var(--text-faint);margin-top:3px;font-family:inherit;}
+.perm-resumo b{color:var(--yellow);font-weight:600;}
+.perm-box{background:var(--panel-alt);border:1px solid var(--border-soft);border-radius:8px;padding:12px 14px;margin:0 0 12px;}
+.perm-note{margin:0 0 10px;font-size:12.5px;color:var(--text-dim);}
+.perm-item{display:flex;align-items:center;gap:10px;padding:7px 0;font-size:13.5px;cursor:pointer;}
+.perm-item input{width:auto;margin:0;accent-color:var(--yellow);}
+.perm-item em{font-style:normal;font-size:11px;color:var(--text-faint);margin-left:auto;}
+.perm-item em.extra{color:var(--green);}
+.perm-item em.tirado{color:var(--red);}
+.perm-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+@media (max-width:640px){.os-lista{grid-template-columns:1fr;}.os-resumo .btn{width:100%;margin-left:0;min-height:46px;}}
 </style>
 <script>
 window.__voReady.then(function(){
