@@ -1151,6 +1151,79 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     return (info.tipo==="cnpj" ? "CNPJ" : "CPF") + ": " + info.documento;
   }
 
+  // ---------- máscaras de CPF, CNPJ e telefone (formatam enquanto digita) ----------
+  function soDigitos(v){ return String(v===undefined||v===null ? "" : v).replace(/\D/g, ""); }
+  function mascaraCpf(d){
+    d = d.slice(0,11);
+    var o = d.slice(0,3);
+    if (d.length>3) o += "." + d.slice(3,6);
+    if (d.length>6) o += "." + d.slice(6,9);
+    if (d.length>9) o += "-" + d.slice(9,11);
+    return o;
+  }
+  function mascaraCnpj(d){
+    d = d.slice(0,14);
+    var o = d.slice(0,2);
+    if (d.length>2) o += "." + d.slice(2,5);
+    if (d.length>5) o += "." + d.slice(5,8);
+    if (d.length>8) o += "/" + d.slice(8,12);
+    if (d.length>12) o += "-" + d.slice(12,14);
+    return o;
+  }
+  // telefone sempre com DDD: (47) 99999-9999 (celular, com o 9 a mais) ou (47) 3333-3333 (8 dígitos).
+  // "final" = campo terminado (ao sair do campo/salvar): celular antigo de 8 dígitos começando com 9 vira 4-4.
+  function mascaraTelefone(d, final){
+    if (d.length>11 && d.slice(0,2)==="55") d = d.slice(2); // colou com +55
+    if (d.length>2 && d.charAt(2)!=="9") d = d.slice(0,10);  // não começa com 9: número de 8 dígitos
+    d = d.slice(0,11);
+    if (!d.length) return "";
+    var ddd = d.slice(0,2), n = d.slice(2);
+    if (d.length<=2) return "(" + ddd;
+    var corte = (n.charAt(0)==="9" && !(final && n.length===8)) ? 5 : 4;
+    var o = "(" + ddd + ") " + n.slice(0,corte);
+    if (n.length>corte) o += "-" + n.slice(corte);
+    return o;
+  }
+  // valor já salvo/final: só formata se os dígitos couberem na máscara (senão deixa como está)
+  function formatarDocumento(tipo, valor){
+    var d = soDigitos(valor), max = tipo==="cnpj" ? 14 : 11;
+    if (!d.length || d.length>max) return String(valor||"").trim();
+    return tipo==="cnpj" ? mascaraCnpj(d) : mascaraCpf(d);
+  }
+  function formatarTelefone(valor){
+    var d = soDigitos(valor);
+    if (!d.length) return "";
+    if (d.length>13 || (d.length>11 && d.slice(0,2)!=="55")) return String(valor||"").trim();
+    return mascaraTelefone(d, true);
+  }
+  // liga a máscara num <input>: refaz a formatação a cada tecla e mantém o cursor no lugar certo
+  function aplicarMascaraInput(inp, fmt, fmtFinal){
+    var ultimo = soDigitos(inp.value).length;
+    inp.addEventListener("input", function(e){
+      var v = inp.value;
+      var pos = (inp.selectionStart===null || inp.selectionStart===undefined) ? v.length : inp.selectionStart;
+      var dig = soDigitos(v);
+      var antes = soDigitos(v.slice(0,pos)).length;
+      // apagou só um símbolo (parêntese, espaço, ponto, traço)? então apaga o número que vem antes dele
+      if (e && e.inputType==="deleteContentBackward" && dig.length===ultimo && antes>0){
+        dig = dig.slice(0,antes-1) + dig.slice(antes); antes--;
+      }
+      var novo = fmt(dig);
+      inp.value = novo;
+      var n = 0, i = 0;
+      if (antes>0){
+        for (i=0; i<novo.length; i++){
+          if (/\d/.test(novo.charAt(i))){ n++; if (n===antes){ i++; break; } }
+        }
+      }
+      try{ inp.setSelectionRange(i, i); }catch(x){}
+      ultimo = soDigitos(novo).length;
+    });
+    if (fmtFinal){
+      inp.addEventListener("blur", function(){ inp.value = fmtFinal(inp.value); ultimo = soDigitos(inp.value).length; });
+    }
+  }
+
   // ---------- notas emitidas ----------
   function loadNotas(){
     return lsGetJSON(K_NOTAS, []);
@@ -1183,6 +1256,27 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     list.push(obj);
     saveNotas(list);
     return obj;
+  }
+  // nota mais recente já emitida para esta venda (ou para qualquer venda do mesmo grupo vinculado)
+  function notaDaVenda(row){
+    var ids = {};
+    groupRows(row).forEach(function(r){ ids[r.id] = 1; });
+    ids[row.id] = 1;
+    var achadas = loadNotas().filter(function(n){
+      if (n.rowId && ids[n.rowId]) return true;
+      return Array.isArray(n.rowIds) && n.rowIds.some(function(id){ return ids[id]; });
+    });
+    achadas.sort(function(a,b){ return (b.createdAt||0)-(a.createdAt||0); });
+    return achadas[0] || null;
+  }
+  // grava a nota nova no lugar da antiga (mesmo id e posição na lista); sem nota antiga, só acrescenta
+  function gravarNota(nota, existente){
+    if (!existente) return addNota(nota);
+    var list = loadNotas(), achou = false;
+    list = list.map(function(n){ if (n.id===existente.id){ achou = true; return nota; } return n; });
+    if (!achou) list.push(nota);
+    saveNotas(list);
+    return nota;
   }
 
   // ---------- estoque (medida, marca, quantidade, preço) ----------
@@ -1868,8 +1962,9 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     setTimeout(function(){ win.print(); }, 300);
   }
 
-  function printNotaGrupo(grp, customer){
-    var vendaNum = nextVendaNumber();
+  function printNotaGrupo(grp, customer, substituir){
+    var existente = substituir ? notaDaVenda(grp[0]) : null;
+    var vendaNum = existente ? existente.vendaNum : nextVendaNumber();
     var carros = [], items = [], descontos = [], detalhes = [], formas = [];
     var subtotal = 0, total = 0, totalPneus = 0, todosPagos = true;
     var buckets = {"Dinheiro":0, "Pix":0, "Débito":0, "Crédito":0};
@@ -1913,15 +2008,17 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       pagamentoBuckets: buckets,
       pago: todosPagos ? "✅" : "❌",
       detalhes: detalhes.join("\n"),
-      createdAt: Date.now()
+      createdAt: existente ? (existente.createdAt || Date.now()) : Date.now()
     };
-    addNota(nota);
+    if (existente){ nota.id = existente.id; nota.atualizadoEm = Date.now(); }
+    gravarNota(nota, existente);
     openPrintWindow(buildNotaHtml(nota));
   }
 
-  function printNota(row, customer){
-    if (groupRows(row).length>1){ return printNotaGrupo(groupRows(row), customer); }
-    var vendaNum = nextVendaNumber();
+  function printNota(row, customer, substituir){
+    if (groupRows(row).length>1){ return printNotaGrupo(groupRows(row), customer, substituir); }
+    var existente = substituir ? notaDaVenda(row) : null;
+    var vendaNum = existente ? existente.vendaNum : nextVendaNumber();
     var nota = {
       id: uid(),
       vendaNum: vendaNum,
@@ -1946,9 +2043,10 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       splitValor: (row.splitValor!==undefined ? row.splitValor : null),
       pago: row.pago||"",
       detalhes: row.detalhes || "",
-      createdAt: Date.now()
+      createdAt: existente ? (existente.createdAt || Date.now()) : Date.now()
     };
-    addNota(nota);
+    if (existente){ nota.id = existente.id; nota.atualizadoEm = Date.now(); }
+    gravarNota(nota, existente);
     openPrintWindow(buildNotaHtml(nota));
   }
 
@@ -5343,6 +5441,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       '</div>';
     }
     var notasCount = loadNotas().filter(function(n){ return n.customerId===customer.id || (n.customer && n.customer.id===customer.id); }).length;
+    var notaAtual = row ? notaDaVenda(row) : null;
 
     var div = document.createElement("div");
     div.className = "overlay";
@@ -5359,13 +5458,19 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
           '<div style="padding-top:8px;font-size:12px;color:var(--text-faint);">'+
             (notasCount ? notasCount+' nota(s) emitida(s) para este cliente.' : 'Nenhuma nota emitida para este cliente ainda.')+
           '</div>'+
+          '<div style="padding-top:6px;font-size:12.5px;color:var(--text);">'+
+            (notaAtual ? 'Nota desta venda: <b>#'+escHtml(String(notaAtual.vendaNum))+'</b> · '+escHtml(fmtDateTimeBR(notaAtual.createdAt))+
+              (notaAtual.atualizadoEm ? ' · atualizada em '+escHtml(fmtDateTimeBR(notaAtual.atualizadoEm)) : '')
+              : 'Esta venda ainda não tem nota emitida.')+
+          '</div>'+
         '</div>'+
         '<div class="modal-actions" style="justify-content:space-between;margin-top:16px;flex-wrap:wrap;gap:8px;">'+
           '<button class="btn ghost small" id="clFechar">Fechar</button>'+
           '<span style="display:flex;gap:8px;flex-wrap:wrap;">'+
             '<button class="btn ghost small" id="clUnlink" style="color:var(--red);">Remover vínculo</button>'+
             '<button class="btn ghost small" id="clTrocar">Trocar cliente</button>'+
-            '<button class="btn primary small" id="clEditar">✎ Editar dados</button>'+
+            '<button class="btn ghost small" id="clEditar">✎ Editar dados</button>'+
+            '<button class="btn primary small" id="clReimprimir" title="'+(notaAtual ? 'Gera a nota de novo com os dados atuais da venda e troca a nota anterior (mesmo número)' : 'Gera a nota desta venda')+'">🖨 '+(notaAtual ? 'Reimprimir nota atualizada' : 'Gerar nota')+'</button>'+
           '</span>'+
         '</div>'+
       '</div>';
@@ -5379,6 +5484,13 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     document.getElementById("clEditar").addEventListener("click", function(){
       state.modal = {type:"customerForm", customerId: customer.id, error:""};
       render();
+    });
+    document.getElementById("clReimprimir").addEventListener("click", function(){
+      if (!row) return;
+      if (notaAtual && !confirm("Substituir a nota #"+notaAtual.vendaNum+" pelos dados atuais desta venda? A nota anterior será trocada (o número continua o mesmo).")) return;
+      state.modal = null;
+      render();
+      printNota(row, customer, true);
     });
     document.getElementById("clUnlink").addEventListener("click", function(){
       if (row){ row.clienteId = ""; scheduleSave(); }
@@ -5501,9 +5613,9 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
             '<button type="button" class="btn small'+(tipoAtual==="cnpj"?" primary":" ghost")+'" id="cfTipoCnpj" style="flex:1;">Pessoa jurídica (CNPJ)</button>'+
           '</div>'+
           '<label id="cfDocLabel">'+(tipoAtual==="cnpj"?"CNPJ":"CPF")+'</label>'+
-          '<input type="text" id="cfDocumento" placeholder="'+(tipoAtual==="cnpj"?"00.000.000/0000-00":"000.000.000-00")+'" value="'+escAttr(docInfo.documento||"")+'">'+
+          '<input type="text" inputmode="numeric" autocomplete="off" id="cfDocumento" placeholder="'+(tipoAtual==="cnpj"?"00.000.000/0000-00":"000.000.000-00")+'" value="'+escAttr(formatarDocumento(tipoAtual, docInfo.documento||""))+'">'+
           '<label>E-mail</label><input type="email" id="cfEmail" placeholder="cliente@exemplo.com" value="'+escAttr(customer?customer.email:"")+'">'+
-          '<label>Telefone</label><input type="text" id="cfTelefone" placeholder="(47) 90000-0000" value="'+escAttr(customer?customer.telefone:"")+'">'+
+          '<label>Telefone</label><input type="text" inputmode="tel" autocomplete="off" id="cfTelefone" placeholder="(47) 99999-9999" value="'+escAttr(customer?formatarTelefone(customer.telefone):"")+'">'+
           '<label>Endereço</label><input type="text" id="cfEndereco" placeholder="Rua, número, bairro, cidade" value="'+escAttr(customer?customer.endereco:"")+'">'+
         '</div>'+
         '<div class="err">'+escHtml(err)+'</div>'+
@@ -5514,6 +5626,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       '</div>';
     document.body.appendChild(div);
     document.getElementById("cfNome").focus();
+    aplicarMascaraInput(document.getElementById("cfDocumento"), tipoAtual==="cnpj" ? mascaraCnpj : mascaraCpf);
+    aplicarMascaraInput(document.getElementById("cfTelefone"), function(d){ return mascaraTelefone(d, false); }, formatarTelefone);
 
     function setTipo(novoTipo){
       state.modal.tipoDocumento = novoTipo;
@@ -5544,9 +5658,9 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       var dados = {
         nome: nome,
         tipoDocumento: tipoAtual,
-        documento: document.getElementById("cfDocumento").value.trim(),
+        documento: formatarDocumento(tipoAtual, document.getElementById("cfDocumento").value),
         email: document.getElementById("cfEmail").value.trim(),
-        telefone: document.getElementById("cfTelefone").value.trim(),
+        telefone: formatarTelefone(document.getElementById("cfTelefone").value),
         endereco: document.getElementById("cfEndereco").value.trim()
       };
       var saved;
