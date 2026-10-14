@@ -141,6 +141,29 @@
     width:auto;height:auto;margin-left:4px;padding:5px 10px;font-size:12px;line-height:1.2;
   }
   .month-nav .label{font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--text-dim);text-transform:capitalize;}
+  .month-nav .label.cal-open{cursor:pointer;padding:7px 12px;border:1px solid var(--border);border-radius:4px;background:var(--panel-alt);color:var(--text);user-select:none;}
+  .month-nav .label.cal-open:hover{border-color:var(--yellow);color:var(--yellow);}
+  .month-nav .label.cal-open::after{content:" ▾";font-size:10px;}
+  /* calendário do Dashboard (abre ao clicar no mês) */
+  .cal-back{position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.35);}
+  .cal-box{position:absolute;width:312px;max-width:calc(100vw - 16px);background:var(--panel);border:1px solid var(--border);border-top:3px solid var(--yellow);border-radius:6px;padding:14px 14px 12px;box-shadow:0 14px 44px rgba(0,0,0,.5);color:var(--text);}
+  .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+  .cal-head b{font-family:'IBM Plex Mono',monospace;font-size:13px;text-transform:capitalize;letter-spacing:.02em;}
+  .cal-head .cal-navs{display:flex;gap:6px;}
+  .cal-head button{width:30px;height:30px;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);border-radius:4px;cursor:pointer;font-size:11px;}
+  .cal-head button:hover{border-color:var(--yellow);color:var(--yellow);}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;text-align:center;}
+  .cal-grid .wd{font-size:11px;color:var(--text-faint);padding:4px 0;font-family:'IBM Plex Mono',monospace;}
+  .cal-grid button{position:relative;aspect-ratio:1/1;width:100%;border:1px solid transparent;border-radius:50%;background:none;color:var(--text);font-size:13px;cursor:pointer;font-family:inherit;padding:0;}
+  .cal-grid button.out{color:var(--text-faint);}
+  .cal-grid button:hover{background:var(--panel-alt);border-color:var(--yellow);}
+  .cal-grid button.hoje{border-color:var(--yellow);color:var(--yellow);font-weight:700;}
+  .cal-grid button.sel{background:var(--yellow);border-color:var(--yellow);color:#14181c;font-weight:700;}
+  .cal-grid button.tem::after{content:"";position:absolute;left:50%;bottom:3px;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:var(--teal);}
+  .cal-grid button.sel.tem::after{background:#14181c;}
+  .cal-foot{display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:11px;color:var(--text-faint);font-family:'IBM Plex Mono',monospace;}
+  .cal-foot button{border:1px solid var(--border);background:var(--panel-alt);color:var(--text);border-radius:4px;padding:6px 12px;cursor:pointer;font-size:12px;}
+  .cal-foot button:hover{border-color:var(--yellow);color:var(--yellow);}
   .big-total{font-size:44px;color:var(--text);line-height:1;margin-bottom:6px;}
   .big-total .cents{font-size:24px;color:var(--text-faint);}
   .hero-left .sub{color:var(--text-dim);font-size:13px;margin-bottom:22px;}
@@ -780,6 +803,59 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
 </div></div>
 
 <script>
+/* Armazenamento grande: troca o localStorage (limite ~5 MB) por um espaço no IndexedDB (centenas de MB),
+   sem mudar o resto do sistema. Nada é apagado: os dados antigos do localStorage são COPIADOS uma vez
+   e continuam lá. Se o navegador não suportar, tudo segue como antes. */
+window.__voReady = new Promise(function(resolve){
+  var done = false; function fim(){ if(!done){ done = true; resolve(); } }
+  try{
+    var real = window.localStorage, DB = "vo_store", ST = "kv";
+    var req = indexedDB.open(DB, 1);
+    req.onupgradeneeded = function(){ req.result.createObjectStore(ST); };
+    req.onerror = req.onblocked = fim;
+    req.onsuccess = function(){
+      try{
+        var db = req.result, mem = Object.create(null), keys = [];
+        var tx = db.transaction(ST, "readonly"), os = tx.objectStore(ST), c = os.openCursor();
+        c.onsuccess = function(){
+          var cur = c.result;
+          if (cur){ mem[cur.key] = cur.value; cur.continue(); return; }
+          // fim da leitura: primeira vez? copia o que já existia no localStorage (sem apagar de lá)
+          var migrar = (mem["__vo_migrado"] !== "1");
+          var novos = {};
+          if (migrar){
+            try{
+              for (var i=0;i<real.length;i++){ var k = real.key(i); if (k!=null && !(k in mem)) novos[k] = real.getItem(k); }
+            }catch(e){}
+            for (var k in novos) mem[k] = novos[k];
+            mem["__vo_migrado"] = "1"; novos["__vo_migrado"] = "1";
+          }
+          function grava(k, v){
+            try{ var t = db.transaction(ST, "readwrite"); if (v===null) t.objectStore(ST).delete(k); else t.objectStore(ST).put(v, k); }
+            catch(e){ console.error("IndexedDB", e); }
+          }
+          for (var kk in novos) grava(kk, novos[kk]);
+          var shim = {
+            getItem: function(k){ k = String(k); return (k in mem && k!=="__vo_migrado") ? mem[k] : null; },
+            setItem: function(k, v){ k = String(k); v = String(v); mem[k] = v; grava(k, v); },
+            removeItem: function(k){ k = String(k); if (k in mem){ delete mem[k]; grava(k, null); } },
+            key: function(i){ var a = Object.keys(mem).filter(function(x){ return x!=="__vo_migrado"; }); return i < a.length ? a[i] : null; },
+            clear: function(){ Object.keys(mem).forEach(function(k){ if (k!=="__vo_migrado"){ delete mem[k]; grava(k, null); } }); }
+          };
+          Object.defineProperty(shim, "length", { get: function(){ return Object.keys(mem).filter(function(x){ return x!=="__vo_migrado"; }).length; } });
+          try{ Object.defineProperty(window, "localStorage", { value: shim, configurable: true, writable: true }); }catch(e){}
+          try{ if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); }catch(e){}
+          fim();
+        };
+        c.onerror = fim;
+      }catch(e){ fim(); }
+    };
+    setTimeout(fim, 8000);
+  }catch(e){ fim(); }
+});
+</script>
+<script>
+window.__voReady.then(function(){
 (function(){
   "use strict";
 
@@ -860,6 +936,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   var K_LEMBRETES = "vo_lembretes";
   var K_NOVOS = "vo_novos:";          // pneus novos: uma chave por mês (vo_novos:AAAA-MM)
   var K_NOVOS_META = "vo_novos_meta";
+  var K_ARQ = "arq:";                 // arquivo morto na nuvem: registros antigos tirados do navegador (nunca apagados)
 
   // ---------- sincronização em nuvem (Supabase) ----------
   // Preencha as duas linhas abaixo com os dados do SEU projeto Supabase
@@ -919,6 +996,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       if (res && !res.error && res.data){
         hadData = res.data.length>0;
         res.data.forEach(function(row){
+          if (row.key.indexOf(K_ARQ)===0) return; // arquivo morto fica só na nuvem (não ocupa espaço do navegador)
           try{ localStorage.setItem(row.key, JSON.stringify(row.value)); }catch(e){}
         });
         cloudStatus = "on";
@@ -954,6 +1032,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       .on("postgres_changes", {event:"*", schema:"public", table:"kv_store"}, function(payload){
         var row = payload.new;
         if (!row || !row.key) return;
+        if (row.key.indexOf(K_ARQ)===0) return; // arquivo morto: só nuvem
         try{ localStorage.setItem(row.key, JSON.stringify(row.value)); }catch(e){}
         if (pendingEchoKeys[row.key] > 0){
           // é só o eco da nossa própria digitação/salvamento — os dados já estão certos localmente,
@@ -988,10 +1067,51 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       return raw ? JSON.parse(raw) : fallback;
     }catch(e){ return fallback; }
   }
+  // ---------- espaço do navegador (localStorage tem ~5 MB) ----------
+  // só os históricos (edições, linhas apagadas, movimentos de estoque, logins) são enxugados; vendas, notas e clientes nunca
+  function lsUso(){
+    var total = 0, itens = [];
+    for (var i=0;i<localStorage.length;i++){
+      var k = localStorage.key(i), v = localStorage.getItem(k) || "";
+      var b = (k.length+v.length)*2; total += b; itens.push({k:k, bytes:b});
+    }
+    itens.sort(function(a,b){ return b.bytes-a.bytes; });
+    return {total:total, itens:itens};
+  }
+  function lsMB(b){ return (b/1048576).toFixed(2).replace(".",",")+" MB"; }
+  function lsLiberarEspaco(nivel){
+    var manter = nivel>=2 ? 30 : (nivel===1 ? 100 : 200), liberado = 0;
+    [K_EDICOES_LOG, K_LINHAS_APAGADAS, K_ESTOQUE_LOG, K_LOGIN_LOG].forEach(function(k){
+      var raw = localStorage.getItem(k); if (!raw) return;
+      try{
+        var lista = JSON.parse(raw);
+        if (!Array.isArray(lista) || lista.length<=manter) return;
+        var corte = lista.slice(0, lista.length-manter);
+        // nada é apagado: o trecho antigo vai inteiro para a nuvem antes de sair do navegador
+        if (sb && corte.length){
+          cloudPush(K_ARQ+k+":"+Date.now(), {origem:k, enviadoEm:new Date().toISOString(), itens:corte});
+        } else if (!sb){
+          return; // sem nuvem configurada, não corta nada (evita perder histórico)
+        }
+        var novo = JSON.stringify(lista.slice(lista.length-manter));
+        localStorage.setItem(k, novo); liberado += (raw.length-novo.length)*2;
+      }catch(e){}
+    });
+    return liberado;
+  }
   function lsSetJSON(key, obj){
     try{
       try{ auditarVendas(key, obj); }catch(e){ /* a auditoria nunca pode impedir de salvar */ }
-      localStorage.setItem(key, JSON.stringify(obj));
+      var txt = JSON.stringify(obj);
+      try{ localStorage.setItem(key, txt); }
+      catch(e){
+        var ok = false;
+        for (var n=0; n<3 && !ok; n++){
+          lsLiberarEspaco(n);
+          try{ localStorage.setItem(key, txt); ok = true; }catch(e2){}
+        }
+        if (!ok) return false;
+      }
       cloudPush(key, obj);
       return true;
     }
@@ -1000,8 +1120,19 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   function getRows(date){
     return Promise.resolve(lsGetJSON(K_ROWS+date, []));
   }
+  // total e nº de vendas de cada dia do mês, recalculados direto das vendas lançadas (assim o gráfico
+  // "Evolução diária" nunca fica defasado por causa de um resumo salvo antigo ou de um dia salvo por outro caminho)
   function getSummary(month){
-    return Promise.resolve(lsGetJSON(K_SUMMARY+month, {}));
+    var summary = {};
+    listAllDates().forEach(function(d){
+      if (d.slice(0,7)!==month) return;
+      var rows = lsGetJSON(K_ROWS+d, []);
+      if (!Array.isArray(rows)) rows = [];
+      var total = 0;
+      for (var i=0;i<rows.length;i++) if (rows[i]) total += computeValor(rows[i]);
+      summary[d] = {total: total, count: rows.length};
+    });
+    return Promise.resolve(summary);
   }
   function computeSubtotal(row){
     return parseNum(row.alinhamento)+parseNum(row.valorBicos)+parseNum(row.valorCambagem)+
@@ -1081,8 +1212,12 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     for (var i=0;i<rows.length;i++) total += computeValor(rows[i]);
     summary[date] = {total: total, count: rows.length};
     var ok2 = lsSetJSON(K_SUMMARY+month, summary);
+    // qualquer venda salva invalida o que o Dashboard tinha guardado desse mês
+    try{ delete state.monthSummaryCache[month]; delete state.monthPartsCache[month]; }catch(e){}
     if (!ok1 || !ok2){
-      return Promise.reject(new Error("Não foi possível salvar — armazenamento do navegador cheio ou bloqueado."));
+      var uso = lsUso();
+      return Promise.reject(new Error("Não foi possível salvar — armazenamento do navegador cheio ou bloqueado. Em uso: "+lsMB(uso.total)+" (maiores: "+
+        uso.itens.slice(0,3).map(function(i){ return i.k+" "+lsMB(i.bytes); }).join(", ")+")."));
     }
     return Promise.resolve();
   }
@@ -2460,7 +2595,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         n2(parseNum(r.alinhamento)), n2(parseNum(r.valorBicos)), n2(parseNum(r.valorCambagem)), n2(parseNum(r.valorRodas)),
         n2(parseNum(r.valorPecas)), n2(parseNum(r.outros)+parseNum(r.maoDeObra)), n2(porP.Renan), n2(porP["João"]), n2(porP.Wesley),
         n2(parseNum(r.valorPneus)), n2(descontoValor(r)), n2(computeValor(r)), r.formaPagamento||"", (r.pago==="✅"?"Pago":"Pendente"),
-        (r.vendedor && r.vendedor!=="Nenhum" ? r.vendedor : "")
+        vendedorEfetivo(r.vendedor)
       ].map(csvEscape).join(";"));
     });
     linhas.push("");
@@ -2515,6 +2650,9 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
           '<button class="btn ghost small" id="ferCsv">⇩ Exportar o mês (CSV/Excel)</button>'+
         '</div>'+
         '<div id="ferRel"></div>'+
+        '<h4 style="margin:18px 0 6px;font-size:17px;">Importar tabelas antigas</h4>'+
+        '<p>Traz para o sistema as tabelas de vendas antigas (arquivos .html), várias de uma vez. A data de cada tabela vem do nome do arquivo.</p>'+
+        '<button class="btn ghost small" id="ferImportar" style="margin-bottom:6px;">📥 Importar tabelas antigas (HTML)</button>'+
         '<h4 style="margin:18px 0 6px;font-size:17px;">Backups automáticos</h4>'+
         '<p>O sistema guarda uma cópia por dia (as últimas 14) neste navegador. Restaurar também atualiza a nuvem.</p>'+
         '<button class="btn ghost small" id="ferSnapNow" style="margin-bottom:10px;">Fazer backup agora</button>'+
@@ -2560,12 +2698,473 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         });
       });
     }
+    q("#ferImportar").addEventListener("click", function(){ state.modal = {type:"importTabelas", itens:[]}; renderModal(); });
     q("#ferMes").addEventListener("change", desenharRel);
     q("#ferCsv").addEventListener("click", function(){ exportarMesCSV(q("#ferMes").value || mes); });
     q("#ferSnapNow").addEventListener("click", function(){ makeSnapshot("Backup manual","man-"+Date.now()).then(desenharSnaps).catch(function(e){ alert("Não foi possível guardar o backup: "+(e&&e.message?e.message:e)); }); });
     q("#ferVoltar").addEventListener("click", function(){ state.modal = null; render(); });
     div.addEventListener("click", function(e){ if (e.target===div){ state.modal = null; render(); } });
     desenharRel(); desenharSnaps(); desenharMig();
+  }
+
+  // ======================= IMPORTAR TABELAS ANTIGAS (HTML) — só master =======================
+  function impNorm(t){ return String(t===undefined||t===null ? "" : t).replace(/\u00a0/g," ").replace(/[ \t\r\f\v]+/g," ").trim(); }
+  function impSemAcento(t){ return impNorm(t).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase(); }
+  function impNumero(t){
+    var x = String(t).replace(/R\$/gi,"").replace(/\s/g,"");
+    if (!/^[\d.,]+$/.test(x)) return NaN;
+    if (x.indexOf(",")>-1) x = x.replace(/\./g,"").replace(",",".");
+    else if (/^\d{1,3}(\.\d{3})+$/.test(x)) x = x.replace(/\./g,"");
+    var n = parseFloat(x);
+    return isNaN(n) ? NaN : n;
+  }
+  function impDinheiro(t){ var n = impNumero(impNorm(t)); return (isNaN(n) || n===0) ? "" : (Math.round(n*100)/100 % 1===0 ? String(Math.round(n*100)/100) : (Math.round(n*100)/100).toFixed(2)); }
+  function impInteiro(t){ var x = impNorm(t); return /^\d+$/.test(x) ? String(parseInt(x,10)) : "0"; }
+  // cabeçalho da tabela antiga -> campo do sistema novo
+  var IMP_CAMPOS = {quantidade:"quantidade", servico:"servico", alinh:"alinhamento", alinhamento:"alinhamento",
+    qbicos:"qtdBicos", bicos:"valorBicos", qcamb:"qtdCambagem", cambagem:"valorCambagem",
+    qbalan:"qtdBalanceamento", balanceamento:"valorBalanceamento", qrodas:"qtdRodas", rodas:"valorRodas",
+    peca:"valorPecas", pecas:"valorPecas", maodeobra:"maoDeObra", pneus:"valorPneus", valor:"valorAntigo",
+    formadepagamento:"formaPagamento", pago:"pago", carro:"carro", vendedor:"vendedor"};
+  var IMP_ORDEM_PADRAO = ["quantidade","servico","alinhamento","qtdBicos","valorBicos","qtdCambagem","valorCambagem","qtdBalanceamento",
+    "valorBalanceamento","qtdRodas","valorRodas","valorPecas","maoDeObra","valorPneus","valorAntigo","formaPagamento","pago","carro","vendedor"];
+  function impMapaColunas(cab){
+    var mapa = cab.map(function(h){ return IMP_CAMPOS[impSemAcento(h).replace(/[^a-z0-9]/g,"")] || ""; });
+    var reconhecidas = mapa.filter(Boolean).length;
+    return reconhecidas>=8 ? mapa : IMP_ORDEM_PADRAO.slice();
+  }
+  function impMetodo(t){
+    var x = impSemAcento(t);
+    if (x.indexOf("din")===0) return "Dinheiro";
+    if (x.indexOf("deb")===0) return "Débito";
+    if (x.indexOf("cred")===0) return "Crédito";
+    if (x.indexOf("pix")===0) return "Pix";
+    return "";
+  }
+  // forma de pagamento antiga ("Pix", "Débito/Pix"...) -> forma do sistema novo; combinações viram "Múltiplo" com os valores
+  // lidos da observação da venda (ex.: "849 pix e 31 cartão"); se não der para saber, divide igualmente e avisa
+  function impPagamento(forma, total, detalhe){
+    var metodos = [];
+    String(forma||"").split(/[\/+&,;]| e /i).forEach(function(p){
+      var m = impMetodo(p); if (m && metodos.indexOf(m)===-1) metodos.push(m);
+    });
+    metodos = metodos.slice(0,4);
+    if (!metodos.length) return {formaPagamento:"Nenhum"};
+    if (metodos.length===1 || !(total>0)) return {formaPagamento:metodos[0]};
+    var achados = {}, t = impSemAcento(detalhe).replace(/r\$\s*/g,"");
+    var re = /(\d+(?:[.,]\d+)?)\s*(?:reais\s*)?(?:no|na|em|de|do|da|pelo|pela|via)?\s*(pix|dinheiro|din|debito|credito|cartao)\b/g, m;
+    var cartoes = metodos.filter(function(x){ return x==="Débito" || x==="Crédito"; });
+    while ((m = re.exec(t))){
+      var v = impNumero(m[1]); if (isNaN(v) || !(v>0)) continue;
+      var nome = m[2]==="pix" ? "Pix" : (m[2]==="dinheiro"||m[2]==="din" ? "Dinheiro" : (m[2]==="debito" ? "Débito" : (m[2]==="credito" ? "Crédito" : (cartoes.length===1 ? cartoes[0] : ""))));
+      if (nome && metodos.indexOf(nome)>-1) achados[nome] = (achados[nome]||0) + v;
+    }
+    var conhecidos = metodos.filter(function(x){ return achados[x]>0; });
+    var valores = null;
+    if (conhecidos.length===metodos.length){
+      var soma = 0; conhecidos.forEach(function(x){ soma += achados[x]; });
+      if (Math.abs(soma-total)<=0.01) valores = metodos.map(function(x){ return Math.round(achados[x]*100)/100; });
+    } else if (conhecidos.length===metodos.length-1){
+      var soma2 = 0; conhecidos.forEach(function(x){ soma2 += achados[x]; });
+      var resto = Math.round((total-soma2)*100)/100;
+      if (resto>0.005) valores = metodos.map(function(x){ return achados[x]>0 ? Math.round(achados[x]*100)/100 : resto; });
+    }
+    var aproximado = false;
+    if (!valores){
+      aproximado = true;
+      var cent = Math.round(total*100), base = Math.floor(cent/metodos.length);
+      valores = metodos.map(function(x,i){ return (i===metodos.length-1 ? cent-base*(metodos.length-1) : base)/100; });
+    }
+    return {formaPagamento:"Múltiplo (até 4 formas)",
+            pagamentosMultiplos: metodos.map(function(x,i){ return {metodo:x, valor:valores[i]}; }),
+            aproximado: aproximado};
+  }
+  // converte uma linha da tabela antiga (lista de textos das células) numa venda do sistema novo
+  function impConverterLinha(cells, mapa, detalheTxt, nomeArquivo){
+    var v = {};
+    mapa.forEach(function(campo, i){ if (campo) v[campo] = cells[i]===undefined ? "" : cells[i]; });
+    var row = {
+      id: uid(), quantidade: impInteiro(v.quantidade), medida:"", medidaId:"", medidaBaixa:0, servico:"",
+      alinhamento: impDinheiro(v.alinhamento),
+      qtdBicos: impInteiro(v.qtdBicos), valorBicos: impDinheiro(v.valorBicos),
+      qtdCambagem: impInteiro(v.qtdCambagem), valorCambagem: impDinheiro(v.valorCambagem),
+      qtdBalanceamento: impInteiro(v.qtdBalanceamento), valorBalanceamento: impDinheiro(v.valorBalanceamento),
+      qtdRodas: impInteiro(v.qtdRodas), valorRodas: impDinheiro(v.valorRodas),
+      outros: impDinheiro(v.maoDeObra), // a antiga "Mão de obra" hoje é o campo Serviço
+      valorPecas: impDinheiro(v.valorPecas), maoDeObra:"", valorPneus: impDinheiro(v.valorPneus),
+      formaPagamento:"Nenhum", pago: (impNorm(v.pago).indexOf("✅")>-1 ? "✅" : "❌"),
+      carro:"Carro 1", vendedor: VENDEDORES[0], detalhes:"", clienteId:""
+    };
+    var notas = [];
+    // coluna "Serviço" da tabela antiga: medida do pneu (225/55/18) ou só um rótulo (RODA, SERVIÇO)
+    var serv = impNorm(v.servico);
+    if (serv){
+      if (/\d{2,3}\s*\/\s*\d{2}/.test(serv)) row.medida = serv;
+      else if (!/^servi[cç]o$/i.test(serv)) notas.push("Serviço: "+serv);
+    }
+    // venda sem pneu: a quantidade antiga era só o valor padrão da célula
+    if (!row.medida && !row.valorPneus) row.quantidade = "0";
+    var car = impNorm(v.carro);
+    if (/^carro\s*\d+$/i.test(car)) row.carro = "Carro "+car.replace(/\D/g,"");
+    var vend = impNorm(v.vendedor);
+    if (vend && !/^vendedor$/i.test(vend)){
+      var achou = VENDEDORES.filter(function(x){ return x.toLowerCase()===vend.toLowerCase(); })[0];
+      if (achou) row.vendedor = achou; else notas.push("Vendedor: "+vend);
+    }
+    var det = String(detalheTxt||"").replace(/\u00a0/g," ").trim();
+    if (det) notas.push(det);
+    row.detalhes = notas.join("\n");
+    var total = computeValor(row);
+    var pg = impPagamento(v.formaPagamento, total, det);
+    row.formaPagamento = pg.formaPagamento;
+    if (pg.pagamentosMultiplos) row.pagamentosMultiplos = pg.pagamentosMultiplos;
+    row.importadoDe = nomeArquivo;
+    var vazia = !(total>0) && !row.medida && !row.detalhes && parseNum(row.quantidade)===0 && !(parseNum(row.qtdBicos)>0);
+    return {row: row, vazia: vazia, aproximado: !!pg.aproximado, valorAntigo: impNumero(impNorm(v.valorAntigo))};
+  }
+  // lê o texto de um arquivo .html antigo e devolve a data (do nome do arquivo) e as vendas já convertidas
+  function impDataDoNome(nome){
+    var m = /(\d{1,2})[-_.\/](\d{1,2})[-_.\/](\d{4})/.exec(nome), d, mo, y;
+    if (m){ d = +m[1]; mo = +m[2]; y = +m[3]; }
+    else { m = /(\d{4})[-_.](\d{1,2})[-_.](\d{1,2})/.exec(nome); if (m){ y = +m[1]; mo = +m[2]; d = +m[3]; } }
+    if (!m) return "";
+    var dt = new Date(y, mo-1, d);
+    if (y<2000 || y>2100 || dt.getFullYear()!==y || dt.getMonth()!==mo-1 || dt.getDate()!==d) return "";
+    return y+"-"+pad(mo)+"-"+pad(d);
+  }
+  // ---------- formato simples das tabelas mais antigas: Quantidade | Serviço | Valor | Forma de Pagamento | Vendedor ----------
+  // cada linha é UM item (pneu, alinhamento, bicos, balanceamento, peça...). Aqui eles são lidos pelo que o texto do "Serviço" diz.
+  function impFmtNum(n){ var r = Math.round(n*100)/100; return r===0 ? "" : (r%1===0 ? String(r) : r.toFixed(2)); }
+  function impColunasSimples(tabela){
+    var trs = [].slice.call(tabela.querySelectorAll("tr")), hi = -1, idx = null;
+    for (var i=0;i<trs.length;i++){
+      var cs = [].map.call(trs[i].querySelectorAll("th,td"), function(c){ return impSemAcento(c.textContent).replace(/[^a-z0-9]/g,""); });
+      var si = cs.indexOf("servico"), vi = cs.indexOf("valor");
+      if (si>-1 && vi>-1 && cs.length>=3){
+        hi = i; idx = {q:cs.indexOf("quantidade"), s:si, v:vi, p:cs.indexOf("formadepagamento"), d:cs.indexOf("vendedor")};
+        break;
+      }
+    }
+    if (hi<0) return null;
+    var linhas = [];
+    for (var j=hi+1;j<trs.length;j++){
+      var tds = trs[j].querySelectorAll("td");
+      if (!tds.length) continue;
+      var cells = [].map.call(tds, function(td){ return impNorm(td.textContent); });
+      if (cells.length<3){ // linha solta: "Total: ..." (ignora) ou uma observação da linha de cima
+        if (/^total/i.test(cells[0]||"")) continue;
+        if (linhas.length && cells[0]) linhas[linhas.length-1].detalhe += (linhas[linhas.length-1].detalhe ? "\n" : "")+cells[0];
+        continue;
+      }
+      linhas.push({q: idx.q>-1 ? cells[idx.q] : "1", s: cells[idx.s]||"", v: cells[idx.v]||"",
+                   p: idx.p>-1 ? (cells[idx.p]||"") : "", d: idx.d>-1 ? (cells[idx.d]||"") : "", detalhe:""});
+    }
+    return linhas;
+  }
+  function impConverterSimples(linhas, nome, res){
+    var grupos = [], juntadas = 0;
+    function nova(){
+      return {num:{}, notas:[], valorAntigo:0, pagto:"", forma:"", vendedor:"",
+        row:{id: uid(), quantidade:"0", medida:"", medidaId:"", medidaBaixa:0, servico:"", alinhamento:"",
+          qtdBicos:"0", valorBicos:"", qtdCambagem:"0", valorCambagem:"", qtdBalanceamento:"0", valorBalanceamento:"",
+          qtdRodas:"0", valorRodas:"", outros:"", valorPecas:"", maoDeObra:"", valorPneus:"",
+          formaPagamento:"Nenhum", pago:"✅", carro:"Carro 1", vendedor:VENDEDORES[0], detalhes:"", clienteId:""}};
+    }
+    function soma(g, campo, n){ g.num[campo] = (g.num[campo]||0) + n; }
+    linhas.forEach(function(l){
+      var texto = impNorm(l.s), t = impSemAcento(texto);
+      var valor = impNumero(impNorm(l.v)); if (isNaN(valor)) valor = 0;
+      if (!texto && !(valor>0)) return;
+      var qtd = parseInt(impNorm(l.q), 10); if (isNaN(qtd) || qtd<0) qtd = 0;
+      var ehPneu = /\d{2,3}\s*\/\s*\d{2}/.test(texto) || /^\d{2}\s*c$/i.test(texto);
+      var pagto = impMetodo(l.p) || impSemAcento(l.p);
+      var g = grupos.length ? grupos[grupos.length-1] : null;
+      // pneu abre uma venda nova; serviço/peça com o mesmo pagamento da linha de cima entra na mesma venda
+      if (ehPneu || !g || g.pagto!==pagto){ g = nova(); g.pagto = pagto; g.forma = l.p; grupos.push(g); }
+      else juntadas++;
+      g.valorAntigo += valor;
+      if (ehPneu){
+        g.row.medida = texto; g.row.quantidade = String(qtd||1); soma(g,"valorPneus",valor);
+      } else if (/alinh/.test(t)){ soma(g,"alinhamento",valor);
+      } else if (/bico/.test(t)){ soma(g,"qtdBicos",qtd||1); soma(g,"valorBicos",valor);
+      } else if (/cambag/.test(t)){ soma(g,"qtdCambagem",qtd||1); soma(g,"valorCambagem",valor);
+      } else if (/balan/.test(t)){ soma(g,"qtdBalanceamento",qtd||1); soma(g,"valorBalanceamento",valor);
+      } else if (/roda|desempeno/.test(t)){ soma(g,"qtdRodas",qtd||1); soma(g,"valorRodas",valor);
+      } else if (/porca|parafuso|prisioneiro|pec[ao]s?\b|valvula|capa|tampa|calota/.test(t)){
+        soma(g,"valorPecas",valor); g.notas.push("Peça: "+texto+(qtd>1 ? " (x"+qtd+")" : ""));
+      } else { soma(g,"outros",valor); g.notas.push("Serviço: "+texto+(qtd>1 ? " (x"+qtd+")" : "")); }
+      var vend = impNorm(l.d);
+      if (vend){
+        var achou = VENDEDORES.filter(function(x){ return x.toLowerCase()===vend.toLowerCase(); })[0];
+        if (achou){ if (!g.vendedor){ g.vendedor = achou; g.row.vendedor = achou; } }
+        else g.notas.push("Vendedor: "+vend);
+      }
+      if (l.detalhe) g.notas.push(l.detalhe);
+    });
+    var out = grupos.map(function(g){
+      var r = g.row;
+      Object.keys(g.num).forEach(function(k){
+        r[k] = /^qtd/.test(k) ? String(Math.round(g.num[k])) : impFmtNum(g.num[k]);
+      });
+      r.detalhes = g.notas.join("\n");
+      var total = computeValor(r);
+      var pg = impPagamento(g.forma, total, r.detalhes);
+      r.formaPagamento = pg.formaPagamento;
+      if (pg.pagamentosMultiplos) r.pagamentosMultiplos = pg.pagamentosMultiplos;
+      r.importadoDe = nome;
+      return {row:r, vazia:false, aproximado:!!pg.aproximado, valorAntigo:g.valorAntigo};
+    });
+    if (res){
+      res.avisos.push("Tabela no formato simples (uma linha por item): li pelo texto do serviço.");
+      if (juntadas) res.avisos.push(juntadas+" linha(s) de serviço/peça foram juntadas à venda de cima com o mesmo pagamento — confira se faz sentido.");
+    }
+    return out;
+  }
+  // ---------- medidas que não existem no estoque: cadastra com quantidade 0 ----------
+  function impChaveMedida(m){
+    var s = impNorm(m), nums = s.match(/\d+/g) || [];
+    if (nums.length>=3) return nums.slice(0,3).join("/") + (/recap/i.test(s) ? "|recap" : "");
+    return impSemAcento(s).replace(/[^a-z0-9]/g,"");
+  }
+  function impMedidasFaltando(rows){
+    var tem = {}, vistas = {}, out = [];
+    loadEstoque().forEach(function(i){ tem[impChaveMedida(i.medida)] = true; });
+    (rows||[]).forEach(function(r){
+      var m = impNorm(r && r.medida); if (!m) return;
+      var k = impChaveMedida(m);
+      if (!k || tem[k] || vistas[k]) return;
+      vistas[k] = true; out.push(m);
+    });
+    return out;
+  }
+  function impCadastrarMedidas(rows){
+    var faltam = impMedidasFaltando(rows);
+    faltam.forEach(function(m){ addEstoqueItem({medida:m, marca:"", quantidade:0, preco:0, custo:0, minimo:0}); });
+    return faltam.length;
+  }
+  function impLerHtml(texto, nome){
+    var res = {nome:nome, date: impDataDoNome(nome), rows:[], avisos:[], erro:"", totalNovo:0, totalAntigo:0, totalArquivo:null, divergentes:0, aproximados:0};
+    var doc;
+    try{ doc = new DOMParser().parseFromString(texto, "text/html"); }catch(e){ res.erro = "Não consegui abrir este arquivo."; return res; }
+    var tabela = doc.querySelector("table#minhaTabela") || doc.querySelector("table");
+    if (!tabela){ res.erro = "Não encontrei nenhuma tabela neste arquivo."; return res; }
+    if (!res.date){
+      var mm = /Data(?: da Exporta[^:]*)?:\s*(\d{1,2}[-\/]\d{1,2}[-\/]\d{4})/i.exec(doc.body ? doc.body.textContent : "");
+      var dd = mm ? impDataDoNome(mm[1]) : "";
+      if (dd){ res.date = dd; res.avisos.push("A data não estava no nome do arquivo; usei a data escrita dentro da tabela."); }
+    }
+    if (!res.date){ res.erro = "Não achei a data no nome do arquivo (ex.: VENDAS_21-08-2026.html)."; return res; }
+    var cab = [].map.call(tabela.querySelectorAll("thead th"), function(th){ return th.textContent; });
+    if (!cab.length){ var thr = tabela.querySelector("tr"); if (thr) cab = [].map.call(thr.querySelectorAll("th"), function(th){ return th.textContent; }); }
+    var mapa = impMapaColunas(cab);
+    var reconhecidas = cab.filter(function(h){ return IMP_CAMPOS[impSemAcento(h).replace(/[^a-z0-9]/g,"")]; }).length;
+    var simples = reconhecidas>=8 ? null : impColunasSimples(tabela);
+    var linhas = [];
+    [].forEach.call(tabela.querySelectorAll("tr"), function(tr){
+      if (tr.parentNode && tr.parentNode.tagName==="THEAD") return;
+      var tds = tr.querySelectorAll("td");
+      if (!tds.length) return;
+      if (tr.classList.contains("exibir-row") || (tds.length===1 && tds[0].colSpan>1)){
+        if (linhas.length) linhas[linhas.length-1].detalhe = tds[0].textContent;
+        return;
+      }
+      linhas.push({cells: [].map.call(tds, function(td){ return td.textContent; }), detalhe:""});
+    });
+    var convertidos = simples ? impConverterSimples(simples, nome, res)
+      : linhas.map(function(l){ return impConverterLinha(l.cells, mapa, l.detalhe, nome); });
+    convertidos.forEach(function(c){
+      if (c.vazia) return;
+      res.rows.push(c.row);
+      var novo = computeValor(c.row);
+      res.totalNovo += novo;
+      if (!isNaN(c.valorAntigo)){
+        res.totalAntigo += c.valorAntigo;
+        if (Math.abs(c.valorAntigo-novo)>0.01) res.divergentes++;
+      }
+      if (c.aproximado) res.aproximados++;
+    });
+    if (!res.rows.length){ res.erro = "Nenhuma venda encontrada nesta tabela."; return res; }
+    var tg = /Total(?:\s+Geral)?:\s*([\d.,]+)/i.exec(doc.body ? doc.body.textContent : "");
+    if (tg){ var n = impNumero(tg[1]); if (!isNaN(n)) res.totalArquivo = n; }
+    return res;
+  }
+  function impLerArquivo(file){
+    return new Promise(function(resolve){
+      var fr = new FileReader();
+      fr.onload = function(){ resolve(impLerHtml(String(fr.result||""), file.name)); };
+      fr.onerror = function(){ resolve({nome:file.name, erro:"Não consegui ler este arquivo.", rows:[]}); };
+      fr.readAsText(file, "utf-8");
+    });
+  }
+  function impDiaTemDados(rows){
+    return (rows||[]).some(function(r){ return r && (computeSubtotal(r)>0 || parseNum(r.quantidade)>0 || r.medida); });
+  }
+  // define, para cada arquivo lido, o que fazer por padrão (nunca mexe em dia que já tem vendas sem você escolher)
+  function impPrepararAcoes(itens){
+    var vistas = {};
+    itens.sort(function(a,b){ return (a.date||"").localeCompare(b.date||"") || a.nome.localeCompare(b.nome); });
+    itens.forEach(function(it){
+      if (it.erro){ it.acao = "skip"; return; }
+      var atuais = lsGetJSON(K_ROWS+it.date, []);
+      it.existentes = atuais.length;
+      it.temDados = impDiaTemDados(atuais);
+      it.jaImportado = atuais.some(function(r){ return r && r.importadoDe===it.nome; });
+      it.dupLote = !!vistas[it.date];
+      it.medidasNovas = impMedidasFaltando(it.rows);
+      if (it.jaImportado || it.temDados || it.dupLote) it.acao = "skip"; else it.acao = "import";
+      if (!it.erro) vistas[it.date] = true;
+    });
+    return itens;
+  }
+  function impExecutar(itens, cb){
+    var res = {arquivos:0, vendas:0, pulados:0, medidasCriadas:0, linhas:[]};
+    function aplicar(){
+      var seq = Promise.resolve();
+      itens.forEach(function(it){
+        seq = seq.then(function(){
+          if (it.erro || it.acao==="skip"){ res.pulados++; return; }
+          var atuais = lsGetJSON(K_ROWS+it.date, []);
+          var novas;
+          if (it.acao==="merge" && impDiaTemDados(atuais)) novas = atuais.concat(it.rows);
+          else {
+            if (it.acao==="replace") atuais.forEach(function(r){ if (r && r.medidaId) releaseRowEstoque(r); }); // devolve ao estoque o que essas vendas tinham baixado
+            novas = it.rows;
+          }
+          res.medidasCriadas += impCadastrarMedidas(it.rows);
+          return saveRows(it.date, novas).then(function(){
+            res.arquivos++; res.vendas += it.rows.length;
+            res.linhas.push({nome:it.nome, date:it.date, vendas:it.rows.length, acao:it.acao});
+          });
+        });
+      });
+      return seq;
+    }
+    makeSnapshot("Antes de importar tabelas antigas", "pre-"+Date.now()).catch(function(){}).then(aplicar).then(function(){
+      state.monthSummaryCache = {}; state.monthPartsCache = {};
+      cb(null, res);
+    }).catch(function(e){ cb(e, res); });
+  }
+
+  function renderImportTabelasModal(){
+    if (state.role!=="master"){ state.modal = null; return; }
+    var m = state.modal;
+    var itens = m.itens || [];
+    var div = document.createElement("div");
+    div.className = "overlay";
+
+    function opcoes(it){
+      var o = [];
+      if (it.temDados || it.jaImportado){
+        o.push(["skip", it.jaImportado ? "Pular (este arquivo já foi importado)" : "Pular (o dia já tem vendas)"]);
+        o.push(["merge","Somar às vendas do dia"]);
+        o.push(["replace","Substituir as vendas do dia"]);
+      } else if (it.dupLote){
+        o.push(["skip","Pular (outro arquivo da lista tem a mesma data)"]);
+        o.push(["merge","Somar às vendas desse dia"]);
+      } else {
+        o.push(["import","Importar"]);
+        o.push(["skip","Pular"]);
+      }
+      return o;
+    }
+    var corpo;
+    if (m.resultado){
+      var r = m.resultado;
+      corpo = '<p style="margin:14px 0 6px;"><b>'+r.vendas+' venda(s)</b> importada(s) de '+r.arquivos+' arquivo(s)'+(r.pulados ? ' · '+r.pulados+' pulado(s)' : '')+(r.medidasCriadas ? ' · '+r.medidasCriadas+' medida(s) nova(s) cadastrada(s) no estoque' : '')+'.</p>'+
+        (m.erro ? '<p style="color:var(--red);">Parou no meio: '+escHtml(m.erro)+'</p>'+
+          '<button class="btn ghost small" id="impLiberar">☁️ Mandar históricos antigos pra nuvem</button> <span id="impLiberarMsg" style="font-size:12.5px;color:var(--text-dim);"></span>' : '')+
+        '<div style="border:1px solid var(--border-soft);border-radius:4px;max-height:260px;overflow-y:auto;">'+
+        r.linhas.map(function(l){
+          return '<div style="padding:8px 10px;border-bottom:1px solid var(--border-soft);font-size:13px;">✓ <b>'+escHtml(fmtDateBR(l.date))+'</b> · '+l.vendas+' venda(s) <span style="color:var(--text-dim);">— '+escHtml(l.nome)+'</span></div>';
+        }).join("")+'</div>'+
+        '<p style="font-size:12.5px;color:var(--text-dim);margin-top:10px;">Uma cópia de segurança foi guardada antes (🛠 Ferramentas → Backups automáticos), caso queira desfazer.</p>';
+    } else if (m.lendo){
+      corpo = '<p style="margin:16px 0;">Lendo os arquivos…</p>';
+    } else if (!itens.length){
+      corpo = '<p style="margin:14px 0 4px;">Escolha um ou mais arquivos <b>.html</b> das tabelas antigas. A <b>data vem do nome do arquivo</b> (ex.: <b>VENDAS_21-08-2026.html</b> vira 21/08/2026). Nada é gravado antes de você conferir.</p>';
+    } else {
+      corpo = itens.map(function(it, i){
+        if (it.erro){
+          return '<div class="imp-item" style="border:1px solid var(--border-soft);border-radius:6px;padding:10px 12px;margin-top:8px;">'+
+            '<div style="font-size:13.5px;"><b>'+escHtml(it.nome)+'</b></div>'+
+            '<div style="font-size:12.5px;color:var(--red);margin-top:3px;">✕ '+escHtml(it.erro)+' Este arquivo não será importado.</div></div>';
+        }
+        var avisos = [];
+        if (it.totalArquivo!==null){
+          if (Math.abs(it.totalArquivo-it.totalNovo)<=0.01) avisos.push('<span style="color:var(--green);">✓ o total bate com o "Total Geral" do arquivo</span>');
+          else avisos.push('<span style="color:var(--yellow);">⚠ o arquivo diz Total Geral '+fmtCurrency(it.totalArquivo)+', mas as linhas somam '+fmtCurrency(it.totalNovo)+'</span>');
+        }
+        if (it.divergentes) avisos.push('<span style="color:var(--yellow);">⚠ '+it.divergentes+' linha(s) com a coluna Valor diferente da soma dos itens</span>');
+        if (it.aproximados) avisos.push('<span style="color:var(--yellow);">⚠ '+it.aproximados+' pagamento(s) combinado(s) divididos meio a meio (confira depois)</span>');
+        (it.avisos||[]).forEach(function(a){ avisos.push('<span style="color:var(--text-dim);">'+escHtml(a)+'</span>'); });
+        if (it.medidasNovas && it.medidasNovas.length && it.acao!=="skip") avisos.push('<span style="color:var(--text-dim);">📦 '+it.medidasNovas.length+' medida(s) fora do estoque serão cadastradas com quantidade 0: '+escHtml(it.medidasNovas.join(", "))+'</span>');
+        if (it.temDados) avisos.push('<span style="color:var(--yellow);">⚠ este dia já tem '+it.existentes+' venda(s) lançada(s) no sistema</span>');
+        return '<div class="imp-item" style="border:1px solid var(--border-soft);border-radius:6px;padding:10px 12px;margin-top:8px;">'+
+          '<div style="font-size:13.5px;"><b>'+escHtml(it.nome)+'</b></div>'+
+          '<div style="font-size:13px;margin-top:3px;">→ <b>'+escHtml(fmtDateBR(it.date))+'</b> · '+it.rows.length+' venda(s) · '+fmtCurrency(it.totalNovo)+'</div>'+
+          (avisos.length ? '<div style="font-size:12.5px;margin-top:4px;display:flex;flex-direction:column;gap:2px;">'+avisos.join("")+'</div>' : '')+
+          '<select data-impacao="'+i+'" style="margin-top:8px;width:100%;">'+
+            opcoes(it).map(function(o){ return '<option value="'+o[0]+'"'+(o[0]===it.acao?' selected':'')+'>'+escHtml(o[1])+'</option>'; }).join("")+
+          '</select></div>';
+      }).join("");
+    }
+    var nImportar = itens.filter(function(it){ return !it.erro && it.acao!=="skip"; }).length;
+    div.innerHTML =
+      '<div class="modal wide">'+
+        '<h3>📥 Importar tabelas antigas</h3>'+
+        (m.resultado ? '' :
+          '<label class="btn ghost small" for="impArquivos" style="display:inline-block;margin-top:6px;cursor:pointer;">📂 '+(itens.length ? 'Escolher outros arquivos' : 'Escolher arquivos')+'</label>'+
+          '<input type="file" id="impArquivos" multiple accept=".html,.htm,text/html" style="display:none;">')+
+        '<div style="max-height:52vh;overflow-y:auto;">'+corpo+'</div>'+
+        '<div class="modal-actions" style="margin-top:16px;">'+
+          '<button class="btn ghost small" id="impVoltar">'+(m.resultado ? 'Fechar' : 'Voltar')+'</button>'+
+          (m.resultado ? '' : '<button class="btn primary small" id="impGo"'+(nImportar ? '' : ' disabled')+'>Importar '+(nImportar ? nImportar+' arquivo(s)' : '')+'</button>')+
+        '</div>'+
+      '</div>';
+    document.body.appendChild(div);
+
+    var inp = div.querySelector("#impArquivos");
+    if (inp) inp.addEventListener("change", function(){
+      var arqs = [].slice.call(inp.files||[]);
+      if (!arqs.length) return;
+      m.lendo = true; m.itens = []; renderModal();
+      Promise.all(arqs.map(impLerArquivo)).then(function(lidos){
+        m.lendo = false; m.itens = impPrepararAcoes(lidos); renderModal();
+      });
+    });
+    div.querySelectorAll("[data-impacao]").forEach(function(sel){
+      sel.addEventListener("change", function(){
+        itens[+sel.getAttribute("data-impacao")].acao = sel.value;
+        renderModal();
+      });
+    });
+    function fechar(){
+      state.modal = m.resultado ? null : {type:"ferramentas"};
+      if (m.resultado){
+        if (state.view==="table" && state.date){ getRows(state.date).then(function(rows){ state.rows = rows; render(); }); return; }
+      }
+      render();
+    }
+    div.querySelector("#impVoltar").addEventListener("click", fechar);
+    div.addEventListener("click", function(e){ if (e.target===div) fechar(); });
+    var lib = div.querySelector("#impLiberar");
+    if (lib) lib.addEventListener("click", function(){
+      var antes = lsUso().total, liberado = lsLiberarEspaco(2), depois = lsUso();
+      div.querySelector("#impLiberarMsg").textContent = liberado>0
+        ? "Enviei "+lsMB(liberado)+" de históricos antigos para a nuvem (nada foi apagado). Agora em uso: "+lsMB(depois.total)+". Feche e importe de novo."
+        : "Os históricos já estão enxutos. Em uso: "+lsMB(depois.total)+" — o espaço está com as vendas/notas; faça um Backup e me avise.";
+    });
+    var go = div.querySelector("#impGo");
+    if (go) go.addEventListener("click", function(){
+      var subst = itens.filter(function(it){ return it.acao==="replace"; }).length;
+      var msg = "Importar "+nImportar+" arquivo(s)?"+(subst ? "\n\n"+subst+" dia(s) terão as vendas atuais SUBSTITUÍDAS pelas do arquivo." : "")+"\n\nUma cópia de segurança é guardada antes.";
+      if (!confirm(msg)) return;
+      go.disabled = true; go.textContent = "Importando…";
+      impExecutar(itens, function(err, resumo){
+        m.resultado = resumo; m.erro = err ? (err.message||String(err)) : "";
+        renderModal();
+      });
+    });
   }
 
   // ======================= MODAL: FECHAMENTO DO DIA =======================
@@ -2986,6 +3585,54 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     div.addEventListener("click", function(e){ if (e.target===div){ state.modal = null; render(); } });
   }
 
+  // ---------- venda sem vendedor vai para a Loja ----------
+  // na tela e nos totais, venda sem vendedor já conta como "Loja"; quando o dia vira (e ao abrir o sistema),
+  // as vendas dos dias anteriores que continuam sem vendedor são gravadas de verdade como "Loja"
+  function vendedorEfetivo(v){ return (v && v!=="Nenhum") ? v : "Loja"; }
+  function lojaParaSemVendedor(){
+    var alterou = false;
+    listAllDates().forEach(function(d){
+      if (d >= today) return;
+      var rows = lsGetJSON(K_ROWS+d, []);
+      if (!Array.isArray(rows)) return;
+      var mudou = false;
+      rows.forEach(function(r){
+        if (r && (!r.vendedor || r.vendedor==="Nenhum") && !linhaApagadaVazia(r)){ r.vendedor = "Loja"; mudou = true; }
+      });
+      if (mudou){ saveRows(d, rows); alterou = true; }
+    });
+    var chaves = [];
+    for (var i=0;i<localStorage.length;i++){
+      var k = localStorage.key(i);
+      if (k && k.indexOf(K_NOVOS)===0 && k!==K_NOVOS_META) chaves.push(k.slice(K_NOVOS.length));
+    }
+    chaves.forEach(function(m){
+      var lista = loadNovosMonth(m), mudou = false;
+      lista.forEach(function(n){
+        if (n && n.date && n.date<today && (!n.vendedor || n.vendedor==="Nenhum") && !isBlankNovo(n)){ n.vendedor = "Loja"; mudou = true; }
+      });
+      if (mudou){ saveNovosMonth(m, lista); alterou = true; }
+    });
+    return alterou;
+  }
+  var ultimaVarreduraLoja = "";
+  function verificarVirada(){
+    var agora = toISO(new Date());
+    var virou = agora!==today;
+    if (virou){ today = agora; yesterday = addDays(today,-1); state.monthSummaryCache = {}; state.monthPartsCache = {}; }
+    var mudou = false;
+    if ((state.role==="master" || state.role==="vendedor") && ultimaVarreduraLoja!==today){
+      try{ mudou = lojaParaSemVendedor(); }catch(e){}
+      ultimaVarreduraLoja = today;
+    }
+    if ((mudou || virou) && state.view==="dashboard" && !state.modal){
+      state.monthSummaryCache = {}; state.monthPartsCache = {};
+      render();
+    }
+  }
+  setTimeout(verificarVirada, 5000);
+  setInterval(verificarVirada, 60000);
+
   // backup automático do dia: logo depois de abrir o sistema e de hora em hora
   setTimeout(function(){ dailySnapshot(); }, 8000);
   setInterval(function(){ dailySnapshot(); }, 3600000);
@@ -3169,7 +3816,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     usuariosLoading: false,
     onlyPending: false,
     orcamento: null,
-    cmpMode: "day", // "day" (comparativo por dia) ou "month" (comparativo por mês)
+    cmpMode: "day", // "day" (comparativo por dia), "month" (por mês) ou "year" (por ano)
     showAdvancedCols: (function(){ try{ return localStorage.getItem("vo_show_advanced")==="1"; }catch(e){ return false; } })(),
     notasQuery: "",
     novosMonth: today.slice(0,7),
@@ -3274,7 +3921,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
           t.valorCambagem += parseNum(r.valorCambagem);
           t.qtdRodas += parseNum(r.qtdRodas);
           t.valorRodas += parseNum(r.valorRodas);
-          var v = r.vendedor;
+          var v = (r.vendedor && r.vendedor!=="Nenhum") ? r.vendedor : (linhaApagadaVazia(r) ? "" : "Loja");
           if (v && t.porVendedor[v]){
             t.porVendedor[v].count += 1;
             t.porVendedor[v].total += computeValor(r);
@@ -3399,7 +4046,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
           '<div class="hero-left">'+
             '<div class="month-nav">'+
               '<button data-act="prevmonth">‹</button>'+
-              '<span class="label">'+escHtml(monthLabel(state.dashMonth))+'</span>'+
+              '<span class="label cal-open" data-act="opencal" title="Abrir calendário">'+escHtml(monthLabel(state.dashMonth))+'</span>'+
               '<button data-act="nextmonth">›</button>'+
               '<button class="btn ghost small hide-vals-btn" data-act="togglehide" title="'+(state.hideValues?"Mostrar valores":"Ocultar valores")+'">'+(state.hideValues?"🙈 Mostrar":"👁 Ocultar")+'</button>'+
             '</div>'+
@@ -3621,6 +4268,36 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     dates.forEach(function(d){ var rr = rowsOfDay(d); if (rr.length){ days++; total += sumRows(rr); count += rr.length; } });
     return {total:total, count:count, days:days};
   }
+  // soma um ano inteiro (e, se vier "corte" no formato MM-DD, também o acumulado até essa data do ano)
+  function statsDoAno(ano, corte){
+    var meses = [];
+    for (var i=1;i<=12;i++) meses.push({m:i, total:0, count:0, days:0});
+    var tot = {total:0, count:0, days:0}, ate = {total:0, count:0, days:0}, rows = [];
+    listAllDates().forEach(function(d){
+      if (d.slice(0,4)!==ano) return;
+      var rr = rowsOfDay(d); if (!rr.length) return;
+      var t = sumRows(rr), mi = parseInt(d.slice(5,7),10)-1;
+      meses[mi].total += t; meses[mi].count += rr.length; meses[mi].days++;
+      tot.total += t; tot.count += rr.length; tot.days++;
+      rows = rows.concat(rr);
+      if (!corte || d.slice(5)<=corte){ ate.total += t; ate.count += rr.length; ate.days++; }
+    });
+    return {key:ano, meses:meses, total:tot.total, count:tot.count, days:tot.days, ate:ate, rows:rows};
+  }
+  function novosDoAno(ano){
+    var out = [];
+    for (var m=1;m<=12;m++) out = out.concat(loadNovosMonth(ano+"-"+pad(m)).filter(function(n){ return !isBlankNovo(n); }));
+    return out;
+  }
+  function nomeMes(m){
+    var t = new Date(2000, m-1, 1).toLocaleDateString("pt-BR",{month:"long"});
+    return t.charAt(0).toUpperCase()+t.slice(1);
+  }
+  function mudaAno(iso, delta){
+    var y = parseInt(iso.slice(0,4),10)+delta, md = iso.slice(5);
+    if (md==="02-29" && new Date(y,1,29).getMonth()!==1) md = "02-28";
+    return y+"-"+md;
+  }
   function dayDetails(iso){
     var rows = rowsOfDay(iso);
     var total = sumRows(rows);
@@ -3679,6 +4356,23 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     // agregações (vendedores, pagamentos, produtos, horários) do dia e do mês inteiro
     det.dayAgg = aggregateRows(rows, novosRowsDoDia(iso));
     det.monthAgg = aggregateRows(rowsOfMonth(month), loadNovosMonth(month).filter(function(n){ return !isBlankNovo(n); }));
+    if (state.cmpMode==="year"){
+      var ano = iso.slice(0,4), anoAnt = String(parseInt(ano,10)-1);
+      var corte = (ano===today.slice(0,4)) ? today.slice(5) : "12-31";
+      var yc = statsDoAno(ano, corte), yp = statsDoAno(anoAnt, corte);
+      function mediaMeses(y){
+        var c = y.meses.filter(function(x){ return x.days>0; });
+        var t = 0, q = 0; c.forEach(function(x){ t += x.total; q += x.count; });
+        return {total: c.length ? t/c.length : 0, count: c.length ? q/c.length : 0, months: c.length};
+      }
+      var melhor = null;
+      yc.meses.forEach(function(x){ if (x.total>0 && (!melhor || x.total>melhor.total)) melhor = x; });
+      det.year = {key:ano, total:yc.total, count:yc.count, days:yc.days, meses:yc.meses, prevMeses:yp.meses,
+        prevYear:{key:anoAnt, total:yp.total, count:yp.count, days:yp.days},
+        samePeriod:{key:anoAnt, total:yp.ate.total, count:yp.ate.count, days:yp.ate.days, corte:corte},
+        ytd:yc.ate, avg:mediaMeses(yc), prevAvg:mediaMeses(yp), best:melhor};
+      det.yearAgg = aggregateRows(yc.rows, novosDoAno(ano));
+    }
     det.vendedores = det.dayAgg.vendedores;
     det.pagamentos = det.dayAgg.pagamentos;
     det.produtos   = det.dayAgg.produtos;
@@ -3705,7 +4399,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     // vendedores
     var vend = {};
     rows.forEach(function(r){
-      var v = r.vendedor && r.vendedor!=="Nenhum" ? r.vendedor : "Sem vendedor";
+      var v = vendedorEfetivo(r.vendedor);
       if (!vend[v]) vend[v] = {nome:v, count:0, total:0};
       vend[v].count += 1; vend[v].total += computeValor(r);
     });
@@ -3767,17 +4461,25 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     function hq(v){ return state.hideValues ? '••' : v; }
     var isToday = iso===today;
     var isMonth = state.cmpMode==="month";
-    // no modo "Por mês" todos os quadros passam a somar o mês inteiro
-    var A = isMonth ? det.monthAgg : det.dayAgg;
-    var periodo = isMonth ? "do mês" : "do dia";
+    var isYear = state.cmpMode==="year";
+    // no modo "Por mês" todos os quadros passam a somar o mês inteiro; no "Por ano", o ano inteiro
+    var A = isYear ? det.yearAgg : (isMonth ? det.monthAgg : det.dayAgg);
+    var periodo = isYear ? "do ano" : (isMonth ? "do mês" : "do dia");
     var nvDet = novosStats(loadNovosMonth(iso.slice(0,7)));
     var nvLucroPeriodo = isMonth ? nvDet.lucro : (nvDet.lucroDia[iso]||0);
     var nvAportePeriodo = isMonth ? nvDet.aporte : (nvDet.aporteDia[iso]||0);
+    if (isYear){
+      nvLucroPeriodo = 0; nvAportePeriodo = 0;
+      for (var nm=1; nm<=12; nm++){
+        var nx = novosStats(loadNovosMonth(iso.slice(0,4)+"-"+pad(nm)));
+        nvLucroPeriodo += nx.lucro; nvAportePeriodo += nx.aporte;
+      }
+    }
     var nvServPeriodo = nvAportePeriodo - nvLucroPeriodo;
     var nvNote = nvAportePeriodo!==0 ? '<div class="dd-note" style="margin:0 0 12px;">💰 Pneus novos '+periodo+': <b style="color:'+(nvAportePeriodo>=0?'var(--green)':'var(--red)')+';">'+hv(nvAportePeriodo)+'</b> (lucro dos pneus '+hv(nvLucroPeriodo)+' + serviços/peças '+hv(nvServPeriodo)+') — já somado na meta do mês.</div>' : '';
 
     function barRows(list, keyLabel, colorCls, withRank){
-      if (!list.length) return '<div class="dd-empty">Nada lançado neste '+(isMonth?'mês':'dia')+'.</div>';
+      if (!list.length) return '<div class="dd-empty">Nada lançado neste '+(isYear?'ano':(isMonth?'mês':'dia'))+'.</div>';
       var max = Math.max.apply(null, list.map(function(x){return x.total;})) || 1;
       var sum = list.reduce(function(a,x){return a+x.total;},0) || 1;
       return list.map(function(x, i){
@@ -3793,12 +4495,36 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     }
 
     var cmpToggle = '<div class="dd-cmp-toggle">'+
-        '<button class="seg'+(isMonth?'':' on')+'" data-act="cmpday">Por dia</button>'+
+        '<button class="seg'+((isMonth||isYear)?'':' on')+'" data-act="cmpday">Por dia</button>'+
         '<button class="seg'+(isMonth?' on':'')+'" data-act="cmpmonth">Por mês</button>'+
+        '<button class="seg'+(isYear?' on':'')+'" data-act="cmpyear">Por ano</button>'+
       '</div>';
 
-    var cmpHtml;
-    if (!isMonth){
+    var cmpHtml, mesesCard = "";
+    if (isYear){
+      var yr = det.year;
+      var corteTxt = fmtDateBR(yr.key+"-"+yr.samePeriod.corte).slice(0,5);
+      cmpHtml =
+        '<div class="dd-cmp"><span class="who">Ano selecionado<small>'+escHtml(yr.key)+' · '+hq(yr.days)+' dia(s) com vendas · '+hq(yr.count)+' venda(s)</small></span>'+
+          '<span><span class="amt">'+hv(yr.total)+'</span><span class="dd-delta">atual</span></span></div>'+
+        '<div class="dd-cmp"><span class="who">Mesmo período do ano passado<small>01/01 a '+corteTxt+' de '+escHtml(yr.samePeriod.key)+' · '+hq(yr.samePeriod.days)+' dia(s) com vendas · '+hq(yr.samePeriod.count)+' venda(s)</small></span>'+
+          '<span><span class="amt">'+hv(yr.samePeriod.total)+'</span>'+deltaBadge(yr.ytd.total, yr.samePeriod.total)+'</span></div>'+
+        '<div class="dd-cmp"><span class="who">Ano anterior (inteiro)<small>'+escHtml(yr.prevYear.key)+' · '+hq(yr.prevYear.days)+' dia(s) com vendas · '+hq(yr.prevYear.count)+' venda(s)</small></span>'+
+          '<span><span class="amt">'+hv(yr.prevYear.total)+'</span>'+deltaBadge(yr.total, yr.prevYear.total)+'</span></div>'+
+        '<div class="dd-cmp"><span class="who">Média mensal do ano<small>'+yr.avg.months+' mês(es) com vendas · média de '+hq(yr.avg.count.toFixed(0))+' venda(s)/mês</small></span>'+
+          '<span><span class="amt">'+hv(yr.avg.total)+'</span>'+deltaBadge(yr.avg.total, yr.prevAvg.total)+'</span></div>'+
+        '<div class="dd-cmp"><span class="who">Melhor mês do ano<small>'+(yr.best ? escHtml(nomeMes(yr.best.m))+' · '+hq(yr.best.count)+' venda(s)' : 'Nenhuma venda ainda')+'</small></span>'+
+          '<span><span class="amt">'+hv(yr.best ? yr.best.total : 0)+'</span></span></div>';
+      var maxMes = Math.max.apply(null, yr.meses.map(function(x){ return x.total; })) || 1;
+      mesesCard = '<div class="dd-card span2"><h3>Faturamento por mês · '+escHtml(yr.key)+' <small style="color:var(--text-faint);font-weight:400;">(% = comparação com o mesmo mês de '+escHtml(yr.prevYear.key)+')</small></h3>'+
+        yr.meses.map(function(x, i){
+          var w = state.hideValues ? 0 : (x.total/maxMes*100);
+          return '<div class="dd-row"><span class="lbl">'+escHtml(nomeMes(x.m))+'<small>'+hq(x.count)+' venda(s)</small></span>'+
+            '<span class="track"><span class="fill y" style="width:'+w.toFixed(1)+'%;display:block;"></span></span>'+
+            '<span class="val">'+hv(x.total)+'</span>'+
+            '<span class="pct">'+deltaBadge(x.total, yr.prevMeses[i].total)+'</span></div>';
+        }).join("")+'</div>';
+    } else if (!isMonth){
       cmpHtml =
         '<div class="dd-cmp"><span class="who">Dia anterior<small>'+escHtml(weekdayLabel(det.prev.iso))+' · '+hq(det.prev.count)+' venda(s)</small></span>'+
           '<span><span class="amt">'+hv(det.prev.total)+'</span>'+deltaBadge(det.total, det.prev.total)+'</span></div>'+
@@ -3849,12 +4575,12 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     }
 
     return '<div class="dd-head">'+
-        '<h2>'+(isMonth ? 'Detalhes do mês' : 'Detalhes do dia')+'</h2>'+
+        '<h2>'+(isYear ? 'Detalhes do ano' : (isMonth ? 'Detalhes do mês' : 'Detalhes do dia'))+'</h2>'+
         cmpToggle+
         '<div class="dd-nav">'+
-          '<button class="nav" data-dd="prev" title="Dia anterior">‹</button>'+
-          '<span class="dd-date">'+(isMonth ? escHtml(monthLabel(det.month.key)) : escHtml(weekdayLabel(iso))+(isToday?' <span style="color:var(--yellow);">· hoje</span>':''))+'</span>'+
-          '<button class="nav" data-dd="next" title="Próximo dia">›</button>'+
+          '<button class="nav" data-dd="prev" title="'+(isYear?'Ano anterior':'Dia anterior')+'">‹</button>'+
+          '<span class="dd-date">'+(isYear ? escHtml(det.year.key) : isMonth ? escHtml(monthLabel(det.month.key)) : escHtml(weekdayLabel(iso))+(isToday?' <span style="color:var(--yellow);">· hoje</span>':''))+'</span>'+
+          '<button class="nav" data-dd="next" title="'+(isYear?'Próximo ano':'Próximo dia')+'">›</button>'+
           (isToday ? '' : '<button class="btn ghost small" data-dd="today">Hoje</button>')+
           '<button class="btn ghost small" data-act="opendate" data-date="'+iso+'">Abrir tabela →</button>'+
         '</div>'+
@@ -3873,6 +4599,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         '<div class="dd-card"><h3>Formas de pagamento</h3>'+barRows(A.pagamentos, null, "g", false)+'</div>'+
         '<div class="dd-card"><h3>Produtos e serviços mais vendidos</h3>'+
           barRows(A.produtos, function(x){ return x.qtd ? hq(x.qtd)+' un.' : ''; }, "", true)+'</div>'+
+        mesesCard+
         '<div class="dd-card span2"><h3>Vendas por hora '+periodo+'</h3>'+hoursHtml+'</div>'+
       '</div>';
   }
@@ -3884,7 +4611,11 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
         var w = btn.getAttribute("data-dd");
         var cur = state.dashDay && state.dashDay.slice(0,7)===state.dashMonth ? state.dashDay
           : (state.dashMonth===today.slice(0,7) ? today : state.dashMonth+"-"+pad(daysInMonth(state.dashMonth)));
-        if (w==="prev") setDay(addDays(cur,-1));
+        if (state.cmpMode==="year"){
+          if (w==="prev") setDay(mudaAno(cur,-1));
+          else if (w==="next") setDay(mudaAno(cur,1));
+          else setDay(today);
+        } else if (w==="prev") setDay(addDays(cur,-1));
         else if (w==="next") setDay(addDays(cur,1));
         else setDay(today);
       });
@@ -4263,7 +4994,75 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     });
   }
 
+  // ---------- calendário do Dashboard: abre ao clicar no nome do mês; clicar num dia mostra os detalhes daquele dia ----------
+  function fecharCalendario(){
+    var o = document.getElementById("calPop"); if (o) o.remove();
+    document.removeEventListener("keydown", calTecla);
+  }
+  function calTecla(e){ if (e.key==="Escape") fecharCalendario(); }
+  function diaTemVendas(iso){
+    try{ if (impDiaTemDados(rowsOfDay(iso))) return true; }catch(e){}
+    try{ if ((novosRowsDoDia(iso)||[]).some(function(r){ return computeValor(r)>0; })) return true; }catch(e){}
+    return false;
+  }
+  function abrirCalendario(anchor){
+    fecharCalendario();
+    var vis = state.dashMonth;
+    var sel = (state.dashDay && state.dashDay.slice(0,7)===state.dashMonth) ? state.dashDay : "";
+    var back = document.createElement("div");
+    back.className = "cal-back"; back.id = "calPop";
+    var box = document.createElement("div");
+    box.className = "cal-box";
+    back.appendChild(box);
+    document.body.appendChild(back);
+    function posicionar(){
+      var r = anchor.getBoundingClientRect(), w = box.offsetWidth || 312;
+      var left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8));
+      var top = r.bottom + 8;
+      if (top + box.offsetHeight > window.innerHeight - 8) top = Math.max(8, window.innerHeight - box.offsetHeight - 8);
+      box.style.left = left+"px"; box.style.top = top+"px";
+    }
+    function desenhar(){
+      var y = parseInt(vis.slice(0,4),10), mo = parseInt(vis.slice(5,7),10);
+      var inicio = new Date(y, mo-1, 1).getDay();
+      var nd = daysInMonth(vis), ant = addMonths(vis,-1), prox = addMonths(vis,1), nAnt = daysInMonth(ant);
+      var h = '<div class="cal-head"><b>'+escHtml(monthLabel(vis))+'</b>'+
+        '<div class="cal-navs"><button type="button" data-cal="prev" title="Mês anterior">▲</button><button type="button" data-cal="next" title="Próximo mês">▼</button></div></div>'+
+        '<div class="cal-grid">'+["D","S","T","Q","Q","S","S"].map(function(l){ return '<div class="wd">'+l+'</div>'; }).join("");
+      for (var i=0;i<42;i++){
+        var d = i - inicio + 1, iso, fora = false;
+        if (d<1){ d = nAnt + d; iso = ant+"-"+pad(d); fora = true; }
+        else if (d>nd){ d = d - nd; iso = prox+"-"+pad(d); fora = true; }
+        else iso = vis+"-"+pad(d);
+        var cls = (fora?" out":"")+(iso===today?" hoje":"")+(iso===sel?" sel":"")+(diaTemVendas(iso)?" tem":"");
+        h += '<button type="button" class="'+cls.trim()+'" data-iso="'+iso+'">'+d+'</button>';
+      }
+      h += '</div><div class="cal-foot"><span>● dia com vendas</span><button type="button" data-cal="hoje">Hoje</button></div>';
+      box.innerHTML = h;
+      box.querySelectorAll("[data-cal]").forEach(function(b){
+        b.addEventListener("click", function(){
+          var w = b.getAttribute("data-cal");
+          if (w==="prev"){ vis = addMonths(vis,-1); desenhar(); }
+          else if (w==="next"){ vis = addMonths(vis,1); desenhar(); }
+          else escolher(today);
+        });
+      });
+      box.querySelectorAll("[data-iso]").forEach(function(b){
+        b.addEventListener("click", function(){ escolher(b.getAttribute("data-iso")); });
+      });
+    }
+    function escolher(iso){
+      fecharCalendario();
+      state.dashDay = iso; state.dashMonth = iso.slice(0,7); state.cmpMode = "day";
+      render();
+    }
+    back.addEventListener("click", function(e){ if (e.target===back) fecharCalendario(); });
+    document.addEventListener("keydown", calTecla);
+    desenhar(); posicionar();
+  }
+
   function handleAction(act, node){
+    if (act==="opencal"){ abrirCalendario(node); return; }
     if (act==="prevmonth"){ state.dashMonth = addMonths(state.dashMonth,-1); render(); }
     else if (act==="nextmonth"){ state.dashMonth = addMonths(state.dashMonth,1); render(); }
     else if (act==="opentoday"){ openDate(today); }
@@ -4271,6 +5070,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     else if (act==="logout"){ state.authed=false; sessionStorage.removeItem("vf_auth"); render(); }
     else if (act==="cmpday"){ state.cmpMode="day"; render(); }
     else if (act==="cmpmonth"){ state.cmpMode="month"; render(); }
+    else if (act==="cmpyear"){ state.cmpMode="year"; render(); }
     else if (act==="back"){ state.view="dashboard"; render(); }
     else if (act==="addrow"){ addRow(); }
     else if (act==="openferramentas"){ if (state.role==="master"){ state.modal = {type:"ferramentas"}; render(); } }
@@ -4441,7 +5241,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
 
     var pendentesCount = curRows.filter(function(r){ return r.pago!=="✅"; }).length;
     var displayRows = onlyPend ? curRows.filter(function(r){ return r.pago!=="✅"; }) : curRows;
-    if (vendFilt) displayRows = displayRows.filter(function(r){ return (r.vendedor||"Nenhum")===vendFilt; });
+    if (vendFilt) displayRows = displayRows.filter(function(r){ return vendedorEfetivo(r.vendedor)===vendFilt; });
     var nvTabsHtml = nv ? '<div class="nv-topline" style="margin:14px 0 12px;"><div class="dd-cmp-toggle">'+
       '<button class="seg" data-act="novostab" data-tab="dash">Dashboard</button>'+
       '<button class="seg on" data-act="novostab" data-tab="vendas">Vendas</button></div></div>' : '';
@@ -5319,6 +6119,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     else if (state.modal.type==="linkSales") renderLinkSalesModal();
     else if (state.modal.type==="notaView") renderNotaViewModal();
     else if (state.modal.type==="ferramentas") renderFerramentasModal();
+    else if (state.modal.type==="importTabelas") renderImportTabelasModal();
     else if (state.modal.type==="fechamento") renderFechamentoModal();
     else renderAuthModal();
   }
@@ -7929,7 +8730,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
       if (novoTemCusto(n)){ t.lucro += l; t.receitaCusto += novoReceitaPneus(n); t.qtdCusto += q; t.lucroDia[n.date] = (t.lucroDia[n.date]||0) + l; }
       else if (parseNum(n.valorPneus)>0) t.semCusto++;
       if (n.pago!=="✅" && v>0) t.pend += v;
-      var vend = (n.vendedor && n.vendedor!=="Nenhum") ? n.vendedor : "Sem vendedor";
+      var vend = vendedorEfetivo(n.vendedor);
       var pv = t.porVendedor[vend] || (t.porVendedor[vend] = {count:0, total:0, qtd:0, lucro:0});
       pv.count++; pv.total += v; pv.qtd += q; pv.lucro += l;
       var b = paymentBreakdown(n);
@@ -7947,7 +8748,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
     var q = parseNum(n.quantidade);
     var meta = [
       fmtDateBR(n.date),
-      (n.vendedor && n.vendedor!=="Nenhum") ? n.vendedor : "",
+      vendedorEfetivo(n.vendedor),
       n.cliente || "",
       (n.formaPagamento && n.formaPagamento!=="Nenhum") ? n.formaPagamento : ""
     ].filter(Boolean).map(escHtml).join(" · ");
@@ -8447,6 +9248,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
 
   checkAuthAndBoot();
 })();
+});
 </script>
 <style id="oficina-legibilidade">
 /* ===== letras maiores e caixas (engrenagens) maiores ===== */
@@ -8521,6 +9323,7 @@ body{font-size:16px}
   @media(max-width:700px){.ui-top{right:12px;bottom:14px}.ui-toast-wrap{bottom:70px}}
 </style>
 <script>
+window.__voReady.then(function(){
 (function(){
   var wrap = document.createElement("div");
   wrap.className = "ui-toast-wrap";
@@ -8628,6 +9431,7 @@ body{font-size:16px}
   themeBtn.addEventListener("click", function(){ applyTheme(currentTheme()==="light" ? "dark" : "light"); });
   document.body.appendChild(themeBtn);
 })();
+});
 </script>
 </body>
 </html>
