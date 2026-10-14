@@ -5004,10 +5004,51 @@ window.__voReady.then(function(){
     var historicoBtn = isMaster ? '<button class="btn ghost small" data-act="openhistorico" title="Ver logins e movimentações de estoque">🕘 Histórico'+histBadgeHtml()+'</button>' : '';
     var usuariosBtn = isMaster ? '<button class="btn ghost small" data-act="openusuarios" title="Criar logins e alterar cargos">👤 Usuários</button>' : '';
     if (isMaster) usuariosBtn += '<button class="btn ghost small" data-act="openferramentas" title="Relatório do mês por pessoa, backups automáticos e migração de dados">🛠 Ferramentas</button>';
-    if (state.authed){
-      return '<div class="auth-zone"><span class="pill on">✓ edição de dias anteriores liberada</span>'+estoqueBtn+clientesBtn+notasBtn+orcamentosBtn+novosBtn+avisosBtn+historicoBtn+usuariosBtn+backupBtns+'<button class="btn ghost small" data-act="logout">Sair</button>'+acctLogout+'</div>';
+    var loginBtn = state.authed ? '<button class="btn ghost small" data-act="logout">Sair</button>' : '<button class="btn small" data-act="login">Entrar com senha</button>';
+    var pill = state.authed ? '<span class="pill on">✓ edição de dias anteriores liberada</span>' : '';
+    return '<div class="top-menu">'+pill+
+      '<button class="menu-toggle" data-menu-toggle="1" aria-label="Abrir menu de opções" aria-expanded="false" title="Opções">'+
+        '<span class="bars"><i></i><i></i><i></i></span>'+
+        (avisosCount>0 ? '<span class="nav-badge menu-dot">'+avisosCount+'</span>' : '')+
+      '</button>'+
+      '<div class="menu-panel" role="menu">'+
+        estoqueBtn+clientesBtn+notasBtn+orcamentosBtn+novosBtn+avisosBtn+historicoBtn+usuariosBtn+backupBtns+loginBtn+acctLogout+
+      '</div>'+
+    '</div>';
+  }
+
+  // abre/fecha o menu de opções (hambúrguer) — um único listener, fora do render
+  if (!window.__topMenuBound){
+    window.__topMenuBound = true;
+    function closeTopMenus(except){
+      document.querySelectorAll(".top-menu.open").forEach(function(z){
+        if (z===except) return;
+        z.classList.remove("open");
+        var b = z.querySelector("[data-menu-toggle]"); if (b) b.setAttribute("aria-expanded","false");
+      });
     }
-    return '<div class="auth-zone">'+estoqueBtn+clientesBtn+notasBtn+orcamentosBtn+novosBtn+avisosBtn+historicoBtn+usuariosBtn+backupBtns+'<button class="btn small" data-act="login">Entrar com senha</button>'+acctLogout+'</div>';
+    document.addEventListener("click", function(e){
+      var t = e.target;
+      var tg = t.closest ? t.closest("[data-menu-toggle]") : null;
+      var zone = t.closest ? t.closest(".top-menu") : null;
+      if (tg && zone){
+        var open = !zone.classList.contains("open");
+        closeTopMenus(zone);
+        zone.classList.toggle("open", open);
+        tg.setAttribute("aria-expanded", open ? "true" : "false");
+        return;
+      }
+      if (zone){
+        // clicou numa opção do menu: fecha (o botão de Importar abre o seletor de arquivo, então fica)
+        var item = t.closest(".menu-panel [data-act]");
+        if (item) closeTopMenus(null);
+        return;
+      }
+      closeTopMenus(null);
+    });
+    document.addEventListener("keydown", function(e){
+      if (e.key==="Escape") closeTopMenus(null);
+    });
   }
 
   function bindBackupControls(){
@@ -9177,24 +9218,33 @@ window.__voReady.then(function(){
   }
 
   // ---------- login de acesso ao site (Supabase Auth — senha nunca fica no código) ----------
+  var LEMBRAR_KEY = "vo_lembrar_usuario";
+  function lerUsuarioLembrado(){ try{ return localStorage.getItem(LEMBRAR_KEY) || ""; }catch(e){ return ""; } }
+  function guardarUsuarioLembrado(email){ try{ if (email) localStorage.setItem(LEMBRAR_KEY, email); else localStorage.removeItem(LEMBRAR_KEY); }catch(e){} }
+
   function renderLoginScreen(errorMsg){
     root.classList.remove("wide");
+    var lembrado = lerUsuarioLembrado();
     root.innerHTML =
       '<div class="login-screen"><div class="login-card">'+
         '<div class="brand"><span class="mark"></span><h1>Painel de Vendas</h1></div>'+
         '<p class="hint">Entre com seu e-mail e senha para acessar o sistema.</p>'+
-        '<input type="email" id="loginEmail" placeholder="E-mail" autocomplete="username">'+
+        '<input type="email" id="loginEmail" placeholder="E-mail" autocomplete="username" value="'+escAttr(lembrado)+'">'+
         '<input type="password" id="loginPassword" placeholder="Senha" autocomplete="current-password">'+
+        '<label class="remember-row"><input type="checkbox" id="loginRemember"'+(lembrado?' checked':'')+'><span>Lembrar usuário</span></label>'+
         '<div class="err">'+escHtml(errorMsg||"")+'</div>'+
         '<button class="btn primary" id="loginBtn">Entrar</button>'+
       '</div></div>';
     var emailInput = document.getElementById("loginEmail");
     var passInput = document.getElementById("loginPassword");
     var btn = document.getElementById("loginBtn");
-    emailInput.focus();
+    var rememberInput = document.getElementById("loginRemember");
+    if (lembrado) passInput.focus(); else emailInput.focus();
     function tryLogin(){
       var email = emailInput.value.trim();
       var pass = passInput.value;
+      // guarda só o e-mail (nunca a senha) se a caixa estiver marcada; desmarcada, esquece
+      guardarUsuarioLembrado(rememberInput.checked ? email : "");
       if (!email || !pass){ renderLoginScreen("Preencha e-mail e senha."); return; }
       btn.disabled = true; btn.textContent = "Entrando...";
       sb.auth.signInWithPassword({email:email, password:pass}).then(function(res){
@@ -9363,6 +9413,24 @@ body{font-size:16px}
   :focus-visible{outline:2px solid var(--yellow);outline-offset:2px}
   .btn:disabled,button:disabled{opacity:.5;cursor:not-allowed}
   @media(max-width:700px){.ui-top{right:12px;bottom:14px}.ui-toast-wrap{bottom:70px}}
+
+/* ---- menu de opções (botão de 3 barras, à direita) ---- */
+.top-menu{position:relative;display:flex;align-items:center;gap:10px;justify-content:flex-end;margin-left:auto;}
+.menu-toggle{position:relative;width:40px;height:38px;display:inline-flex;align-items:center;justify-content:center;
+  background:var(--panel);border:1px solid var(--border);border-radius:6px;cursor:pointer;padding:0;color:var(--text);}
+.menu-toggle:hover,.top-menu.open .menu-toggle{border-color:var(--yellow);}
+.menu-toggle .bars{display:flex;flex-direction:column;gap:4px;width:18px;}
+.menu-toggle .bars i{display:block;height:2px;border-radius:2px;background:currentColor;}
+.menu-toggle .menu-dot{position:absolute;top:-6px;right:-6px;margin:0;}
+.menu-panel{display:none;position:absolute;top:calc(100% + 8px);right:0;z-index:500;min-width:230px;max-width:calc(100vw - 24px);
+  max-height:calc(100vh - 90px);overflow-y:auto;flex-direction:column;align-items:stretch;gap:4px;padding:8px;
+  background:var(--panel);border:1px solid var(--border);border-radius:8px;box-shadow:0 18px 44px rgba(0,0,0,.45);}
+.top-menu.open .menu-panel{display:flex;}
+.menu-panel .btn{width:100%;justify-content:flex-start;text-align:left;white-space:nowrap;margin:0;min-height:38px;}
+.menu-panel label.btn{display:flex;align-items:center;cursor:pointer;}
+
+.login-card .remember-row{display:flex;align-items:center;gap:8px;margin:2px 0 10px;font-size:13px;color:var(--text-dim);cursor:pointer;user-select:none;}
+.login-card .remember-row input{width:auto;margin:0;padding:0;accent-color:var(--yellow);cursor:pointer;}
 </style>
 <script>
 window.__voReady.then(function(){
