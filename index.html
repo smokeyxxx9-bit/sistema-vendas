@@ -362,7 +362,7 @@
   .dd-empty{color:var(--text-faint);font-size:12.5px;padding:8px 0;}
   .dd-hours svg{width:100%;height:auto;display:block;overflow:visible;}
   .dd-note{font-size:11px;color:var(--text-faint);margin-top:8px;}
-  .chart-wrap circle[data-iso]{cursor:pointer;}
+  .chart-wrap circle[data-iso],.chart-wrap circle[data-mon]{cursor:pointer;}
   .sticky-head-block .tbl-head{margin-bottom:12px;}
   .sticky-head-block .tbl-toolbar{margin:0 0 10px;}
   .grid-scroll-head{border:1px solid var(--border-soft);border-radius:4px 4px 0 0;border-bottom:none;overflow:hidden;background:var(--panel-alt);}
@@ -3962,6 +3962,15 @@ window.__voReady.then(function(){
       var pct1 = Math.min(100, (monthTotal/GOAL_1)*100);
       var pct2 = Math.min(100, (monthTotal/GOAL_2)*100);
 
+      // faturamento e evolução do ano exibido (visível para todos os papéis)
+      var yearKey = state.dashMonth.slice(0,4), yearPoints = [], yearTotal = 0;
+      for (var ym=1; ym<=12; ym++){
+        var ymKey = yearKey+"-"+pad(ym);
+        var yv = (ymKey===state.dashMonth) ? monthTotal : (sumMonth(ymKey).total + novosStats(loadNovosMonth(ymKey)).aporte);
+        yearTotal += yv;
+        yearPoints.push({m:ym, key:ymKey, v:Math.max(0, yv)});
+      }
+
       var ySummary = state.monthSummaryCache[yesterday.slice(0,7)] || {};
       var yData = ySummary[yesterday] || {total:0, count:0};
       var parts = state.monthPartsCache[state.dashMonth] || {qtdBicos:0, valorBicos:0, qtdCambagem:0, valorCambagem:0, qtdRodas:0, valorRodas:0, porVendedor:{}};
@@ -4052,6 +4061,7 @@ window.__voReady.then(function(){
             '</div>'+
             '<div class="big-total">'+(state.hideValues?'••••••':(totalParts[0]+(totalParts[1]?','+totalParts[1]:'')))+'</div>'+
             '<div class="sub">faturamento total do mês</div>'+nvIncludeHtml+
+            '<div class="sub" style="margin-top:2px;">faturamento de '+yearKey+': <b style="color:var(--text);">'+(state.hideValues?'••••••':fmtCurrency(yearTotal))+'</b></div>'+
             '<div class="goal-row">'+
               '<div class="goal-label"><span>Meta 350 mil</span><b>'+(state.hideValues?'••%':pct1.toFixed(0)+'%')+'</b></div>'+
               '<div class="goal-track"><div class="goal-fill'+(pct1>=100?' reached':'')+'" style="width:'+(state.hideValues?0:pct1)+'%"></div></div>'+
@@ -4062,8 +4072,8 @@ window.__voReady.then(function(){
             '</div>'+
           '</div>'+
           '<div class="hero-right">'+
-            '<h2>Evolução diária <span style="color:var(--text-faint);font-size:11.5px;">· toque em um dia do gráfico para ver os detalhes</span></h2>'+
-            '<div class="chart-wrap">'+buildChartSvg(points, selDay)+'</div>'+
+            '<h2>Evolução do ano <span style="color:var(--text-faint);font-size:11.5px;">· '+yearKey+' · toque em um mês do gráfico para ver os detalhes</span></h2>'+
+            '<div class="chart-wrap">'+buildYearChartSvg(yearPoints, state.dashMonth)+'</div>'+
           '</div>'+
         '</div>'+
 
@@ -4256,6 +4266,35 @@ window.__voReady.then(function(){
       '<polyline points="'+linePts+'" fill="none" stroke="var(--teal)" stroke-width="1.6" opacity="0.85"/>'+
       circles + labels +
       '</svg>';
+  }
+
+  // gráfico "Evolução do ano": um ponto por mês (jan–dez) do ano exibido
+  var MESES_ABREV = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+  function buildYearChartSvg(points, selectedKey){
+    if (points.every(function(p){return p.v===0;})){
+      return '<div class="chart-empty">Sem lançamentos neste ano ainda.</div>';
+    }
+    var W = 720, H = 190, padL = 14, padR = 14, padT = 14, padB = 22;
+    var maxV = Math.max.apply(null, points.map(function(p){return p.v;}));
+    if (maxV<=0) maxV = 1;
+    var stepX = (W-padL-padR) / Math.max(1, points.length-1);
+    function xFor(i){ return padL + i*stepX; }
+    function yFor(v){ return padT + (1 - v/maxV) * (H-padT-padB); }
+    var linePts = points.map(function(p,i){ return xFor(i).toFixed(1)+","+yFor(p.v).toFixed(1); }).join(" ");
+    var circles = points.map(function(p,i){
+      var x=xFor(i).toFixed(1), y=yFor(p.v).toFixed(1);
+      var sel = p.key===selectedKey;
+      var r = sel ? 5 : (p.v>0 ? 3.8 : 2);
+      var fill = sel ? "var(--yellow)" : (p.v>0 ? "var(--teal)" : "var(--border)");
+      return '<circle cx="'+x+'" cy="'+y+'" r="'+r+'" fill="'+fill+'" data-mon="'+p.key+'"'+(sel?' stroke="var(--yellow)" stroke-opacity=".35" stroke-width="6"':'')+'><title>'+MESES_ABREV[p.m-1]+': '+(state.hideValues?'••••':fmtCurrency(p.v))+' — clique para ver o mês</title></circle>';
+    }).join("");
+    var labels = points.map(function(p,i){
+      return '<text x="'+xFor(i).toFixed(1)+'" y="'+(H-6)+'" font-size="9" fill="'+(p.key===selectedKey?'var(--yellow)':'var(--text-faint)')+'" text-anchor="middle" font-family="IBM Plex Mono, monospace">'+MESES_ABREV[p.m-1]+'</text>';
+    }).join("");
+    return '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none">'+
+      '<line x1="'+padL+'" y1="'+(H-padB)+'" x2="'+(W-padR)+'" y2="'+(H-padB)+'" stroke="var(--border-soft)" stroke-width="1"/>'+
+      '<polyline points="'+linePts+'" fill="none" stroke="var(--teal)" stroke-width="1.6" opacity="0.85"/>'+
+      circles + labels + '</svg>';
   }
 
   // ---------- detalhes de um dia (comparativos, vendedores, pagamentos, produtos, horários) ----------
@@ -4622,6 +4661,9 @@ window.__voReady.then(function(){
     });
     root.querySelectorAll(".chart-wrap circle[data-iso]").forEach(function(c){
       c.addEventListener("click", function(){ setDay(c.getAttribute("data-iso")); });
+    });
+    root.querySelectorAll(".chart-wrap circle[data-mon]").forEach(function(c){
+      c.addEventListener("click", function(){ state.dashMonth = c.getAttribute("data-mon"); state.dashDay = null; state.cmpMode = "month"; render(); });
     });
   }
 
