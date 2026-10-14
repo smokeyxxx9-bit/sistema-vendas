@@ -6436,6 +6436,93 @@ window.__voReady.then(function(){
   }
   function osHora(ts){ var d = new Date(ts); return ("0"+d.getHours()).slice(-2)+":"+("0"+d.getMinutes()).slice(-2); }
 
+
+  // ---------- O.S. → tabela do dia: cada serviço lançado soma na linha da O.S. (uma linha por O.S. por dia) ----------
+  var OS_CAMPOS = {"Bicos":{q:"qtdBicos",v:"valorBicos"}, "Cambagem":{q:"qtdCambagem",v:"valorCambagem"},
+                   "Conserto de rodas":{q:"qtdRodas",v:"valorRodas"}, "Alinhamento":{q:null,v:"alinhamento"}};
+  function osFmtNum(n){ n = Math.round(n*100)/100; return String(n).replace(".", ","); }
+  // "Carro N" da linha nova continua a contagem da última linha do dia (igual ao botão de nova linha)
+  function osProximoCarro(rows){
+    var last = rows.length ? String(rows[rows.length-1].carro||"") : "";
+    if (!last) return "Carro 1";
+    var m = /(\d+)\s*$/.exec(last);
+    if (!m) return last;
+    var n = parseInt(m[1],10)+1;
+    return n<=19 ? last.replace(/(\d+)\s*$/, String(n)) : last;
+  }
+  // soma (sinal=1) ou tira (sinal=-1) um serviço na linha da O.S. do dia; devolve o array de linhas novo
+  function osAplicarNaLinha(rows, os, serv, sinal){
+    rows = Array.isArray(rows) ? rows : [];
+    var f = OS_CAMPOS[serv.tipo]; if (!f) return rows;
+    var row = rows.filter(function(r){ return r && r.osId===os.id; })[0];
+    if (!row){
+      if (sinal<0) return rows;
+      row = newRow();
+      row.osId = os.id; row.osNum = os.num;
+      row.detalhes = "O.S. #"+os.num+" · "+(os.carro||"")+(os.placa?" · "+String(os.placa).toUpperCase():"");
+      row.vendedor = VENDEDORES[0];
+      row.carro = osProximoCarro(rows);
+      rows.push(row);
+    }
+    if (f.q) row[f.q] = String(Math.max(0, (parseInt(row[f.q],10)||0) + sinal*(parseInt(serv.qtd,10)||1)));
+    var novoV = Math.max(0, parseNum(row[f.v]) + sinal*(Number(serv.valor)||0));
+    row[f.v] = novoV>0 ? osFmtNum(novoV) : "";
+    if (sinal<0 && computeSubtotal(row)===0 && !(parseInt(row.qtdBicos,10)>0) && !(parseInt(row.qtdCambagem,10)>0) && !(parseInt(row.qtdRodas,10)>0)){
+      rows = rows.filter(function(r){ return r!==row; });
+    }
+    return rows;
+  }
+  // grava no navegador o que o servidor devolveu (sem reenviar pra nuvem: o servidor já gravou)
+  function osGuardarLocal(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+  function osFinalizar(res){
+    if (res && res.os) osGuardarLocal(K_OS, res.os);
+    if (res && res.dia && res.rows){
+      osGuardarLocal(K_ROWS+res.dia, res.rows);
+      var m = res.dia.slice(0,7);
+      try{ delete state.monthSummaryCache[m]; delete state.monthPartsCache[m]; }catch(e){}
+    }
+  }
+  function osErroRpcAusente(err){
+    var m = String((err && (err.message||err.code)) || "");
+    return /PGRST202|42883|Could not find the function|does not exist/i.test(m);
+  }
+  // lança um serviço: pelo servidor (seguro: o montador não escreve direto nas vendas) ou, sem o script, localmente
+  function osLancarServico(osId, serv, cb){
+    function local(){
+      var lista = loadOS(), o = lista.filter(function(x){ return x.id===osId; })[0];
+      if (!o || o.status!=="aberta") return cb("Esta O.S. já foi fechada.");
+      o.servicos = o.servicos || []; o.servicos.push(serv);
+      var dia = serv.data;
+      if (can("vendas")){
+        var rows = osAplicarNaLinha(lsGetJSON(K_ROWS+dia, []), o, serv, 1);
+        saveRows(dia, rows).catch(function(){});
+      }
+      saveOS(lista); cb(null);
+    }
+    if (!sb) return local();
+    sb.rpc("os_lancar_servico", {p_os_id:osId, p_servico:serv}).then(function(r){
+      if (r.error){ if (osErroRpcAusente(r.error)) return local(); return cb(r.error.message||"Não foi possível lançar."); }
+      osFinalizar(r.data); cb(null);
+    }).catch(function(){ cb("Sem conexão. Tente de novo."); });
+  }
+  function osRemoverServico(osId, servId, cb){
+    function local(){
+      var lista = loadOS(), o = lista.filter(function(x){ return x.id===osId; })[0];
+      if (!o) return cb(null);
+      var sv = (o.servicos||[]).filter(function(x){ return x.id===servId; })[0];
+      o.servicos = (o.servicos||[]).filter(function(x){ return x.id!==servId; });
+      if (sv && sv.data && can("vendas")){
+        saveRows(sv.data, osAplicarNaLinha(lsGetJSON(K_ROWS+sv.data, []), o, sv, -1)).catch(function(){});
+      }
+      saveOS(lista); cb(null);
+    }
+    if (!sb) return local();
+    sb.rpc("os_remover_servico", {p_os_id:osId, p_serv_id:servId}).then(function(r){
+      if (r.error){ if (osErroRpcAusente(r.error)) return local(); return cb(r.error.message||"Não foi possível remover."); }
+      osFinalizar(r.data); cb(null);
+    }).catch(function(){ cb("Sem conexão. Tente de novo."); });
+  }
+
   function osCardHtml(o){
     var gerir = can("os_gerir");
     var servs = o.servicos || [];
@@ -6504,10 +6591,12 @@ window.__voReady.then(function(){
     });
     root.querySelectorAll("[data-delserv]").forEach(function(b){
       b.addEventListener("click", function(){
-        var l = loadOS(), o = l.filter(function(x){ return x.id===b.getAttribute("data-os"); })[0];
-        if (!o) return;
-        o.servicos = (o.servicos||[]).filter(function(x){ return x.id!==b.getAttribute("data-delserv"); });
-        saveOS(l); render();
+        if (!confirm("Remover este lançamento? Ele também sai da tabela de vendas do dia.")) return;
+        b.disabled = true;
+        osRemoverServico(b.getAttribute("data-os"), b.getAttribute("data-delserv"), function(err){
+          if (err){ b.disabled = false; alert(err); return; }
+          render();
+        });
       });
     });
   }
@@ -6592,13 +6681,13 @@ window.__voReady.then(function(){
       var valor = parseNum(document.getElementById("svValor").value);
       if (isNaN(qtd) || qtd<1){ document.getElementById("svErr").textContent = "Informe a quantidade."; return; }
       if (!(valor>0)){ document.getElementById("svErr").textContent = "Informe o valor."; return; }
-      var lista = loadOS(), alvo = lista.filter(function(x){ return x.id===o.id; })[0];
-      if (!alvo || alvo.status!=="aberta"){ close(); return; }
-      alvo.servicos = alvo.servicos || [];
-      alvo.servicos.push({id:uid(), tipo:document.getElementById("svTipo").value, qtd:qtd, valor:valor, porId:state.userId||"", por:userDisplayName(), ts:Date.now()});
-      saveOS(lista);
-      if (window.uiToast) window.uiToast("Serviço lançado.", "ok");
-      close();
+      var btn = document.getElementById("svSave"); btn.disabled = true; btn.textContent = "Lançando...";
+      var serv = {id:uid(), tipo:document.getElementById("svTipo").value, qtd:qtd, valor:valor, porId:state.userId||"", por:userDisplayName(), ts:Date.now(), data:toISO(new Date())};
+      osLancarServico(o.id, serv, function(err){
+        if (err){ btn.disabled = false; btn.textContent = "Lançar"; document.getElementById("svErr").textContent = err; return; }
+        if (window.uiToast) window.uiToast("Serviço lançado e somado na tabela do dia.", "ok");
+        close();
+      });
     });
   }
 
@@ -6623,7 +6712,7 @@ window.__voReady.then(function(){
       var nome = input.value.trim().replace(/\s+/g," ");
       if (!nome){ document.getElementById("pfErr").textContent = "Digite um nome."; return; }
       var btn = document.getElementById("pfSave"); btn.disabled = true; btn.textContent = "Salvando...";
-      function ok(){ state.userNome = nome; try{ localStorage.setItem("vo_user_nome", nome); }catch(e){} close(); }
+      function ok(){ state.userNome = nome; try{ localStorage.setItem("perfil_nome", nome); }catch(e){} close(); }
       if (sb && sb.auth && sb.auth.updateUser){
         sb.auth.updateUser({data:{nome:nome}}).then(function(res){
           if (res && res.error){ btn.disabled = false; btn.textContent = "Salvar"; document.getElementById("pfErr").textContent = "Não foi possível salvar: "+(res.error.message||"erro"); }
@@ -9593,7 +9682,7 @@ window.__voReady.then(function(){
   }
 
   // ---------- login de acesso ao site (Supabase Auth — senha nunca fica no código) ----------
-  var LEMBRAR_KEY = "vo_lembrar_usuario";
+  var LEMBRAR_KEY = "lembrar_usuario";
   function lerUsuarioLembrado(){ try{ return localStorage.getItem(LEMBRAR_KEY) || ""; }catch(e){ return ""; } }
   function guardarUsuarioLembrado(email){ try{ if (email) localStorage.setItem(LEMBRAR_KEY, email); else localStorage.removeItem(LEMBRAR_KEY); }catch(e){} }
 
@@ -9647,7 +9736,7 @@ window.__voReady.then(function(){
       if (!user){ state.role = "vendedor"; return cb(); }
       state.userEmail = user.email || "";
       state.userId = user.id;
-      state.userNome = (user.user_metadata && user.user_metadata.nome) || (function(){ try{ return localStorage.getItem("vo_user_nome")||""; }catch(e){ return ""; } })();
+      state.userNome = (user.user_metadata && user.user_metadata.nome) || (function(){ try{ return localStorage.getItem("perfil_nome")||""; }catch(e){ return ""; } })();
       sb.from("perfis").select("papel").eq("user_id", user.id).limit(1).then(function(r){
         var row = r && r.data && r.data[0];
         var papel = row && row.papel;
@@ -9659,10 +9748,11 @@ window.__voReady.then(function(){
   }
 
   function bootApp(afterPull){
+    // (montador/estoquista não gravam em vendas: pula as tarefas de boot que mexem nelas)
     loadRole(function(){
       cloudPullAll(function(hadRemoteData){
         aplicarPermissoes(); // já com as permissões mais recentes da nuvem
-        migrarBalanceamentoAuto(function(){
+        (can("vendas") ? migrarBalanceamentoAuto : function(d){ d(); })(function(){
           if (typeof afterPull === "function") afterPull(); // ex: registrar o login já com os dados mais recentes em mãos
           render();
           if (!hadRemoteData) pushAllLocalToCloud(); // primeira ativação: sobe o histórico local pra nuvem
