@@ -4107,22 +4107,12 @@ window.__voReady.then(function(){
             '</div>'+
             '<button class="btn primary" data-act="opentoday">Abrir tabela de hoje →</button>'+
           '</div>'+
-        '</div>'+
-
-        '<div class="archive-head"><h2>Todas as tabelas</h2></div>'+
-        '<div class="archive-list" id="archiveList"><div class="arow-empty">Carregando…</div></div>'+
-
-        '<div class="archive-head" style="margin-top:22px;"><h2>Clientes</h2><span class="hint">busque por nome, CPF ou telefone</span></div>'+
-        '<div class="card" style="padding:14px 16px;">'+
-          '<input type="text" id="dashCustSearch" class="dash-cust-search" placeholder="Buscar cliente...">'+
-          '<div id="dashCustArea"></div>'+
         '</div>';
+
 
       attachDashboardEvents();
       bindDayDetailEvents();
       bindBackupControls();
-      setupClientesSection();
-      loadArchiveIndex(function(dates){ renderArchiveList(dates); });
     });
   }
 
