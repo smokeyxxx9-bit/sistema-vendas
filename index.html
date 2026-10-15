@@ -5440,7 +5440,7 @@ window.__voReady.then(function(){
     }
     else if (act==="rowos"){
       var roId = node.getAttribute("data-id"), roRow = findTblRow(roId), roOs = roRow ? osDaLinha(roRow) : null;
-      state.modal = roOs ? {type:"osLinha", osId:roOs.id, rowId:roId} : {type:"osForm", osId:null, rowId:roId, origem:"tabela"};
+      state.modal = roOs ? {type:"osLinha", osId:roOs.id, rowId:roId, novos:isNovosTbl()} : {type:"osForm", osId:null, rowId:roId, origem:"tabela", novos:isNovosTbl(), dia:isNovosTbl()?tblDate():undefined};
       render();
     }
     else if (act==="desconto"){
@@ -5760,7 +5760,7 @@ window.__voReady.then(function(){
       '<button class="icon-btn cli-btn'+(custName?' has':'')+'" data-act="linkcustomer" data-id="'+row.id+'" title="'+(custName?('Cliente: '+escAttr(custName)+' — clique para ver os dados'):'Vincular cliente a esta linha')+'">👤</button>'+
       '<button class="icon-btn'+(hasDesc?' has':'')+'" data-act="desconto" data-id="'+row.id+'" title="'+(hasDesc?('Descontos ('+descontosList(row).length+'): -'+escAttr(fmtCurrency(descontoValor(row)))):'Dar desconto nesta venda')+'">🏷</button>'+
       '<button class="icon-btn'+(groupRows(row).length>1?' has':'')+'" data-act="linksales" data-id="'+row.id+'" title="'+(groupRows(row).length>1?('Vinculada a mais '+(groupRows(row).length-1)+' venda(s) — imprime numa nota só. Clique para alterar'):'Vincular a outra venda do mesmo cliente (nota e garantia únicas)')+'">🔗</button>'+
-      (can("os_gerir") && !isNovosTbl() ? '<button class="icon-btn'+(osDaLinha(row)?' has':'')+'" data-act="rowos" data-id="'+row.id+'" title="'+(osDaLinha(row)?('O.S. #'+osDaLinha(row).num+' desta linha — clique para editar'):'Abrir O.S. para esta linha')+'">🔧</button>' : '')+
+      (can("os_gerir") ? '<button class="icon-btn'+(osDaLinha(row)?' has':'')+'" data-act="rowos" data-id="'+row.id+'" title="'+(osDaLinha(row)?('O.S. #'+osDaLinha(row).num+' desta linha — clique para editar'):'Abrir O.S. para esta linha')+'">🔧</button>' : '')+
       '<button class="icon-btn print-btn" data-act="printnote" data-id="'+row.id+'" title="Imprimir nota">🖨</button>'+
       (editable ? '<button class="icon-btn" data-act="delrow" data-id="'+row.id+'" title="Remover linha">✕</button>' : '')+
       (editable ? '<button class="icon-btn drag-btn" data-drag="'+row.id+'" title="Segure e arraste para mover a venda para cima ou para baixo">⣿</button>' : '')+
@@ -6353,13 +6353,18 @@ window.__voReady.then(function(){
   function nextCarroLabel(){
     var col = COLUMNS.filter(function(c){ return c.key==="carro"; })[0];
     var opts = (col && col.options) || [];
-    var rws = tblRows();
-    if (!rws.length) return opts[0] || "Carro 1";
-    var last = rws[rws.length-1].carro || "";
-    var m = /(\d+)\s*$/.exec(last);
-    if (!m) return last || opts[0] || "Carro 1";
-    var cand = last.replace(/(\d+)\s*$/, String(parseInt(m[1],10)+1));
-    return opts.indexOf(cand) > -1 ? cand : last; // chegou no último carro da lista: repete o atual
+    var d = tblDate(), novos = isNovosTbl();
+    // as duas tabelas (seminovos e pneus novos) do mesmo dia dividem a mesma contagem de carros
+    var semi = novos ? rowsOfDay(d) : state.rows;
+    var nov = novos ? (state.novosRows||[]) : novosOfDay(d);
+    var maxN = 0, maxLabel = "";
+    (semi||[]).concat(nov||[]).forEach(function(r){
+      var m = /(\d+)\s*$/.exec((r && r.carro) || "");
+      if (m && parseInt(m[1],10) >= maxN){ maxN = parseInt(m[1],10); maxLabel = r.carro; }
+    });
+    if (!maxN) return opts[0] || "Carro 1";
+    var cand = maxLabel.replace(/(\d+)\s*$/, String(maxN+1));
+    return opts.indexOf(cand) > -1 ? cand : maxLabel; // chegou no último carro da lista: repete o atual
   }
 
   function addRow(){
@@ -6582,6 +6587,20 @@ window.__voReady.then(function(){
     var n = parseInt(m[1],10)+1;
     return n<=19 ? last.replace(/(\d+)\s*$/, String(n)) : last;
   }
+  // O.S. aberta a partir da tabela de pneus novos: o serviço soma na linha de pneus novos que guarda o osId
+  function osAplicarNovos(os, serv, sinal){
+    var f = OS_CAMPOS[serv.tipo]; if (!f) return;
+    var month = String(serv.data || os.dia || today).slice(0,7);
+    var list = loadNovosMonth(month);
+    var row = list.filter(function(r){ return r && r.osId===os.id; })[0];
+    if (!row) return;
+    if (f.q) row[f.q] = String(Math.max(0, (parseInt(row[f.q],10)||0) + sinal*(parseInt(serv.qtd,10)||1)));
+    var novoV = Math.max(0, parseNum(row[f.v]) + sinal*(Number(serv.valor)||0));
+    row[f.v] = novoV>0 ? osFmtNum(novoV) : "";
+    saveNovosMonth(month, list);
+    state.novosRows = null;
+  }
+  function osEhNovos(osId){ var o = loadOS().filter(function(x){ return x.id===osId; })[0]; return !!(o && o.tabela==="novos"); }
   // soma (sinal=1) ou tira (sinal=-1) um serviço na linha da O.S. do dia; devolve o array de linhas novo
   function osAplicarNaLinha(rows, os, serv, sinal){
     rows = Array.isArray(rows) ? rows : [];
@@ -6634,12 +6653,15 @@ window.__voReady.then(function(){
       o.servicos = o.servicos || []; o.servicos.push(serv);
       var dia = serv.data;
       if (can("vendas")){
-        var rows = osAplicarNaLinha(lsGetJSON(K_ROWS+dia, []), o, serv, 1);
-        saveRows(dia, rows).catch(function(){});
+        if (o.tabela==="novos") osAplicarNovos(o, serv, 1);
+        else {
+          var rows = osAplicarNaLinha(lsGetJSON(K_ROWS+dia, []), o, serv, 1);
+          saveRows(dia, rows).catch(function(){});
+        }
       }
       saveOS(lista); cb(null);
     }
-    if (!sb) return local();
+    if (!sb || (can("vendas") && osEhNovos(osId))) return local();
     sb.rpc("os_lancar_servico", {p_os_id:osId, p_servico:serv}).then(function(r){
       if (r.error){ if (osErroRpcAusente(r.error)) return local(); return cb(r.error.message||"Não foi possível lançar."); }
       osFinalizar(r.data); osConferirQtds(serv.data); cb(null);
@@ -6659,11 +6681,12 @@ window.__voReady.then(function(){
       var sv = (o.servicos||[]).filter(function(x){ return x.id===servId; })[0];
       o.servicos = (o.servicos||[]).filter(function(x){ return x.id!==servId; });
       if (sv && sv.data && can("vendas")){
-        saveRows(sv.data, osAplicarNaLinha(lsGetJSON(K_ROWS+sv.data, []), o, sv, -1)).catch(function(){});
+        if (o.tabela==="novos") osAplicarNovos(o, sv, -1);
+        else saveRows(sv.data, osAplicarNaLinha(lsGetJSON(K_ROWS+sv.data, []), o, sv, -1)).catch(function(){});
       }
       saveOS(lista); cb(null);
     }
-    if (!sb) return local();
+    if (!sb || (can("vendas") && osEhNovos(osId))) return local();
     sb.rpc("os_remover_servico", {p_os_id:osId, p_serv_id:servId}).then(function(r){
       if (r.error){ if (osErroRpcAusente(r.error)) return local(); return cb(r.error.message||"Não foi possível remover."); }
       osFinalizar(r.data); cb(null);
@@ -6852,7 +6875,7 @@ window.__voReady.then(function(){
     document.getElementById("olCancel").addEventListener("click", fechar);
     div.addEventListener("click", function(e){ if (e.target===div) fechar(); });
     document.getElementById("olEdit").addEventListener("click", function(){
-      state.modal = {type:"osForm", osId:o.id, rowId:state.modal.rowId, origem:"tabela"}; render();
+      state.modal = {type:"osForm", osId:o.id, rowId:state.modal.rowId, origem:"tabela", novos:state.modal.novos}; render();
     });
     document.getElementById("olClose").addEventListener("click", function(){
       if (!confirm("Encerrar a O.S. #"+o.num+" ("+(o.carro||"carro")+")? Ela some da lista dos montadores.")) return;
@@ -6903,7 +6926,7 @@ window.__voReady.then(function(){
     var linha = null;
     if (!o && state.modal.rowId){
       var _dia = state.modal.dia || state.date;
-      var _rows = (state.modal.origem==="tabela" && _dia===state.date) ? state.rows : lsGetJSON(K_ROWS+_dia, []);
+      var _rows = state.modal.novos ? (state.novosRows||[]) : ((state.modal.origem==="tabela" && _dia===state.date) ? state.rows : lsGetJSON(K_ROWS+_dia, []));
       linha = (_rows||[]).filter(function(x){ return x && x.id===state.modal.rowId; })[0] || null;
       if (linha) o = {carro:linha.carro||"", placa:"", cliente:customerNameById(linha.clienteId), qtdPneus:(parseNum(linha.quantidade)>0?parseNum(linha.quantidade):4), medida:linha.medida||"", obs:"", _nova:true};
     }
@@ -6949,10 +6972,14 @@ window.__voReady.then(function(){
       alvo.obs = document.getElementById("osObs").value.trim();
       addOsLog(novaOS ? "abriu" : "editou", alvo, {linha: (linha && linha.carro) || alvo.linhaCarro || ""});
       if (novaOS && linha){
-        alvo.rowId = linha.id; alvo.dia = state.modal.dia || state.date; alvo.linhaCarro = linha.carro || "";
+        alvo.rowId = linha.id; alvo.dia = state.modal.dia || (state.modal.novos ? tblDate() : state.date); alvo.linhaCarro = linha.carro || "";
+        if (state.modal.novos) alvo.tabela = "novos";
       }
       saveOS(lista);
-      if (novaOS && linha) osVincularLinha(alvo.dia, linha.id, alvo, state.modal.origem==="tabela");
+      if (novaOS && linha){
+        if (state.modal.novos){ linha.osId = alvo.id; linha.osNum = alvo.num; novosCommit(); }
+        else osVincularLinha(alvo.dia, linha.id, alvo, state.modal.origem==="tabela");
+      }
       close();
     });
   }
