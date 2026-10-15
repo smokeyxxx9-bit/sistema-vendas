@@ -381,6 +381,8 @@
   }
   .grid-row.data{border-bottom:1px solid var(--border-soft);}
   .grid-row.data:hover{background:rgba(255,255,255,.015);}
+  /* carro pronto (marcado pelo montador na O.S.): contorno verde na linha da tabela de vendas */
+  .grid-row.data.carro-pronto{outline:2px solid #22c55e;outline-offset:-2px;border-radius:6px;box-shadow:0 0 10px rgba(34,197,94,.35);position:relative;}
   .grid-row .cell{
     padding:6px 8px;border-right:1px solid var(--border-soft);display:flex;align-items:center;
   }
@@ -4752,7 +4754,7 @@ window.__voReady.then(function(){
       : '<div class="arow-empty">'+(edicoesRaw.length ? 'Nenhuma alteração encontrada para esse filtro.' : 'Nenhuma alteração registrada ainda. Só entram alterações feitas em vendas que já existiam há mais de 10 minutos (ou de dias anteriores).')+'</div>';
     var osEvs = porUsuario(osRaw);
     if (q) osEvs = osEvs.filter(function(e){ return [e.email, e.nome, e.carro, "#"+e.osNum, e.tipo, e.linha].join(" ").toLowerCase().indexOf(q)>-1; });
-    var osAcao = {abriu:["Abriu","var(--green)"], lancou:["Lançou","var(--green)"], removeu:["Removeu","var(--red)"], editou:["Editou","var(--yellow)"], encerrou:["Encerrou","var(--text-dim)"]};
+    var osAcao = {abriu:["Abriu","var(--green)"], lancou:["Lançou","var(--green)"], removeu:["Removeu","var(--red)"], editou:["Editou","var(--yellow)"], encerrou:["Encerrou","var(--text-dim)"], pronto:["Carro pronto","var(--green)"], desfez_pronto:["Desfez pronto","var(--yellow)"]};
     var osGrupos = [], osIdx = {};
     osEvs.forEach(function(e){
       var g = osIdx[e.osId];
@@ -4773,6 +4775,8 @@ window.__voReady.then(function(){
               else if (e.acao==="abriu") frase = 'abriu a O.S.'+(e.linha ? ' na linha <b>'+escHtml(e.linha)+'</b>' : '');
               else if (e.acao==="editou") frase = 'editou os dados da O.S.';
               else if (e.acao==="encerrou") frase = 'encerrou a O.S.';
+              else if (e.acao==="pronto") frase = 'marcou o carro como <b style="color:'+a[1]+';">pronto</b>';
+              else if (e.acao==="desfez_pronto") frase = 'desfez o "carro pronto"';
               else frase = escHtml(e.acao);
               return '<div class="arow">'+
                 '<span class="d">'+fmtDateTimeBR(e.ts)+'</span>'+
@@ -5762,7 +5766,8 @@ window.__voReady.then(function(){
       (editable ? '<button class="icon-btn drag-btn" data-drag="'+row.id+'" title="Segure e arraste para mover a venda para cima ou para baixo">⣿</button>' : '')+
       '</div>';
     var open = !!state.openDetails[row.id];
-    var mainRow = '<div class="grid-row data" style="grid-template-columns:'+colTemplate+'" data-row="'+row.id+'">'+cells+'</div>';
+    var osProntaLinha = osDaLinha(row);
+    var mainRow = '<div class="grid-row data'+((osProntaLinha && osProntaLinha.pronto) ? ' carro-pronto' : '')+'"'+((osProntaLinha && osProntaLinha.pronto) ? ' title="✅ Carro pronto (O.S. #'+osProntaLinha.num+')"' : '')+' style="grid-template-columns:'+colTemplate+'" data-row="'+row.id+'">'+cells+'</div>';
     var toggleRow = '<div class="grid-row" style="grid-template-columns:'+colTemplate+'">'+
       '<div class="detail-toggle-row"><button class="detail-toggle'+(open?' open':'')+'" data-act="toggledetail" data-id="'+row.id+'"><span class="car">▸</span> detalhes da venda</button>'+'</div>'+
       '</div>';
@@ -6637,7 +6642,7 @@ window.__voReady.then(function(){
     if (!sb) return local();
     sb.rpc("os_lancar_servico", {p_os_id:osId, p_servico:serv}).then(function(r){
       if (r.error){ if (osErroRpcAusente(r.error)) return local(); return cb(r.error.message||"Não foi possível lançar."); }
-      osFinalizar(r.data); cb(null);
+      osFinalizar(r.data); osConferirQtds(serv.data); cb(null);
     }).catch(function(){ cb("Sem conexão. Tente de novo."); });
   }
   function osRemoverServico(osId, servId, cb){
@@ -6665,6 +6670,59 @@ window.__voReady.then(function(){
     }).catch(function(){ cb("Sem conexão. Tente de novo."); });
   }
 
+  // ---- carro pronto: o montador marca na O.S. e a linha do carro fica com contorno verde na tabela de vendas
+  function osMarcarPronto(osId, pronto, cb){
+    var cbOrig = cb;
+    cb = function(err){
+      if (!err){
+        var o1 = loadOS().filter(function(x){ return x.id===osId; })[0];
+        if (o1) addOsLog(pronto ? "pronto" : "desfez_pronto", o1);
+      }
+      cbOrig(err);
+    };
+    function aplicar(){
+      var lista = loadOS(), o = lista.filter(function(x){ return x.id===osId; })[0];
+      if (!o || o.status!=="aberta") return "Esta O.S. já foi fechada.";
+      if (pronto){ o.pronto = true; o.prontoEm = Date.now(); o.prontoPor = userDisplayName(); }
+      else { delete o.pronto; delete o.prontoEm; delete o.prontoPor; }
+      saveOS(lista); return null;
+    }
+    function local(){ cb(aplicar()); }
+    if (!sb) return local();
+    sb.rpc("os_marcar_pronto", {p_os_id:osId, p_pronto:!!pronto, p_por:userDisplayName()}).then(function(r){
+      if (r.error){ if (osErroRpcAusente(r.error)) return local(); return cb(r.error.message||"Não foi possível marcar."); }
+      if (r.data && r.data.os){ osGuardarLocal(K_OS, r.data.os); cb(null); } else local();
+    }).catch(function(){ cb("Sem conexão. Tente de novo."); });
+  }
+
+  // ---- conferência: garante que a quantidade lançada na O.S. (ex.: 4 bicos) chegou inteira na linha da tabela
+  // (se o servidor somou só 1, completa aqui). Só sobe a quantidade — nunca apaga o que alguém ajustou à mão.
+  function osConferirQtds(dia){
+    try{
+      if (!dia || !can("vendas")) return;
+      var rows = lsGetJSON(K_ROWS+dia, []);
+      if (!Array.isArray(rows)) return;
+      var lista = loadOS(), mudou = false;
+      lista.forEach(function(o){
+        var row = rows.filter(function(r){ return r && r.osId===o.id; })[0];
+        if (!row) return;
+        var soma = {};
+        (o.servicos||[]).forEach(function(sv){
+          if (!sv || sv.data!==dia) return;
+          var f = OS_CAMPOS[sv.tipo]; if (!f || !f.q) return;
+          soma[f.q] = (soma[f.q]||0) + (parseInt(sv.qtd,10)||1);
+        });
+        for (var campo in soma){
+          if (!Object.prototype.hasOwnProperty.call(soma, campo)) continue;
+          if ((parseInt(row[campo],10)||0) < soma[campo]){ row[campo] = String(soma[campo]); mudou = true; }
+        }
+      });
+      if (!mudou) return;
+      if (dia===state.date) state.rows = rows;
+      saveRows(dia, rows).catch(function(){});
+    }catch(e){ /* a conferência nunca pode impedir o trabalho */ }
+  }
+
   function osCardHtml(o){
     var gerir = can("os_gerir");
     var servs = o.servicos || [];
@@ -6677,10 +6735,10 @@ window.__voReady.then(function(){
         ((gerir||meu) ? '<button class="icon-btn" data-os="'+escAttr(o.id)+'" data-delserv="'+escAttr(x.id)+'" title="Remover este lançamento">✕</button>' : '')+
         '</span></div>';
     }).join("");
-    var chips = (o.linhaCarro ? '<span class="os-chip">📌 '+escHtml(o.linhaCarro)+'</span>' : '')+'<span class="os-chip">🛞 '+(parseInt(o.qtdPneus,10)||0)+' pneu(s)</span>'+
+    var chips = (o.pronto ? '<span class="os-chip os-chip-pronto">✅ Carro pronto'+(o.prontoPor?' · '+escHtml(o.prontoPor):'')+'</span>' : '')+(o.linhaCarro ? '<span class="os-chip">📌 '+escHtml(o.linhaCarro)+'</span>' : '')+'<span class="os-chip">🛞 '+(parseInt(o.qtdPneus,10)||0)+' pneu(s)</span>'+
       (o.medida ? '<span class="os-chip">'+escHtml(o.medida)+'</span>' : '')+
       '<span class="os-chip dim">'+osHa(o.criadaEm)+'</span>';
-    return '<div class="os-card">'+
+    return '<div class="os-card'+(o.pronto ? ' os-pronto' : '')+'">'+
       '<div class="os-head"><span class="os-num">#'+o.num+'</span><span class="os-carro">'+escHtml(o.carro||"Carro")+(o.placa?' <small>'+escHtml(String(o.placa).toUpperCase())+'</small>':'')+'</span></div>'+
       '<div class="os-chips">'+chips+'</div>'+
       ((gerir && o.cliente) ? '<div class="os-line">Cliente: <b>'+escHtml(o.cliente)+'</b></div>' : '')+
@@ -6688,6 +6746,7 @@ window.__voReady.then(function(){
       (servs.length ? '<div class="os-servs">'+servHtml+'<div class="os-total"><span>Total lançado</span><b>'+fmtCurrency(total)+'</b></div></div>' : '')+
       '<div class="os-actions">'+
         '<button class="btn primary os-add" data-os-add="'+escAttr(o.id)+'">+ Serviço</button>'+
+        '<button class="btn os-pronto-btn'+(o.pronto?' on':'')+'" data-os-pronto="'+escAttr(o.id)+'">'+(o.pronto ? '↩ Desfazer pronto' : '✅ Carro pronto')+'</button>'+
         (gerir ? '<button class="btn ghost small" data-os-edit="'+escAttr(o.id)+'">Editar</button><button class="btn ghost small" data-os-close="'+escAttr(o.id)+'">Fechar O.S.</button>' : '')+
       '</div>'+
     '</div>';
@@ -6717,6 +6776,21 @@ window.__voReady.then(function(){
     if (nova) nova.addEventListener("click", function(){ state.modal = {type:"osPickRow"}; render(); });
     root.querySelectorAll("[data-os-add]").forEach(function(b){
       b.addEventListener("click", function(){ state.modal = {type:"osServico", osId:b.getAttribute("data-os-add")}; render(); });
+    });
+    root.querySelectorAll("[data-os-pronto]").forEach(function(b){
+      b.addEventListener("click", function(){
+        var id = b.getAttribute("data-os-pronto");
+        var o = loadOS().filter(function(x){ return x.id===id; })[0];
+        if (!o) return;
+        var novo = !o.pronto;
+        if (novo && !confirm("Marcar o carro "+(o.carro||"")+" (O.S. #"+o.num+") como PRONTO?")) return;
+        b.disabled = true;
+        osMarcarPronto(id, novo, function(err){
+          if (err){ b.disabled = false; alert(err); return; }
+          if (window.uiToast) window.uiToast(novo ? "Carro pronto! A linha ficou com contorno verde na tabela." : "Marcação de pronto removida.", "ok");
+          render();
+        });
+      });
     });
     root.querySelectorAll("[data-os-edit]").forEach(function(b){
       b.addEventListener("click", function(){ state.modal = {type:"osForm", osId:b.getAttribute("data-os-edit")}; render(); });
@@ -9894,6 +9968,8 @@ window.__voReady.then(function(){
     if (key===K_PERMS) aplicarPermissoes();
     // não atropela quem está preenchendo um formulário de O.S. no celular
     if (key===K_OS && state.modal && (state.modal.type==="osForm" || state.modal.type==="osServico")) return;
+    // o servidor pode ter somado só 1 bico quando o montador lançou 4: confere o dia de hoje e o dia aberto
+    if (key===K_OS || key.indexOf(K_ROWS)===0){ osConferirQtds(toISO(new Date())); if (state.date) osConferirQtds(state.date); }
     if (key.indexOf(K_ROWS)===0){
       var date = key.slice(K_ROWS.length);
       var month = date.slice(0,7);
@@ -10174,6 +10250,10 @@ body{font-size:16px}
 .os-total{display:flex;justify-content:space-between;font-size:13px;color:var(--text-dim);padding-top:6px;border-top:1px dashed var(--border-soft);}
 .os-total b{color:var(--text);}
 .os-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+.os-card.os-pronto{border-color:#22c55e;box-shadow:0 0 0 1px #22c55e inset;}
+.os-chip-pronto{background:rgba(34,197,94,.18);border-color:#22c55e;color:#22c55e;font-weight:600;}
+.os-actions .os-pronto-btn{flex:1 1 140px;min-height:46px;font-size:15px;justify-content:center;background:#16a34a;border-color:#16a34a;color:#fff;font-weight:600;}
+.os-actions .os-pronto-btn.on{background:transparent;color:#22c55e;border-color:#22c55e;}
 .os-actions .os-add{flex:1 1 140px;min-height:46px;font-size:15px;justify-content:center;}
 .user-block{border-bottom:1px solid var(--border-soft);}
 .user-block .arow{border-bottom:0;}
