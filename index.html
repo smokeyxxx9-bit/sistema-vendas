@@ -24,6 +24,29 @@
   .est-custo-btn:hover{border-color:var(--accent,#c9a227);color:var(--text);}
   .est-custo-btn.vazio{color:var(--text-faint);}
   .est-margem{color:#3fae6a;} .est-margem.neg{color:#e2554c;}
+  /* ---- pneus do mês (registro mensal) ---- */
+  .rm-wrap{overflow-x:auto;}
+  .rm-table{width:100%;border-collapse:collapse;min-width:680px;}
+  .rm-table th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim);text-align:left;padding:8px 6px;border-bottom:1px solid var(--border);font-weight:500;}
+  .rm-table td{padding:4px;border-bottom:1px solid var(--border-soft);}
+  .rm-n{width:34px;color:var(--text-faint);font-family:'IBM Plex Mono',monospace;font-size:12px;text-align:center;}
+  .rm-in{width:100%;background:var(--panel-alt);border:1px solid var(--border-soft);border-radius:3px;color:var(--text);padding:8px 9px;font-size:14px;min-height:38px;}
+  .rm-in:focus{outline:none;border-color:var(--yellow);}
+  .rm-num{text-align:right;font-family:'IBM Plex Mono',monospace;}
+  .rm-month{width:auto;color-scheme:dark;}
+  html[data-theme="light"] .rm-month{color-scheme:light;}
+  .rm-vazio{padding:22px 10px;text-align:center;color:var(--text-dim);font-size:13px;}
+  .rm-chips{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px;}
+  .rm-chip{background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 12px;font-size:13px;text-align:left;display:flex;flex-direction:column;gap:2px;}
+  .rm-chip small{color:var(--text-dim);font-size:11px;}
+  .rm-chip.on{border-color:var(--yellow);color:var(--yellow);}
+  .rm-busy{font-size:12.5px;color:var(--yellow);}
+  .rm-fotos{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-top:12px;}
+  .rm-foto{position:relative;aspect-ratio:1/1;border:1px solid var(--border-soft);border-radius:6px;overflow:hidden;background:var(--panel-alt);cursor:zoom-in;}
+  .rm-foto img{width:100%;height:100%;object-fit:cover;display:block;}
+  .rm-foto button{position:absolute;top:4px;right:4px;width:26px;height:26px;border-radius:50%;border:none;background:rgba(0,0,0,.65);color:#fff;font-size:12px;line-height:1;}
+  .rm-lightbox{position:fixed;inset:0;z-index:9500;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;padding:16px;cursor:zoom-out;}
+  .rm-lightbox img{max-width:100%;max-height:100%;border-radius:4px;}
   :root{
     --bg:#14181c;
     --panel:#1c2227;
@@ -942,6 +965,9 @@ window.__voReady.then(function(){
   var K_NOVOS = "vo_novos:";          // pneus novos: uma chave por mês (vo_novos:AAAA-MM)
   var K_NOVOS_META = "vo_novos_meta";
   var K_ARQ = "arq:";                 // arquivo morto na nuvem: registros antigos tirados do navegador (nunca apagados)
+  var K_BKP = "bkp:";                 // backups automáticos na nuvem (só nuvem; ficam fora do navegador)
+  var K_FOTOMES = "fotomes:";         // fotos do registro mensal (só nuvem)
+  var K_REGMES = "vo_regmes:";        // registro mensal de pneus: uma chave por mês (vo_regmes:AAAA-MM)
 
   // ---------- sincronização em nuvem (Supabase) ----------
   // Preencha as duas linhas abaixo com os dados do SEU projeto Supabase
@@ -1019,7 +1045,7 @@ window.__voReady.then(function(){
       cb(true);
     }
     function pagina(de){
-      sb.from("kv_store").select("key,value").order("key",{ascending:true}).range(de, de+PAGINA-1).then(function(res){
+      sb.from("kv_store").select("key,value").not("key","like",K_BKP+"%").not("key","like",K_FOTOMES+"%").not("key","like",K_ARQ+"%").order("key",{ascending:true}).range(de, de+PAGINA-1).then(function(res){
         if (!res || res.error || !res.data){ return falhou(res && res.error); }
         todas = todas.concat(res.data);
         if (res.data.length === PAGINA) return pagina(de+PAGINA);
@@ -1058,7 +1084,7 @@ window.__voReady.then(function(){
       .on("postgres_changes", {event:"*", schema:"public", table:"kv_store"}, function(payload){
         var row = payload.new;
         if (!row || !row.key) return;
-        if (row.key.indexOf(K_ARQ)===0) return; // arquivo morto: só nuvem
+        if (row.key.indexOf(K_ARQ)===0 || row.key.indexOf(K_BKP)===0 || row.key.indexOf(K_FOTOMES)===0) return; // arquivo morto, backups e fotos: só nuvem
         try{ localStorage.setItem(row.key, JSON.stringify(row.value)); }catch(e){}
         if (pendingEchoKeys[row.key] > 0){
           // é só o eco da nossa própria digitação/salvamento — os dados já estão certos localmente,
@@ -2387,6 +2413,99 @@ window.__voReady.then(function(){
     });
   }
 
+  // ======================= BACKUP NA NUVEM (Supabase): a cada 30 min, guarda os 10 mais recentes =======================
+  // Cada backup é uma linha da tabela kv_store com chave "bkp:<hora>". Quando entra o 11º, o mais antigo é apagado.
+  var K_BKP_SIG = "bkpnuvem_sig"; // (sem "vo_": não entra no backup e não sobe para a nuvem)
+  var BKP_INTERVALO = 30*60*1000, BKP_MAX = 10;
+  var bkpPronto = false, bkpEmAndamento = false;
+  function bkpPodeRodar(){ return !!sb && !!state.userId && bkpPronto && (state.role==="master" || can("vendas")); }
+  function bkpChave(ts){ return K_BKP + String(ts).padStart(13,"0"); }
+  function hashTexto(t){ var h = 5381; for (var i=0;i<t.length;i++){ h = ((h<<5)+h+t.charCodeAt(i))|0; } return (h>>>0).toString(36); }
+  // compacta o backup (gzip + base64) para o envio ser leve; sem suporte do navegador, vai em texto puro
+  function gzipB64(txt){
+    if (!window.CompressionStream) return Promise.resolve({enc:"raw", d:txt});
+    var stream = new Blob([txt]).stream().pipeThrough(new CompressionStream("gzip"));
+    return new Response(stream).arrayBuffer().then(function(buf){
+      var bytes = new Uint8Array(buf), bin = "", CH = 0x8000;
+      for (var i=0;i<bytes.length;i+=CH) bin += String.fromCharCode.apply(null, bytes.subarray(i, i+CH));
+      return {enc:"gzip-b64", d:btoa(bin)};
+    });
+  }
+  function gunzipB64(v){
+    if (!v || v.enc!=="gzip-b64") return Promise.resolve(v && v.d);
+    var bin = atob(v.d), bytes = new Uint8Array(bin.length);
+    for (var i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+    var stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
+    return new Response(stream).text();
+  }
+  function listarBackupsNuvem(){
+    return sb.from("kv_store").select("key,ts:value->>ts,motivo:value->>motivo,bytes:value->>bytes,chaves:value->>chaves")
+      .like("key", K_BKP+"%").order("key",{ascending:true}).then(function(res){
+        if (!res || res.error) throw new Error((res && res.error && res.error.message) || "Falha ao listar os backups da nuvem.");
+        return (res.data||[]).map(function(r){
+          return {key:r.key, ts:parseInt(r.ts,10)||0, motivo:r.motivo||"", bytes:parseInt(r.bytes,10)||0, chaves:parseInt(r.chaves,10)||0};
+        });
+      });
+  }
+  // mantém só os BKP_MAX mais recentes: o que passar disso (o mais antigo) é apagado
+  function podarBackupsNuvem(){
+    return listarBackupsNuvem().then(function(lista){
+      var excesso = lista.length - BKP_MAX;
+      if (excesso<=0) return 0;
+      var apagar = lista.slice(0, excesso).map(function(b){ return b.key; });
+      return sb.from("kv_store").delete().in("key", apagar).select("key").then(function(res){
+        if (res && res.error) throw new Error("Backup guardado, mas não consegui apagar o mais antigo: "+res.error.message);
+        var n = (res && res.data) ? res.data.length : 0;
+        if (n < apagar.length) throw new Error("Backup guardado, mas o Supabase não deixou apagar o mais antigo (falta permissão de DELETE na tabela kv_store).");
+        return n;
+      });
+    });
+  }
+  // manual=true ignora as travas "já fez há pouco" e "nada mudou"
+  function backupNuvemAgora(manual){
+    if (!sb || !state.userId) return Promise.reject(new Error("Entre na sua conta para guardar backups na nuvem."));
+    if (bkpEmAndamento) return Promise.resolve({pulou:"andamento"});
+    bkpEmAndamento = true;
+    var agora = Date.now(), txt = "", sig = "";
+    return listarBackupsNuvem().then(function(lista){
+      var ult = lista.length ? lista[lista.length-1].ts : 0;
+      // outro aparelho aberto pode ter acabado de fazer: não duplica
+      if (!manual && agora-ult < BKP_INTERVALO-60000) return {pulou:"recente"};
+      var data = dadosParaSnapshot(), chaves = Object.keys(data).length;
+      if (!chaves) return {pulou:"vazio"};
+      txt = JSON.stringify(data); sig = txt.length+":"+hashTexto(txt);
+      var sigAnt = ""; try{ sigAnt = localStorage.getItem(K_BKP_SIG) || ""; }catch(e){}
+      // sem nenhuma alteração desde o último backup: não gasta uma das 10 vagas com uma cópia igual
+      if (!manual && sig===sigAnt && lista.length) return {pulou:"semmudanca"};
+      return gzipB64(txt).then(function(z){
+        var valor = {ts:agora, motivo:manual ? "Manual" : "Automático (30 min)", chaves:chaves, bytes:txt.length, enc:z.enc, d:z.d};
+        return sb.from("kv_store").upsert({key:bkpChave(agora), value:valor, updated_at:new Date().toISOString()}).then(function(res){
+          if (res && res.error) throw new Error(res.error.message || "A nuvem recusou o backup.");
+          try{ localStorage.setItem(K_BKP_SIG, sig); }catch(e){}
+          state.bkpUltimo = agora; state.bkpErro = "";
+          return podarBackupsNuvem().then(function(apagados){ return {ok:true, ts:agora, apagados:apagados}; });
+        });
+      });
+    }).then(function(r){ bkpEmAndamento = false; return r; },
+            function(e){ bkpEmAndamento = false; state.bkpErro = (e && e.message) || String(e); throw e; });
+  }
+  function restaurarBackupNuvem(chave){
+    return makeSnapshot("Antes de restaurar backup da nuvem", "pre-"+Date.now()).catch(function(){}).then(function(){
+      return sb.from("kv_store").select("value").eq("key", chave).limit(1);
+    }).then(function(res){
+      var row = res && res.data && res.data[0];
+      if (!row || !row.value) throw new Error("Backup não encontrado na nuvem.");
+      return gunzipB64(row.value);
+    }).then(function(txt){
+      var data = JSON.parse(txt), n = 0;
+      Object.keys(data).forEach(function(k){
+        try{ localStorage.setItem(k, data[k]); cloudPush(k, JSON.parse(data[k])); n++; }catch(e){}
+      });
+      state.monthSummaryCache = {}; state.monthPartsCache = {};
+      return n;
+    });
+  }
+
   // ======================= MIGRAÇÃO: Mão de obra → Serviço =======================
   function fmtCampoNum(n){ return n>0 ? n.toFixed(2).replace(".",",") : ""; }
   function migrarLinhaMaoDeObra(row){
@@ -2683,6 +2802,10 @@ window.__voReady.then(function(){
         '<p>O sistema guarda uma cópia por dia (as últimas 14) neste navegador. Restaurar também atualiza a nuvem.</p>'+
         '<button class="btn ghost small" id="ferSnapNow" style="margin-bottom:10px;">Fazer backup agora</button>'+
         '<div id="ferSnaps"></div>'+
+        '<h4 style="margin:18px 0 6px;font-size:17px;">Backups na nuvem (Supabase)</h4>'+
+        '<p>Automático a cada 30 minutos (só se algo mudou). Guarda os 10 mais recentes: ao entrar o 11º, o mais antigo é apagado. Restaurar também atualiza as telas.</p>'+
+        '<button class="btn ghost small" id="ferNuvemNow" style="margin-bottom:10px;">☁ Fazer backup na nuvem agora</button>'+
+        '<div id="ferNuvem"></div>'+
         '<h4 style="margin:18px 0 6px;font-size:17px;">Migrar Mão de obra → Serviço</h4>'+
         '<div id="ferMig"></div>'+
         '<div class="modal-actions" style="margin-top:18px;"><button class="btn ghost small" id="ferVoltar">Voltar</button></div>'+
@@ -2710,6 +2833,26 @@ window.__voReady.then(function(){
         div.querySelectorAll(".ferDown").forEach(function(b){ b.addEventListener("click", function(){ baixarSnapshot(b.getAttribute("data-id")); }); });
       }).catch(function(e){ q("#ferSnaps").innerHTML = '<p>'+escHtml(e&&e.message?e.message:"Backups indisponíveis neste navegador.")+'</p>'; });
     }
+    function desenharNuvem(){
+      var box = q("#ferNuvem");
+      if (!sb){ box.innerHTML = '<p>A nuvem (Supabase) não está configurada neste sistema.</p>'; return; }
+      box.innerHTML = '<p>Carregando…</p>';
+      listarBackupsNuvem().then(function(lista){
+        lista = lista.slice().reverse();
+        if (!lista.length){ box.innerHTML = '<p>Ainda não há backups na nuvem. O primeiro é feito sozinho em instantes, ou clique em "Fazer backup na nuvem agora".</p>'; return; }
+        box.innerHTML = '<p style="font-size:13px;color:var(--text-dim);">'+lista.length+' de '+BKP_MAX+' backups guardados.</p>'+
+          '<div style="border:1px solid var(--border-soft);border-radius:4px;max-height:260px;overflow-y:auto;">'+lista.map(function(m){
+          return '<div style="display:flex;gap:10px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--border-soft);flex-wrap:wrap;">'+
+            '<div style="flex:1 1 220px;min-width:0;"><b>'+escHtml(new Date(m.ts).toLocaleString("pt-BR"))+'</b><div style="font-size:13px;color:var(--text-dim);">'+escHtml(m.motivo)+' · '+m.chaves+' registros · '+Math.max(1,Math.round(m.bytes/1024))+' KB</div></div>'+
+            '<button class="btn ghost small ferNRest" data-key="'+escAttr(m.key)+'">Restaurar</button></div>';
+        }).join("")+'</div>';
+        div.querySelectorAll(".ferNRest").forEach(function(b){ b.addEventListener("click", function(){
+          if (!confirm("Restaurar este backup da nuvem? Os dados de hoje serão substituídos pelos dessa cópia (uma cópia do estado atual é guardada antes neste navegador).")) return;
+          restaurarBackupNuvem(b.getAttribute("data-key")).then(function(n){ alert(n+" registro(s) restaurado(s)."); state.modal = null; state.view = "dashboard"; render(); })
+            .catch(function(e){ alert("Não foi possível restaurar: "+(e&&e.message?e.message:e)); });
+        }); });
+      }).catch(function(e){ box.innerHTML = '<p>Não foi possível ler os backups da nuvem: '+escHtml(e&&e.message?e.message:e)+'</p>'; });
+    }
     function desenharMig(){
       var c = contarMaoDeObra();
       if (!c.vendas){ q("#ferMig").innerHTML = '<p>✓ Nenhuma venda com valor em Mão de obra. Não há nada para migrar.</p>'; return; }
@@ -2728,9 +2871,17 @@ window.__voReady.then(function(){
     q("#ferMes").addEventListener("change", desenharRel);
     q("#ferCsv").addEventListener("click", function(){ exportarMesCSV(q("#ferMes").value || mes); });
     q("#ferSnapNow").addEventListener("click", function(){ makeSnapshot("Backup manual","man-"+Date.now()).then(desenharSnaps).catch(function(e){ alert("Não foi possível guardar o backup: "+(e&&e.message?e.message:e)); }); });
+    q("#ferNuvemNow").addEventListener("click", function(){
+      var bt = q("#ferNuvemNow"); bt.disabled = true;
+      backupNuvemAgora(true).then(function(r){
+        if (r && r.ok) alert("Backup guardado na nuvem."+(r.apagados ? " O mais antigo foi apagado para manter "+BKP_MAX+"." : ""));
+        else alert("Já existe um backup em andamento. Tente de novo em instantes.");
+      }).catch(function(e){ alert("Não foi possível guardar o backup na nuvem: "+(e&&e.message?e.message:e)); })
+        .then(function(){ bt.disabled = false; desenharNuvem(); });
+    });
     q("#ferVoltar").addEventListener("click", function(){ state.modal = null; render(); });
     div.addEventListener("click", function(e){ if (e.target===div){ state.modal = null; render(); } });
-    desenharRel(); desenharSnaps(); desenharMig();
+    desenharRel(); desenharSnaps(); desenharNuvem(); desenharMig();
   }
 
   // ======================= IMPORTAR TABELAS ANTIGAS (HTML) — só master =======================
@@ -3663,6 +3814,18 @@ window.__voReady.then(function(){
   setTimeout(function(){ dailySnapshot(); }, 8000);
   setInterval(function(){ dailySnapshot(); }, 3600000);
 
+  // backup na nuvem: a cada 30 min (e logo depois de abrir, se o último já passou disso)
+  function bkpTick(){
+    if (!bkpPodeRodar()) return;
+    backupNuvemAgora(false).catch(function(e){
+      console.error("Backup na nuvem", e);
+      var msg = "Backup na nuvem: "+((e && e.message) || e);
+      if (msg!==state.bkpUltimoAviso){ state.bkpUltimoAviso = msg; if (window.uiToast) window.uiToast(msg, "err", 9000); }
+    });
+  }
+  setTimeout(bkpTick, 25000);
+  setInterval(bkpTick, BKP_INTERVALO);
+
 
   // ---------- backup / restauração ----------
   function exportBackup(auto){
@@ -3883,6 +4046,7 @@ window.__voReady.then(function(){
     else if (state.view==="notas") renderNotas();
     else if (state.view==="avisos") renderAvisos();
     else if (state.view==="novos") renderNovos();
+    else if (state.view==="regmes") renderRegMes();
     else if (state.view==="orcamento") renderOrcamento();
     else if (state.view==="orcamentos") renderOrcamentos();
     else if (state.view==="historico" && isMaster) renderHistorico();
@@ -4954,12 +5118,13 @@ window.__voReady.then(function(){
     {key:"clientes",   label:"Clientes",                          short:"Clientes"},
     {key:"notas",      label:"Notas e orçamentos",                short:"Notas"},
     {key:"novos",      label:"Pneus novos",                       short:"Pneus novos"},
+    {key:"registro",   label:"Pneus do mês (registro mensal, fotos e PDF)", short:"Pneus do mês"},
     {key:"avisos",     label:"Avisos",                            short:"Avisos"},
     {key:"os",         label:"O.S. — ver carros em loja e lançar serviços", short:"O.S."},
     {key:"os_gerir",   label:"O.S. — abrir, editar e fechar",     short:"Gerir O.S."}
   ];
   var PERMS_PADRAO = {
-    vendedor:   ["vendas","fechamento","estoque","clientes","notas","novos","avisos","os","os_gerir"],
+    vendedor:   ["vendas","fechamento","estoque","clientes","notas","novos","registro","avisos","os","os_gerir"],
     estoquista: ["estoque"],
     montador:   ["os"]
   };
@@ -4987,7 +5152,7 @@ window.__voReady.then(function(){
     state.role = (state.baseRole!=="master" && o && o.cargo==="montador") ? "montador" : state.baseRole;
   }
   var VIEW_PERM = {dashboard:"vendas", table:"vendas", estoque:"estoque", clientes:"clientes", notas:"notas",
-    orcamento:"notas", orcamentos:"notas", novos:"novos", avisos:"avisos", os:"os"};
+    orcamento:"notas", orcamentos:"notas", novos:"novos", regmes:"registro", avisos:"avisos", os:"os"};
   function viewPermitida(v){ var k = VIEW_PERM[v]; return !k || can(k); }
   function renderUsuarios(){
     if (!sb){
@@ -5216,6 +5381,7 @@ window.__voReady.then(function(){
     var notasBtn = '<button class="btn ghost small" data-act="opennotas" title="Ver todas as notas emitidas, em ordem de emissão">🧾 Notas</button>';
     var orcamentosBtn = '<button class="btn ghost small" data-act="openorcamentos" title="Orçamentos salvos (separados das notas)">📋 Orçamentos</button>';
     var novosBtn = '<button class="btn ghost small" data-act="opennovos" title="Vendas de pneus novos (o lucro dos pneus e o valor dos serviços/peças entram na meta do dashboard principal)">🆕 Pneus novos</button>';
+    var regBtn = '<button class="btn ghost small" data-act="openregmes" title="Registro mensal de pneus: medida, quantidade, preço, placa, carro e fotos (exporta PDF)">🗂 Pneus do mês</button>';
     var avisosCount = avisosPendentesCount();
     var avisosBtn = '<button class="btn ghost small" data-act="openavisos" title="Clientes esperando medida, lembretes e estoque baixo">🔔 Avisos'+
       (avisosCount>0 ? '<span class="nav-badge">'+avisosCount+'</span>' : '')+'</button>';
@@ -5226,10 +5392,11 @@ window.__voReady.then(function(){
     if (!can("clientes")) clientesBtn = "";
     if (!can("notas")){ notasBtn = ""; orcamentosBtn = ""; }
     if (!can("novos")) novosBtn = "";
+    if (!can("registro")) regBtn = "";
     if (!can("avisos")) avisosBtn = "";
     if (!(isMaster || can("vendas"))) backupBtns = "";
     var osBtn = can("os") ? '<button class="btn ghost small" data-act="openos" title="Carros em loja com O.S. aberta">🔧 O.S.</button>' : '';
-    var menuItems = osBtn+estoqueBtn+clientesBtn+notasBtn+orcamentosBtn+avisosBtn+historicoBtn+usuariosBtn+backupBtns;
+    var menuItems = osBtn+estoqueBtn+clientesBtn+notasBtn+orcamentosBtn+regBtn+avisosBtn+historicoBtn+usuariosBtn+backupBtns;
     // atalhos só com ícone, ao lado das Opções: tabela dos pneus novos e tabela principal (pneus usados, de hoje)
     var svgTire = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 3v5M12 16v5M3 12h5M16 12h5"/></svg>';
     var svgTable = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v16"/></svg>';
@@ -5472,6 +5639,7 @@ window.__voReady.then(function(){
     else if (act==="openclientes"){ state.clientesDetailId = null; state.view="clientes"; render(); }
     else if (act==="opennotas"){ state.view="notas"; render(); }
     else if (act==="opennovos"){ state.view="novos"; render(); }
+    else if (act==="openregmes"){ if (can("registro")){ state.view="regmes"; render(); } }
     else if (act==="opennovostable"){ state.view="novos"; state.novosTab="vendas"; state.novosRows=null; render(); }
     else if (act==="openavisos"){ state.view="avisos"; render(); }
     else if (act==="avisostab"){ state.avisosTab = node.getAttribute("data-tab"); render(); }
@@ -8357,6 +8525,7 @@ window.__voReady.then(function(){
         '<button class="btn ghost small" data-act="opennotas">🧾 Notas</button>'+
         '<button class="btn ghost small" data-act="openorcamentos">📋 Orçamentos</button>'+
         '<button class="btn ghost small" data-act="opennovos">🆕 Pneus novos</button>'+
+        (can("registro") ? '<button class="btn ghost small" data-act="openregmes">🗂 Pneus do mês</button>' : '')+
         '<button class="btn ghost small" data-act="openavisos">🔔 Avisos'+(avisosCount>0?'<span class="nav-badge">'+avisosCount+'</span>':'')+'</button>'+
         (state.role==="master" ? '<button class="btn ghost small" data-act="openhistorico">🕘 Histórico'+histBadgeHtml()+'</button>' : '')+
         (state.role==="master" ? '<button class="btn ghost small" data-act="openusuarios">👤 Usuários</button>' : '')+
@@ -8639,6 +8808,325 @@ window.__voReady.then(function(){
         e.stopPropagation();
         deleteNotaWithUndo(btn.getAttribute("data-notadel"), function(){ renderNotas(); });
       });
+    });
+  }
+
+  // ======================= PNEUS DO MÊS: registro mensal (medida, qtd, preço, placa, carro) + fotos + PDF =======================
+  // Linhas e lista de fotos ficam em "vo_regmes:AAAA-MM" (sincroniza entre aparelhos). As fotos em si (já reduzidas)
+  // ficam só na nuvem, em "fotomes:AAAA-MM:<id>", para não encher o armazenamento do navegador.
+  var regFotoCache = {}, regTimer = null;
+  function regKey(m){ return K_REGMES + m; }
+  function regCap(s){ s = String(s||""); return s.charAt(0).toUpperCase() + s.slice(1); }
+  function regLoad(m){
+    var r = lsGetJSON(regKey(m), null);
+    if (!r || typeof r!=="object") r = {};
+    if (!Array.isArray(r.linhas)) r.linhas = [];
+    if (!Array.isArray(r.fotos)) r.fotos = [];
+    return r;
+  }
+  function regSave(m, r){ return lsSetJSON(regKey(m), r); }
+  function regSaveSoon(){
+    clearTimeout(regTimer);
+    var m = state.regMes, r = state.regData;
+    regTimer = setTimeout(function(){ regTimer = null; regSave(m, r); }, 500);
+  }
+  function regFlush(){
+    if (regTimer){ clearTimeout(regTimer); regTimer = null; if (state.regData) regSave(state.regMes, state.regData); }
+  }
+  function regTotais(d){
+    var q = 0, v = 0;
+    d.linhas.forEach(function(l){ q += parseNum(l.qtd); v += parseNum(l.preco); });
+    return {linhas:d.linhas.length, qtd:q, valor:v};
+  }
+  function regAtualizaTotais(){
+    var t = regTotais(state.regData);
+    var a = document.getElementById("rmTotLinhas"), b = document.getElementById("rmTotQtd"), c = document.getElementById("rmTotValor");
+    if (a) a.textContent = t.linhas; if (b) b.textContent = t.qtd; if (c) c.textContent = fmtCurrency(t.valor);
+  }
+
+  // ---- fotos ----
+  function fotoKey(m, id){ return K_FOTOMES + m + ":" + id; }
+  function fotoSalvar(m, id, dataUrl){
+    if (!sb) return Promise.reject(new Error("As fotos ficam guardadas na nuvem: configure o Supabase para anexar imagens."));
+    return sb.from("kv_store").upsert({key:fotoKey(m,id), value:{d:dataUrl}, updated_at:new Date().toISOString()}).then(function(res){
+      if (res && res.error) throw new Error(res.error.message || "A nuvem recusou a foto.");
+    });
+  }
+  function fotoCarregar(m, id){
+    var k = fotoKey(m, id);
+    if (regFotoCache[k]) return Promise.resolve(regFotoCache[k]);
+    if (!sb) return Promise.reject(new Error("Sem nuvem."));
+    return sb.from("kv_store").select("value").eq("key", k).limit(1).then(function(res){
+      var row = res && res.data && res.data[0];
+      if (!row || !row.value || !row.value.d) throw new Error("Foto não encontrada.");
+      regFotoCache[k] = row.value.d;
+      return row.value.d;
+    });
+  }
+  // reduz a foto (máx. 1280 px, JPEG) antes de enviar: fica leve e cabe bem no PDF
+  function regComprimir(file){
+    return new Promise(function(res, rej){
+      var url = URL.createObjectURL(file), img = new Image();
+      img.onload = function(){
+        var MAX = 1280, w = img.naturalWidth, h = img.naturalHeight, s = Math.min(1, MAX/Math.max(w,h));
+        var c = document.createElement("canvas"); c.width = Math.max(1, Math.round(w*s)); c.height = Math.max(1, Math.round(h*s));
+        var ctx = c.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0,0,c.width,c.height); ctx.drawImage(img,0,0,c.width,c.height);
+        URL.revokeObjectURL(url);
+        res({d:c.toDataURL("image/jpeg",0.72), w:c.width, h:c.height});
+      };
+      img.onerror = function(){ URL.revokeObjectURL(url); rej(new Error("não consegui ler a imagem "+file.name)); };
+      img.src = url;
+    });
+  }
+  function regAddFotos(files){
+    var m = state.regMes, dados = state.regData;
+    var lista = Array.prototype.slice.call(files||[]).filter(function(f){ return /^image\//.test(f.type); });
+    if (!lista.length) return;
+    state.regBusy = "Enviando fotos…"; renderRegMes();
+    var seq = Promise.resolve();
+    lista.forEach(function(f){
+      seq = seq.then(function(){
+        return regComprimir(f).then(function(img){
+          var id = uid();
+          return fotoSalvar(m, id, img.d).then(function(){
+            regFotoCache[fotoKey(m,id)] = img.d;
+            dados.fotos.push({id:id, nome:f.name, w:img.w, h:img.h, ts:Date.now()});
+          });
+        }).catch(function(e){ alert("Foto não enviada: "+((e && e.message) || e)); });
+      });
+    });
+    seq.then(function(){
+      regSave(m, dados);
+      state.regBusy = "";
+      if (state.view==="regmes") renderRegMes();
+    });
+  }
+  function regApagarFoto(m, dados, id){
+    dados.fotos = dados.fotos.filter(function(f){ return f.id!==id; });
+    regSave(m, dados);
+    delete regFotoCache[fotoKey(m,id)];
+    if (sb) sb.from("kv_store").delete().eq("key", fotoKey(m,id)).then(function(){}, function(){});
+  }
+  function regAbrirFoto(m, id){
+    fotoCarregar(m, id).then(function(du){
+      var o = document.createElement("div"); o.className = "rm-lightbox";
+      var im = document.createElement("img"); im.src = du; im.alt = "";
+      o.appendChild(im); o.addEventListener("click", function(){ o.remove(); });
+      document.body.appendChild(o);
+    }).catch(function(){ alert("Não foi possível abrir esta foto."); });
+  }
+
+  // ---- PDF do mês: tabela + todas as fotos anexadas ----
+  function regExportarPDF(){
+    var mes = state.regMes, d = state.regData;
+    if (!window.jspdf || !window.jspdf.jsPDF){ alert("O gerador de PDF não carregou. Confira a internet e tente de novo."); return; }
+    if (!d.linhas.length && !d.fotos.length){ alert("Este mês ainda não tem linhas nem fotos para exportar."); return; }
+    regFlush();
+    state.regBusy = "Montando o PDF…"; renderRegMes();
+    var imgs = [], p = Promise.resolve();
+    d.fotos.forEach(function(f){
+      p = p.then(function(){
+        return fotoCarregar(mes, f.id).then(function(du){ imgs.push({f:f, d:du}); }, function(){ imgs.push({f:f, d:null}); });
+      });
+    });
+    p.then(function(){
+      var pdf = new window.jspdf.jsPDF({unit:"pt", format:"a4"});
+      var PW = pdf.internal.pageSize.getWidth(), PH = pdf.internal.pageSize.getHeight(), M = 40, y = M;
+      function num(n){ return n.toLocaleString("pt-BR",{minimumFractionDigits:2, maximumFractionDigits:2}); }
+      function cortar(txt, w){ var s = pdf.splitTextToSize(String(txt||""), w); return s.length ? s[0] : ""; }
+      var cols = [{t:"#",w:26,a:"c"},{t:"Medida",w:112},{t:"Qtd",w:46,a:"r"},{t:"Preço (R$)",w:86,a:"r"},{t:"Placa",w:76},{t:"Carro",w:PW-2*M-26-112-46-86-76}];
+      function celula(txt, x, yy, c){
+        var tx = x+5, opt = {};
+        if (c.a==="r"){ tx = x+c.w-5; opt.align = "right"; } else if (c.a==="c"){ tx = x+c.w/2; opt.align = "center"; }
+        pdf.text(cortar(txt, c.w-10), tx, yy+13.5, opt);
+      }
+      function cabecalhoTabela(){
+        var x = M;
+        pdf.setFillColor(235,235,235); pdf.rect(M, y, PW-2*M, 20, "F");
+        pdf.setFont("helvetica","bold"); pdf.setFontSize(9); pdf.setTextColor(40);
+        cols.forEach(function(c){ celula(c.t, x, y, c); x += c.w; });
+        y += 20;
+        pdf.setFont("helvetica","normal"); pdf.setFontSize(9.5); pdf.setTextColor(20);
+      }
+      pdf.setFont("helvetica","bold"); pdf.setFontSize(15); pdf.setTextColor(20);
+      pdf.text(EMPRESA.nome, M, y+12);
+      pdf.setFont("helvetica","normal"); pdf.setFontSize(11); pdf.setTextColor(80);
+      pdf.text("Registro de pneus - "+regCap(monthLabel(mes)), M, y+30);
+      pdf.setFontSize(9);
+      pdf.text("Gerado em "+fmtDateTimeBR(new Date().toISOString()).replace(" às "," "), PW-M, y+12, {align:"right"});
+      y += 46;
+      cabecalhoTabela();
+      var totQ = 0, totV = 0;
+      d.linhas.forEach(function(l, i){
+        if (y+20 > PH-M){ pdf.addPage(); y = M; cabecalhoTabela(); }
+        var q = parseNum(l.qtd), v = parseNum(l.preco); totQ += q; totV += v;
+        var vals = [String(i+1), l.medida, (l.qtd===""||l.qtd===undefined) ? "" : String(q), v ? num(v) : "", String(l.placa||"").toUpperCase(), l.carro];
+        var x = M;
+        cols.forEach(function(c, ci){ celula(vals[ci], x, y, c); x += c.w; });
+        pdf.setDrawColor(215); pdf.line(M, y+20, PW-M, y+20);
+        y += 20;
+      });
+      if (!d.linhas.length){ pdf.setTextColor(120); pdf.text("Nenhuma linha neste mês.", M+5, y+14); y += 22; }
+      else {
+        if (y+26 > PH-M){ pdf.addPage(); y = M; }
+        pdf.setFont("helvetica","bold"); pdf.setFontSize(10); pdf.setTextColor(20);
+        var xT = M+26+112;
+        pdf.text("TOTAL", xT-5, y+17, {align:"right"});
+        pdf.text(String(totQ), xT+46-5, y+17, {align:"right"});
+        pdf.text("R$ "+num(totV), xT+46+86-5, y+17, {align:"right"});
+        y += 26;
+      }
+      if (imgs.length){
+        pdf.addPage(); y = M;
+        pdf.setFont("helvetica","bold"); pdf.setFontSize(12); pdf.setTextColor(20);
+        pdf.text("Fotos anexadas ("+imgs.length+") - "+regCap(monthLabel(mes)), M, y+12);
+        y += 28;
+        var gap = 14, cw = (PW-2*M-gap)/2, chMax = 300;
+        for (var i=0; i<imgs.length; i+=2){
+          var par = [imgs[i], imgs[i+1]].filter(Boolean);
+          var dims = par.map(function(it){
+            var w = it.f.w || 800, h = it.f.h || 600, s = Math.min(cw/w, chMax/h);
+            return {iw:w*s, ih:h*s};
+          });
+          var rowH = Math.max.apply(null, dims.map(function(z){ return z.ih; })) + 18;
+          if (y+rowH > PH-M){ pdf.addPage(); y = M; }
+          par.forEach(function(it, k){
+            var x0 = M + k*(cw+gap);
+            if (it.d){ try{ pdf.addImage(it.d, "JPEG", x0+(cw-dims[k].iw)/2, y, dims[k].iw, dims[k].ih); }catch(e){} }
+            else { pdf.setFont("helvetica","normal"); pdf.setFontSize(9); pdf.setTextColor(150); pdf.text("(foto indisponível)", x0, y+12); }
+            pdf.setFont("helvetica","normal"); pdf.setFontSize(8); pdf.setTextColor(110);
+            pdf.text(cortar(it.f.nome||"", cw), x0, y+dims[k].ih+11);
+          });
+          y += rowH + 6;
+        }
+      }
+      pdf.save("pneus-"+mes+".pdf");
+    }).catch(function(e){
+      alert("Não foi possível gerar o PDF: "+((e && e.message) || e));
+    }).then(function(){
+      state.regBusy = "";
+      if (state.view==="regmes") renderRegMes();
+    });
+  }
+
+  // ---- tela ----
+  function renderRegMes(){
+    var mes = state.regMes || (state.regMes = today.slice(0,7));
+    if (!state.regData || state.regDataMes!==mes){ state.regData = regLoad(mes); state.regDataMes = mes; }
+    var d = state.regData, busy = state.regBusy || "", tot = regTotais(d);
+    var meses = {}; meses[mes] = 1; meses[today.slice(0,7)] = 1;
+    for (var i=0;i<localStorage.length;i++){
+      var k = localStorage.key(i);
+      if (k && k.indexOf(K_REGMES)===0){ var mm = k.slice(K_REGMES.length); if (/^\d{4}-\d{2}$/.test(mm)) meses[mm] = 1; }
+    }
+    var chips = Object.keys(meses).sort().reverse().map(function(m){
+      var r = m===mes ? d : lsGetJSON(regKey(m), null);
+      var nl = r && Array.isArray(r.linhas) ? r.linhas.length : 0, nf = r && Array.isArray(r.fotos) ? r.fotos.length : 0;
+      return '<button type="button" class="rm-chip'+(m===mes ? ' on' : '')+'" data-rmmes="'+m+'">'+escHtml(regCap(monthLabel(m)))+
+        '<small>'+nl+' linha(s) · '+nf+' foto(s)</small></button>';
+    }).join("");
+    var linhasHtml = d.linhas.length ? d.linhas.map(function(l, n){
+      return '<tr data-id="'+escAttr(l.id)+'">'+
+        '<td class="rm-n">'+(n+1)+'</td>'+
+        '<td><input class="rm-in" data-f="medida" placeholder="Ex.: 205/55R16" value="'+escAttr(l.medida)+'"></td>'+
+        '<td><input class="rm-in rm-num" data-f="qtd" inputmode="numeric" placeholder="0" value="'+escAttr(l.qtd)+'"></td>'+
+        '<td><input class="rm-in rm-num" data-f="preco" inputmode="decimal" placeholder="0,00" value="'+escAttr(l.preco)+'"></td>'+
+        '<td><input class="rm-in" data-f="placa" maxlength="8" autocapitalize="characters" placeholder="ABC1D23" style="text-transform:uppercase;" value="'+escAttr(l.placa)+'"></td>'+
+        '<td><input class="rm-in" data-f="carro" placeholder="Ex.: Onix, Gol, Hilux…" value="'+escAttr(l.carro)+'"></td>'+
+        '<td><button class="icon-btn" data-rmdel="'+escAttr(l.id)+'" title="Apagar linha">✕</button></td></tr>';
+    }).join("") : '<tr><td colspan="7" class="rm-vazio">Nenhuma linha neste mês ainda. Clique em “+ Adicionar linha”.</td></tr>';
+    var fotosHtml = d.fotos.length ? d.fotos.map(function(f){
+      return '<div class="rm-foto" data-rmabrir="'+escAttr(f.id)+'" title="'+escAttr(f.nome||"")+'">'+
+        '<img data-rmfoto="'+escAttr(f.id)+'" alt="">'+
+        '<button type="button" data-rmfdel="'+escAttr(f.id)+'" title="Remover foto">✕</button></div>';
+    }).join("") : '';
+    root.innerHTML =
+      clientesTopbarHtml("Pneus do mês", "REGISTRO MENSAL · MEDIDA, PLACA E FOTOS") +
+      '<div class="rm-chips">'+chips+'</div>'+
+      '<div class="month-nav">'+
+        '<button type="button" data-rmnav="-1" aria-label="Mês anterior">‹</button>'+
+        '<input type="month" id="rmMesInput" class="rm-in rm-month" value="'+escAttr(mes)+'">'+
+        '<button type="button" data-rmnav="1" aria-label="Próximo mês">›</button>'+
+      '</div>'+
+      '<div class="totals-bar">'+
+        '<div class="tstat"><div class="k">Linhas</div><div class="v accent" id="rmTotLinhas">'+tot.linhas+'</div></div>'+
+        '<div class="tstat"><div class="k">Pneus (qtd)</div><div class="v" id="rmTotQtd">'+tot.qtd+'</div></div>'+
+        '<div class="tstat"><div class="k">Valor total</div><div class="v" id="rmTotValor">'+fmtCurrency(tot.valor)+'</div></div>'+
+      '</div>'+
+      '<div class="tbl-head">'+
+        '<div class="tbl-head-left"><h2>'+escHtml(monthLabel(mes))+'</h2></div>'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">'+
+          (busy ? '<span class="rm-busy">'+escHtml(busy)+'</span>' : '')+
+          '<button class="btn primary small" id="rmAdd"'+(busy?' disabled':'')+'>+ Adicionar linha</button>'+
+          '<button class="btn ghost small" id="rmPdf"'+(busy?' disabled':'')+' title="Baixa a tabela do mês com todas as fotos anexadas">⇩ Exportar PDF</button>'+
+        '</div>'+
+      '</div>'+
+      '<div class="card" style="padding:14px 16px;margin-bottom:16px;">'+
+        '<div class="rm-wrap"><table class="rm-table"><thead><tr>'+
+          '<th>#</th><th>Medida</th><th style="text-align:right;">Qtd. pneus</th><th style="text-align:right;">Preço (R$)</th><th>Placa</th><th>Carro</th><th></th>'+
+        '</tr></thead><tbody id="rmBody">'+linhasHtml+'</tbody></table></div>'+
+      '</div>'+
+      '<div class="card" style="padding:14px 16px;">'+
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">'+
+          '<h3 style="font-size:17px;">Fotos do mês <span style="color:var(--text-dim);font-size:13px;font-weight:400;">('+d.fotos.length+')</span></h3>'+
+          '<label class="btn ghost small" style="margin:0;'+(busy?'opacity:.5;pointer-events:none;':'')+'">📷 Anexar imagens'+
+            '<input type="file" id="rmFile" accept="image/*" multiple style="display:none;"></label>'+
+        '</div>'+
+        (d.fotos.length ? '<div class="rm-fotos">'+fotosHtml+'</div>' : '<p style="color:var(--text-dim);font-size:13px;margin:10px 0 0;">Nenhuma foto anexada neste mês. Elas entram no PDF junto com a tabela.</p>')+
+      '</div>';
+
+    root.querySelectorAll("[data-act]").forEach(function(node){
+      node.addEventListener("click", function(){ regFlush(); handleAction(node.getAttribute("data-act"), node); });
+    });
+    function irMes(m){
+      if (!/^\d{4}-\d{2}$/.test(m)) return;
+      regFlush(); state.regMes = m; state.regData = null; renderRegMes();
+    }
+    root.querySelectorAll("[data-rmmes]").forEach(function(b){ b.addEventListener("click", function(){ irMes(b.getAttribute("data-rmmes")); }); });
+    root.querySelectorAll("[data-rmnav]").forEach(function(b){ b.addEventListener("click", function(){ irMes(addMonths(mes, parseInt(b.getAttribute("data-rmnav"),10))); }); });
+    var mi = document.getElementById("rmMesInput");
+    if (mi) mi.addEventListener("change", function(){ irMes(mi.value); });
+    document.getElementById("rmAdd").addEventListener("click", function(){
+      d.linhas.push({id:uid(), medida:"", qtd:"", preco:"", placa:"", carro:""});
+      regSave(mes, d); renderRegMes();
+      var ins = root.querySelectorAll("#rmBody tr:last-child input[data-f=medida]");
+      if (ins.length) ins[0].focus();
+    });
+    document.getElementById("rmPdf").addEventListener("click", regExportarPDF);
+    var body = document.getElementById("rmBody");
+    body.addEventListener("input", function(e){
+      var el = e.target, f = el.getAttribute && el.getAttribute("data-f");
+      if (!f) return;
+      var tr = el.closest("tr"), id = tr && tr.getAttribute("data-id");
+      var l = d.linhas.filter(function(x){ return x.id===id; })[0];
+      if (!l) return;
+      var v = el.value;
+      if (f==="placa"){ v = v.toUpperCase(); if (el.value!==v) el.value = v; }
+      l[f] = v;
+      regAtualizaTotais(); regSaveSoon();
+    });
+    root.querySelectorAll("[data-rmdel]").forEach(function(b){
+      b.addEventListener("click", function(){
+        if (!confirm("Apagar esta linha?")) return;
+        var id = b.getAttribute("data-rmdel");
+        d.linhas = d.linhas.filter(function(x){ return x.id!==id; });
+        regSave(mes, d); renderRegMes();
+      });
+    });
+    var fi = document.getElementById("rmFile");
+    if (fi) fi.addEventListener("change", function(){ var fs = fi.files; regAddFotos(fs); try{ fi.value = ""; }catch(e){} });
+    root.querySelectorAll("[data-rmabrir]").forEach(function(b){
+      b.addEventListener("click", function(){ regAbrirFoto(mes, b.getAttribute("data-rmabrir")); });
+    });
+    root.querySelectorAll("[data-rmfdel]").forEach(function(b){
+      b.addEventListener("click", function(e){
+        e.stopPropagation();
+        if (!confirm("Remover esta foto?")) return;
+        regApagarFoto(mes, d, b.getAttribute("data-rmfdel")); renderRegMes();
+      });
+    });
+    root.querySelectorAll("img[data-rmfoto]").forEach(function(im){
+      fotoCarregar(mes, im.getAttribute("data-rmfoto")).then(function(du){ im.src = du; }, function(){ im.alt = "indisponível"; });
     });
   }
 
@@ -10130,6 +10618,13 @@ window.__voReady.then(function(){
   // ---------- reage a mudanças feitas em outro aparelho ----------
   function handleRemoteChange(key){
     if (key===K_PERMS) aplicarPermissoes();
+    if (key.indexOf(K_REGMES)===0){
+      // outro aparelho mudou um mês do registro: não atropela quem está digitando agora
+      var ae = document.activeElement;
+      if (state.view==="regmes" && ae && ae.classList && ae.classList.contains("rm-in")) return;
+      state.regData = null;
+      if (state.view!=="regmes") return;
+    }
     // não atropela quem está preenchendo um formulário de O.S. no celular
     if (key===K_OS && state.modal && (state.modal.type==="osForm" || state.modal.type==="osServico")) return;
     // o servidor pode ter somado só 1 bico quando o montador lançou 4: confere o dia de hoje e o dia aberto
@@ -10235,6 +10730,7 @@ window.__voReady.then(function(){
           render();
           if (!hadRemoteData) pushAllLocalToCloud(); // primeira ativação: sobe o histórico local pra nuvem
           initCloudSync(handleRemoteChange);
+          bkpPronto = true; // dados já baixados da nuvem: backups automáticos liberados
           avisarPendenciasNoBoot();
         });
       });
