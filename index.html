@@ -5953,7 +5953,13 @@ window.__voReady.then(function(){
 
   // colunas realmente exibidas na tabela agora (algumas ficam escondidas por padrão)
   function visibleColumns(){
-    return (isNovosTbl() ? NV_COLUMNS : COLUMNS).filter(function(c){ return !c.advanced || state.showAdvancedCols; });
+    var linhasVis = [];
+    try{ linhasVis = (isNovosTbl() ? state.novosRows : state.rows) || []; }catch(e){}
+    return (isNovosTbl() ? NV_COLUMNS : COLUMNS).filter(function(c){
+      if (!c.advanced || state.showAdvancedCols) return true;
+      // coluna "avançada" com valor lançado (ex.: Alinhamento vindo da O.S.) nunca fica escondida
+      return linhasVis.some(function(r){ return r && parseNum(r[c.key])>0; });
+    });
   }
   // detecta quantidade e valor de um mesmo grupo (bicos, cambagem, balanceamento, rodas) que não batem
   function pairMismatch(row, key){
@@ -6419,6 +6425,8 @@ window.__voReady.then(function(){
         // invalidate cached month summary so dashboard reflects new totals next visit
         delete state.monthSummaryCache[state.date.slice(0,7)];
         delete state.monthPartsCache[state.date.slice(0,7)];
+        // se um serviço da O.S. chegou enquanto a tabela estava salvando, devolve ele pra tabela
+        try{ var antes = JSON.stringify(state.rows); osConferirQtds(state.date); if (JSON.stringify(state.rows)!==antes) render(); }catch(e){}
       }).catch(function(err){
         state.saving = false;
         var flag = document.getElementById("saveFlag");
@@ -6667,6 +6675,7 @@ window.__voReady.then(function(){
     if (res && res.os) osGuardarLocal(K_OS, res.os);
     if (res && res.dia && res.rows){
       osGuardarLocal(K_ROWS+res.dia, res.rows);
+      if (res.dia===state.date && !state.saving && Array.isArray(res.rows)) state.rows = res.rows;
       var m = res.dia.slice(0,7);
       try{ delete state.monthSummaryCache[m]; delete state.monthPartsCache[m]; }catch(e){}
     }
@@ -6692,7 +6701,9 @@ window.__voReady.then(function(){
       var dia = serv.data;
       if (can("vendas")){
         if (o.tabela!=="novos"){
-          var rows = osAplicarNaLinha(lsGetJSON(K_ROWS+dia, []), o, serv, 1);
+          var base = (dia===state.date && Array.isArray(state.rows)) ? state.rows : lsGetJSON(K_ROWS+dia, []);
+          var rows = osAplicarNaLinha(base, o, serv, 1);
+          if (dia===state.date) state.rows = rows;
           saveRows(dia, rows).catch(function(){});
         }
       }
@@ -6718,7 +6729,12 @@ window.__voReady.then(function(){
       var sv = (o.servicos||[]).filter(function(x){ return x.id===servId; })[0];
       o.servicos = (o.servicos||[]).filter(function(x){ return x.id!==servId; });
       if (sv && sv.data && can("vendas")){
-        if (o.tabela!=="novos") saveRows(sv.data, osAplicarNaLinha(lsGetJSON(K_ROWS+sv.data, []), o, sv, -1)).catch(function(){});
+        if (o.tabela!=="novos"){
+          var base2 = (sv.data===state.date && Array.isArray(state.rows)) ? state.rows : lsGetJSON(K_ROWS+sv.data, []);
+          var rows2 = osAplicarNaLinha(base2, o, sv, -1);
+          if (sv.data===state.date) state.rows = rows2;
+          saveRows(sv.data, rows2).catch(function(){});
+        }
       }
       saveOS(lista); osReconciliarNovos(); cb(null);
     }
@@ -6760,20 +6776,38 @@ window.__voReady.then(function(){
     try{
       if (!dia || !can("vendas")) return;
       var rows = lsGetJSON(K_ROWS+dia, []);
-      if (!Array.isArray(rows)) return;
-      var lista = loadOS(), mudou = false;
+      if (!Array.isArray(rows)) rows = [];
+      var lista = loadOS(), mudou = false, apagadas = null;
       lista.forEach(function(o){
+        if (!o || o.tabela==="novos") return;
+        var servsDia = (o.servicos||[]).filter(function(sv){ return sv && sv.data===dia && OS_CAMPOS[sv.tipo]; });
+        if (!servsDia.length) return;
         var row = rows.filter(function(r){ return r && r.osId===o.id; })[0];
-        if (!row) return;
-        var soma = {};
-        (o.servicos||[]).forEach(function(sv){
-          if (!sv || sv.data!==dia) return;
-          var f = OS_CAMPOS[sv.tipo]; if (!f || !f.q) return;
-          soma[f.q] = (soma[f.q]||0) + (parseInt(sv.qtd,10)||1);
+        if (!row){
+          // a linha da O.S. não está na tabela do dia (ex.: foi sobrescrita por uma gravação antiga ou o servidor não criou):
+          // recria com os serviços lançados — só se a O.S. está aberta, o lançamento é recente e a linha não foi apagada de propósito
+          if (o.status!=="aberta") return;
+          if (apagadas===null) apagadas = loadLinhasApagadas();
+          if (apagadas.some(function(a){ return a && a.linha && a.linha.osId===o.id && a.data===dia; })) return;
+          var recentes = servsDia.filter(function(sv){ return !sv.ts || (Date.now()-sv.ts) < 48*3600*1000; });
+          recentes.forEach(function(sv){ rows = osAplicarNaLinha(rows, o, sv, 1); });
+          if (recentes.length) mudou = true;
+          return;
+        }
+        var soma = {}, somaV = {};
+        servsDia.forEach(function(sv){
+          var f = OS_CAMPOS[sv.tipo];
+          if (f.q) soma[f.q] = (soma[f.q]||0) + (parseInt(sv.qtd,10)||1);
+          somaV[f.v] = (somaV[f.v]||0) + (Number(sv.valor)||0);
         });
         for (var campo in soma){
           if (!Object.prototype.hasOwnProperty.call(soma, campo)) continue;
           if ((parseInt(row[campo],10)||0) < soma[campo]){ row[campo] = String(soma[campo]); mudou = true; }
+        }
+        // valor (inclui Alinhamento, que não tem quantidade): só preenche se estiver vazio — nunca mexe no que alguém ajustou à mão
+        for (var cv in somaV){
+          if (!Object.prototype.hasOwnProperty.call(somaV, cv)) continue;
+          if (somaV[cv]>0 && !(parseNum(row[cv])>0)){ row[cv] = osFmtNum(somaV[cv]); mudou = true; }
         }
       });
       if (!mudou) return;
