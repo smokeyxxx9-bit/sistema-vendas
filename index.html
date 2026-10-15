@@ -9685,7 +9685,11 @@ window.__voReady.then(function(){
     }
 
     root.innerHTML =
-      clientesTopbarHtml("Pneus Novos", "VENDAS DE PNEUS NOVOS · O LUCRO ENTRA NA META DO PAINEL") +
+      '<div class="topbar">'+
+        '<button class="btn ghost small" data-act="back">‹ Painel de vendas</button>'+
+        '<div class="brand"><span class="mark"></span><h1>Pneus Novos</h1><span class="tag">VENDAS DE PNEUS NOVOS · O LUCRO ENTRA NA META DO PAINEL</span>'+syncBadgeHtml()+'</div>'+
+        authZoneHtml()+
+      '</div>' +
       '<div class="nv-topline">'+tabsHtml+(tab==="vendas" ? monthNavHtml : '')+'</div>'+
       body;
 
@@ -9715,6 +9719,7 @@ window.__voReady.then(function(){
         else handleAction(act, node);
       });
     });
+    bindBackupControls(); // Importar backup (menu de opções)
     root.querySelectorAll(".chart-wrap circle[data-iso]").forEach(function(c){
       c.addEventListener("click", function(){ state.novosDay = c.getAttribute("data-iso"); render(); });
     });
