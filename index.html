@@ -4765,17 +4765,19 @@ window.__voReady.then(function(){
             '<div style="font-weight:600;margin-bottom:4px;">🔧 O.S. #'+escHtml(g.osNum)+' — '+escHtml(g.carro||"Carro")+' <span style="color:var(--text-dim);font-weight:400;font-size:12px;">· '+g.evs.length+' registro(s)</span></div>'+
             g.evs.map(function(e){
               var a = osAcao[e.acao] || [e.acao, "var(--text)"];
-              var det = "";
-              if (e.acao==="lancou" || e.acao==="removeu"){
-                det = escHtml(e.tipo||"")+((e.qtd||1)>1 ? ' ×'+escHtml(e.qtd) : '')+' — <b>'+fmtCurrency(Number(e.valor)||0)+'</b>'+
-                  (e.acao==="removeu" && e.lancadoPor ? ' <span style="color:var(--text-dim);">(lançado por '+escHtml(e.lancadoPor)+')</span>' : '');
-              } else if (e.acao==="abriu" && e.linha){ det = 'na linha <b>'+escHtml(e.linha)+'</b>'; }
+              var quem = String(e.nome||e.email||"").replace(/^./, function(c){ return c.toUpperCase(); });
+              var servTxt = escHtml(e.tipo||"")+((e.qtd||1)>1 ? ' ×'+escHtml(e.qtd) : '')+' <span style="color:var(--text-dim);">('+fmtCurrency(Number(e.valor)||0)+')</span>';
+              var frase;
+              if (e.acao==="lancou") frase = 'adicionou <b style="color:'+a[1]+';">'+servTxt+'</b>';
+              else if (e.acao==="removeu") frase = 'removeu <b style="color:'+a[1]+';">'+servTxt+'</b>'+(e.lancadoPor ? ' <span style="color:var(--text-dim);">(lançado por '+escHtml(e.lancadoPor)+')</span>' : '');
+              else if (e.acao==="abriu") frase = 'abriu a O.S.'+(e.linha ? ' na linha <b>'+escHtml(e.linha)+'</b>' : '');
+              else if (e.acao==="editou") frase = 'editou os dados da O.S.';
+              else if (e.acao==="encerrou") frase = 'encerrou a O.S.';
+              else frase = escHtml(e.acao);
               return '<div class="arow">'+
                 '<span class="d">'+fmtDateTimeBR(e.ts)+'</span>'+
                 '<span class="stats">'+
-                  '<span style="color:'+a[1]+';font-weight:600;">'+escHtml(a[0])+'</span>'+
-                  '<span><b>'+escHtml(e.nome||e.email)+'</b>'+(e.cargo ? ' <span style="color:var(--text-dim);">('+escHtml(papelLabel(e.cargo))+')</span>' : '')+'</span>'+
-                  (det ? '<span>'+det+'</span>' : '')+
+                  '<span><b>'+escHtml(quem)+'</b>'+(e.cargo ? ' <span style="color:var(--text-dim);font-size:12px;">('+escHtml(papelLabel(e.cargo))+')</span>' : '')+' '+frase+'</span>'+
                 '</span>'+
               '</div>';
             }).join("")+
