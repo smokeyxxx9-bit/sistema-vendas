@@ -928,6 +928,7 @@ window.__voReady.then(function(){
   var K_PERMS = "vo_permissoes"; // permissões extras/retiradas por usuário (sincroniza com a nuvem)
   var K_OS = "vo_os";            // ordens de serviço (O.S.) dos carros em loja
   var K_LOGIN_LOG = "vo_login_log";
+  var K_OS_LOG = "vo_os_log"; // registro (só o master vê) do que cada pessoa abriu, lançou, removeu e encerrou nas O.S.
   var K_EDICOES_LOG = "vo_edicoes_vendas"; // registro (só o master vê) de alterações em vendas já existentes
   var K_LINHAS_APAGADAS = "vo_linhas_apagadas"; // registro (só o master vê) das linhas de venda apagadas
   var K_ESTOQUE_LOG = "vo_estoque_log";
@@ -1097,7 +1098,7 @@ window.__voReady.then(function(){
   function lsMB(b){ return (b/1048576).toFixed(2).replace(".",",")+" MB"; }
   function lsLiberarEspaco(nivel){
     var manter = nivel>=2 ? 30 : (nivel===1 ? 100 : 200), liberado = 0;
-    [K_EDICOES_LOG, K_LINHAS_APAGADAS, K_ESTOQUE_LOG, K_LOGIN_LOG].forEach(function(k){
+    [K_EDICOES_LOG, K_LINHAS_APAGADAS, K_ESTOQUE_LOG, K_LOGIN_LOG, K_OS_LOG].forEach(function(k){
       var raw = localStorage.getItem(k); if (!raw) return;
       try{
         var lista = JSON.parse(raw);
@@ -4695,9 +4696,22 @@ window.__voReady.then(function(){
     var movsRaw = loadEstoqueLog().slice().reverse();
     var apagadasRaw = loadLinhasApagadas().slice().reverse();
     var edicoesRaw = loadEdicoesLog().slice().reverse();
+    // O.S.: o que está no registro + serviços que já estão nas O.S. mas não foram registrados (ex.: lançados pelo montador)
+    var osLogBase = loadOsLog();
+    var osJaVistos = {};
+    osLogBase.forEach(function(x){ if (x.servId && x.acao==="lancou") osJaVistos[x.servId] = 1; });
+    var osSint = [];
+    loadOS().forEach(function(o){
+      (o.servicos||[]).forEach(function(sv){
+        if (!sv || osJaVistos[sv.id] || !sv.ts) return;
+        osSint.push({id:"s"+sv.id, ts:new Date(sv.ts).toISOString(), email:sv.por||"(desconhecido)", nome:sv.por||"", cargo:"",
+                     osId:o.id, osNum:o.num, carro:o.carro||"", acao:"lancou", servId:sv.id, tipo:sv.tipo, qtd:sv.qtd, valor:sv.valor});
+      });
+    });
+    var osRaw = osLogBase.concat(osSint).sort(function(a,b){ return Date.parse(b.ts)-Date.parse(a.ts); });
     // filtros por usuário e por período: valem para todas as abas
     var usersSet = {};
-    [loginsRaw, movsRaw, apagadasRaw, edicoesRaw].forEach(function(l){ l.forEach(function(x){ if (x.email) usersSet[x.email] = 1; }); });
+    [loginsRaw, movsRaw, apagadasRaw, edicoesRaw, osRaw].forEach(function(l){ l.forEach(function(x){ if (x.email) usersSet[x.email] = 1; }); });
     var usersList = Object.keys(usersSet).sort();
     var uSel = state.historicoUser || "";
     if (uSel && !usersSet[uSel]) uSel = "";
@@ -4736,6 +4750,38 @@ window.__voReady.then(function(){
           '</div>';
         }).join("")
       : '<div class="arow-empty">'+(edicoesRaw.length ? 'Nenhuma alteração encontrada para esse filtro.' : 'Nenhuma alteração registrada ainda. Só entram alterações feitas em vendas que já existiam há mais de 10 minutos (ou de dias anteriores).')+'</div>';
+    var osEvs = porUsuario(osRaw);
+    if (q) osEvs = osEvs.filter(function(e){ return [e.email, e.nome, e.carro, "#"+e.osNum, e.tipo, e.linha].join(" ").toLowerCase().indexOf(q)>-1; });
+    var osAcao = {abriu:["Abriu","var(--green)"], lancou:["Lançou","var(--green)"], removeu:["Removeu","var(--red)"], editou:["Editou","var(--yellow)"], encerrou:["Encerrou","var(--text-dim)"]};
+    var osGrupos = [], osIdx = {};
+    osEvs.forEach(function(e){
+      var g = osIdx[e.osId];
+      if (!g){ g = osIdx[e.osId] = {osNum:e.osNum, carro:e.carro, evs:[]}; osGrupos.push(g); }
+      g.evs.push(e);
+    });
+    var osHtml = osGrupos.length
+      ? osGrupos.map(function(g){
+          return '<div style="border-bottom:1px solid var(--border, rgba(128,128,128,.25));padding:8px 0;">'+
+            '<div style="font-weight:600;margin-bottom:4px;">🔧 O.S. #'+escHtml(g.osNum)+' — '+escHtml(g.carro||"Carro")+' <span style="color:var(--text-dim);font-weight:400;font-size:12px;">· '+g.evs.length+' registro(s)</span></div>'+
+            g.evs.map(function(e){
+              var a = osAcao[e.acao] || [e.acao, "var(--text)"];
+              var det = "";
+              if (e.acao==="lancou" || e.acao==="removeu"){
+                det = escHtml(e.tipo||"")+((e.qtd||1)>1 ? ' ×'+escHtml(e.qtd) : '')+' — <b>'+fmtCurrency(Number(e.valor)||0)+'</b>'+
+                  (e.acao==="removeu" && e.lancadoPor ? ' <span style="color:var(--text-dim);">(lançado por '+escHtml(e.lancadoPor)+')</span>' : '');
+              } else if (e.acao==="abriu" && e.linha){ det = 'na linha <b>'+escHtml(e.linha)+'</b>'; }
+              return '<div class="arow">'+
+                '<span class="d">'+fmtDateTimeBR(e.ts)+'</span>'+
+                '<span class="stats">'+
+                  '<span style="color:'+a[1]+';font-weight:600;">'+escHtml(a[0])+'</span>'+
+                  '<span><b>'+escHtml(e.nome||e.email)+'</b>'+(e.cargo ? ' <span style="color:var(--text-dim);">('+escHtml(papelLabel(e.cargo))+')</span>' : '')+'</span>'+
+                  (det ? '<span>'+det+'</span>' : '')+
+                '</span>'+
+              '</div>';
+            }).join("")+
+          '</div>';
+        }).join("")
+      : '<div class="arow-empty">'+(osRaw.length ? 'Nenhum registro de O.S. encontrado para esse filtro.' : 'Nenhuma ação de O.S. registrada ainda. Os próximos lançamentos, remoções e encerramentos aparecem aqui.')+'</div>';
     var apagadasTotal = 0; apagadas.forEach(function(e){ apagadasTotal += parseNum(e.valor); });
     var moedaTipos = ["currency","computed","outros","pecas","maodeobra"];
     var apagadasHtml = apagadas.length
@@ -4810,7 +4856,7 @@ window.__voReady.then(function(){
 
     root.innerHTML =
       '<div class="topbar">'+
-        '<div class="brand"><span class="mark"></span><h1>Histórico</h1><span class="tag">LOGINS · ESTOQUE · LINHAS APAGADAS · ALTERAÇÕES</span>'+syncBadgeHtml()+'</div>'+
+        '<div class="brand"><span class="mark"></span><h1>Histórico</h1><span class="tag">LOGINS · ESTOQUE · LINHAS APAGADAS · ALTERAÇÕES · O.S.</span>'+syncBadgeHtml()+'</div>'+
         '<div class="auth-zone">'+
           '<button class="btn ghost small" data-act="back">‹ Painel de vendas</button>'+
           '<button class="btn ghost small" data-act="openestoque">📦 Estoque</button>'+
@@ -4825,6 +4871,7 @@ window.__voReady.then(function(){
           '<button class="btn small'+(tab==="estoque"?" primary":" ghost")+'" data-act="historicotab" data-tab="estoque" style="margin-left:8px;">Movimentações de estoque</button> '+
           '<button class="btn small'+(tab==="apagadas"?" primary":" ghost")+'" data-act="historicotab" data-tab="apagadas" style="margin-left:8px;">🗑 Linhas apagadas'+(apagadasRaw.length ? ' ('+apagadasRaw.length+')' : '')+'</button> '+
           '<button class="btn small'+(tab==="edicoes"?" primary":" ghost")+'" data-act="historicotab" data-tab="edicoes" style="margin-left:8px;">✏️ Alterações em vendas'+(edicoesRaw.length ? ' ('+edicoesRaw.length+')' : '')+'</button> '+
+          '<button class="btn small'+(tab==="os"?" primary":" ghost")+'" data-act="historicotab" data-tab="os" style="margin-left:8px;">🔧 O.S.'+(osRaw.length ? ' ('+osRaw.length+')' : '')+'</button> '+
           '<select id="histUser" class="btn small ghost" style="padding:5px 8px;margin-left:8px;" title="Filtrar por usuário">'+
             '<option value="">👤 Todos os usuários</option>'+
             usersList.map(function(u){ return '<option value="'+escAttr(u)+'"'+(u===uSel?' selected':'')+'>'+escHtml(u)+'</option>'; }).join("")+
@@ -4836,12 +4883,12 @@ window.__voReady.then(function(){
       '</div>'+
 
       (tab!=="logins" ? '<div class="card" style="padding:12px 16px;margin-bottom:14px;">'+
-        '<input type="text" id="histSearch" class="dash-cust-search" placeholder="'+(tab==="apagadas" ? 'Buscar por cliente, medida ou usuário...' : tab==="edicoes" ? 'Buscar por cliente, campo ou usuário...' : 'Buscar por medida (ex: 175/70 R14)...')+'" value="'+escAttr(state.historicoQuery||"")+'">'+
+        '<input type="text" id="histSearch" class="dash-cust-search" placeholder="'+(tab==="apagadas" ? 'Buscar por cliente, medida ou usuário...' : tab==="edicoes" ? 'Buscar por cliente, campo ou usuário...' : tab==="os" ? 'Buscar por carro, nº da O.S., serviço ou usuário...' : 'Buscar por medida (ex: 175/70 R14)...')+'" value="'+escAttr(state.historicoQuery||"")+'">'+
       '</div>' : '')+
 
       '<div class="card" style="padding:14px 16px;">'+
         '<div class="archive-list">'+
-          (tab==="logins" ? loginsHtml : (tab==="apagadas" ? apagadasHtml : (tab==="edicoes" ? edicoesHtml : movsHtml)))+
+          (tab==="logins" ? loginsHtml : (tab==="apagadas" ? apagadasHtml : (tab==="edicoes" ? edicoesHtml : (tab==="os" ? osHtml : movsHtml))))+
         '</div>'+
       '</div>';
 
@@ -6478,6 +6525,19 @@ window.__voReady.then(function(){
     if (origemTabela && dia===state.date){ scheduleSave(); }
     else { saveRows(dia, rows).catch(function(){}); if (dia===state.date) state.rows = rows; }
   }
+  // ---- histórico das O.S. (aba "O.S." do Histórico, só o master): quem abriu, lançou, removeu, editou e encerrou
+  function loadOsLog(){ return lsGetJSON(K_OS_LOG, []); }
+  function addOsLog(acao, os, extra){
+    try{
+      var list = loadOsLog();
+      var e = {id:uid(), ts:new Date().toISOString(), email:state.userEmail||"(desconhecido)", nome:userDisplayName(),
+               cargo:state.role||"", osId:os.id, osNum:os.num, carro:os.carro||"", acao:acao};
+      if (extra){ for (var k in extra){ if (Object.prototype.hasOwnProperty.call(extra,k)) e[k] = extra[k]; } }
+      list.push(e);
+      if (list.length>1000) list = list.slice(list.length-1000);
+      lsSetJSON(K_OS_LOG, list);
+    }catch(err){ /* o histórico nunca pode impedir o trabalho */ }
+  }
   function osHora(ts){ var d = new Date(ts); return ("0"+d.getHours()).slice(-2)+":"+("0"+d.getMinutes()).slice(-2); }
 
 
@@ -6532,6 +6592,14 @@ window.__voReady.then(function(){
   }
   // lança um serviço: pelo servidor (seguro: o montador não escreve direto nas vendas) ou, sem o script, localmente
   function osLancarServico(osId, serv, cb){
+    var cbOrig = cb;
+    cb = function(err){
+      if (!err){
+        var o1 = loadOS().filter(function(x){ return x.id===osId; })[0];
+        if (o1) addOsLog("lancou", o1, {servId:serv.id, tipo:serv.tipo, qtd:serv.qtd, valor:serv.valor});
+      }
+      cbOrig(err);
+    };
     function local(){
       var lista = loadOS(), o = lista.filter(function(x){ return x.id===osId; })[0];
       if (!o || o.status!=="aberta") return cb("Esta O.S. já foi fechada.");
@@ -6550,6 +6618,13 @@ window.__voReady.then(function(){
     }).catch(function(){ cb("Sem conexão. Tente de novo."); });
   }
   function osRemoverServico(osId, servId, cb){
+    var o0 = loadOS().filter(function(x){ return x.id===osId; })[0];
+    var sv0 = o0 ? (o0.servicos||[]).filter(function(x){ return x.id===servId; })[0] : null;
+    var cbOrig = cb;
+    cb = function(err){
+      if (!err && o0 && sv0) addOsLog("removeu", o0, {servId:servId, tipo:sv0.tipo, qtd:sv0.qtd, valor:sv0.valor, lancadoPor:sv0.por||""});
+      cbOrig(err);
+    };
     function local(){
       var lista = loadOS(), o = lista.filter(function(x){ return x.id===osId; })[0];
       if (!o) return cb(null);
@@ -6630,7 +6705,7 @@ window.__voReady.then(function(){
         if (!o) return;
         if (!confirm("Fechar a O.S. #"+o.num+" ("+(o.carro||"carro")+")? Ela some da lista dos montadores.")) return;
         o.status = "fechada"; o.fechadaEm = Date.now(); o.fechadaPor = userDisplayName();
-        saveOS(l); render();
+        saveOS(l); addOsLog("encerrou", o); render();
       });
     });
     root.querySelectorAll("[data-delserv]").forEach(function(b){
@@ -6688,6 +6763,7 @@ window.__voReady.then(function(){
       if (alvo){
         alvo.status = "fechada"; alvo.fechadaEm = Date.now(); alvo.fechadaPor = userDisplayName();
         saveOS(lista);
+        addOsLog("encerrou", alvo);
       }
       if (window.uiToast) window.uiToast("O.S. #"+o.num+" encerrada.", "ok");
       fechar();
@@ -6774,6 +6850,7 @@ window.__voReady.then(function(){
       alvo.qtdPneus = pneus;
       alvo.medida = document.getElementById("osMedida").value.trim();
       alvo.obs = document.getElementById("osObs").value.trim();
+      addOsLog(novaOS ? "abriu" : "editou", alvo, {linha: (linha && linha.carro) || alvo.linhaCarro || ""});
       if (novaOS && linha){
         alvo.rowId = linha.id; alvo.dia = state.modal.dia || state.date; alvo.linhaCarro = linha.carro || "";
       }
