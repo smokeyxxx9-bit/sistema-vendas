@@ -6807,8 +6807,8 @@ window.__voReady.then(function(){
           row.osAplicados = ap;
           if (doEstado) novosCommit(); else saveNovosMonth(month, fonte);
         }
-        // o mesmo serviço também vai (duplicado) para a tabela de seminovos do dia, na linha do mesmo "Carro N"
-        if (o.status==="aberta" && osEspelharSeminovos(o)) osMudou = true;
+        // serviço de O.S. dos pneus novos NÃO pode ir para a tabela principal: tira qualquer linha/serviço que tenha caído lá
+        if (osLimparSeminovosDeNovos(o)) osMudou = true;
       });
       if (osMudou) saveOS(todasOS);
     }catch(e){ /* a conferência nunca pode impedir o trabalho */ }
@@ -6820,56 +6820,53 @@ window.__voReady.then(function(){
     var v = Math.max(0, parseNum(row[f.v]) + sinal*(Number(valor)||0));
     row[f.v] = v>0 ? osFmtNum(v) : "";
   }
-  // O.S. aberta a partir da tabela de pneus novos: o serviço também é lançado (duplicado) na tabela de seminovos do mesmo dia,
-  // na linha do mesmo "Carro N". Se essa linha não existe, cria uma com o serviço. Cada serviço fica anotado na linha
-  // (row.osEspelhados), então rodar de novo nunca soma em dobro e serviço removido da O.S. sai das duas tabelas.
-  // Devolve true se marcou a O.S. (quem chama grava a lista de O.S.).
-  function osEspelharSeminovos(o){
+  // O.S. aberta a partir da tabela de pneus novos: o serviço fica SÓ na tabela de pneus novos.
+  // Esta função desfaz o que antes ia (duplicado) para a tabela principal: serviços "espelhados" por versões antigas
+  // e a linha que o servidor (os_lancar_servico, quando é o montador que lança) cria na tabela principal.
+  // Roda sem efeito se não houver nada a limpar. Devolve true só quando marca uma O.S. já encerrada como limpa
+  // (quem chama grava a lista de O.S.).
+  function osLimparSeminovosDeNovos(o){
     var dia = o.dia; if (!dia) return false;
-    var servs = (o.servicos||[]).filter(function(sv){ return sv && sv.id && OS_CAMPOS[sv.tipo]; });
+    var aberta = (o.status==="aberta");
+    if (!aberta && o.espelhoLimpo) return false;
     var usaEstado = (dia===state.date && Array.isArray(state.rows));
     var rows = usaEstado ? state.rows : lsGetJSON(K_ROWS+dia, []);
     if (!Array.isArray(rows)) rows = [];
-    var alvo = rows.filter(function(r){ return r && r.osId===o.id; })[0] ||
-               (o.linhaCarro ? rows.filter(function(r){ return r && r.carro===o.linhaCarro; })[0] : null) || null;
-    var criou = false, mudou = false;
-    if (!alvo){
-      // sem linha desse carro nos seminovos: cria (só se já tem serviço e se a linha não foi apagada de propósito antes)
-      if (!servs.length || o.semEspelhado) return false;
-      alvo = newRow();
-      alvo.osId = o.id; alvo.osNum = o.num;
-      alvo.detalhes = "O.S. #"+o.num+" · "+(o.carro||"")+(o.placa?" · "+String(o.placa).toUpperCase():"");
-      alvo.vendedor = VENDEDORES[0];
-      alvo.carro = o.linhaCarro || osProximoCarro(rows);
-      rows.push(alvo); criou = true; mudou = true;
+    var servs = (o.servicos||[]).filter(function(sv){ return sv && sv.id && OS_CAMPOS[sv.tipo]; });
+    var ids = {}; servs.forEach(function(sv){ ids[sv.id] = 1; });
+    var mudou = false;
+    function vazia(r){
+      return computeSubtotal(r)===0 && !(parseInt(r.qtdBicos,10)>0) && !(parseInt(r.qtdCambagem,10)>0) && !(parseInt(r.qtdRodas,10)>0) &&
+             !r.medida && !r.marca && !r.cliente && !r.clienteId && !(parseNum(r.quantidade)>0);
     }
-    var ap = alvo.osEspelhados;
-    if (!ap){
-      ap = alvo.osEspelhados = {}; mudou = true;
-      // linha que o servidor já criou com os serviços do montador (guarda o osId da O.S.): não soma de novo
-      if (!criou && alvo.osId===o.id) servs.forEach(function(sv){ ap[sv.id] = {tipo:sv.tipo, qtd:sv.qtd, valor:sv.valor}; });
-    }
-    servs.forEach(function(sv){
-      if (ap[sv.id]) return;
-      osSomarCampos(alvo, sv.tipo, sv.qtd, sv.valor, 1);
-      ap[sv.id] = {tipo:sv.tipo, qtd:sv.qtd, valor:sv.valor}; mudou = true;
+    rows = rows.filter(function(r){
+      if (!r) return true;
+      var feito = false;
+      // serviços espelhados por versões antigas (podem estar numa linha "Carro N" que já existia)
+      if (r.osEspelhados){
+        Object.keys(r.osEspelhados).forEach(function(id){
+          if (!ids[id]) return;
+          var a = r.osEspelhados[id];
+          osSomarCampos(r, a.tipo, a.qtd, a.valor, -1);
+          delete r.osEspelhados[id]; feito = true;
+        });
+        if (feito && !Object.keys(r.osEspelhados).length) delete r.osEspelhados;
+      }
+      // linha ligada a esta O.S. na tabela principal (criada pelo espelhamento antigo ou pelo servidor)
+      if (r.osId===o.id){
+        if (!feito) servs.forEach(function(sv){ osSomarCampos(r, sv.tipo, sv.qtd, sv.valor, -1); });
+        feito = true;
+        if (vazia(r)){ mudou = true; return false; }
+        delete r.osId; delete r.osNum; delete r.osEspelhados;
+      }
+      if (feito) mudou = true;
+      return true;
     });
-    Object.keys(ap).forEach(function(id){
-      if (servs.some(function(sv){ return sv.id===id; })) return;
-      var a = ap[id];
-      osSomarCampos(alvo, a.tipo, a.qtd, a.valor, -1);
-      delete ap[id]; mudou = true;
-    });
-    // linha criada só para essa O.S. que ficou sem nenhum serviço: some
-    if (alvo.osId===o.id && !Object.keys(ap).length && computeSubtotal(alvo)===0 &&
-        !(parseInt(alvo.qtdBicos,10)>0) && !(parseInt(alvo.qtdCambagem,10)>0) && !(parseInt(alvo.qtdRodas,10)>0)){
-      rows = rows.filter(function(r){ return r!==alvo; }); mudou = true;
-    }
     if (mudou){
       if (usaEstado) state.rows = rows;
       saveRows(dia, rows).catch(function(){});
     }
-    if (!o.semEspelhado){ o.semEspelhado = true; return true; }
+    if (!aberta){ o.espelhoLimpo = true; return true; }
     return false;
   }
   function osEhNovos(osId){ var o = loadOS().filter(function(x){ return x.id===osId; })[0]; return !!(o && o.tabela==="novos"); }
