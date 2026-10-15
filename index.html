@@ -5035,12 +5035,7 @@ window.__voReady.then(function(){
     root.innerHTML =
       '<div class="topbar">'+
         '<div class="brand"><span class="mark"></span><h1>Histórico</h1><span class="tag">LOGINS · ESTOQUE · LINHAS APAGADAS · ALTERAÇÕES · O.S.</span>'+syncBadgeHtml()+'</div>'+
-        '<div class="auth-zone">'+
-          '<button class="btn ghost small" data-act="back">‹ Painel de vendas</button>'+
-          '<button class="btn ghost small" data-act="openestoque">📦 Estoque</button>'+
-          '<button class="btn ghost small" data-act="openclientes">👥 Clientes</button>'+
-          '<button class="btn ghost small" data-act="openusuarios">👤 Usuários</button>'+
-        '</div>'+
+        authZoneHtml()+
       '</div>'+
 
       '<div class="tbl-head">'+
@@ -5226,12 +5221,7 @@ window.__voReady.then(function(){
     root.innerHTML =
       '<div class="topbar">'+
         '<div class="brand"><span class="mark"></span><h1>Usuários</h1><span class="tag">LOGINS E CARGOS</span>'+syncBadgeHtml()+'</div>'+
-        '<div class="auth-zone">'+
-          '<button class="btn ghost small" data-act="back">‹ Painel de vendas</button>'+
-          '<button class="btn ghost small" data-act="openestoque">📦 Estoque</button>'+
-          '<button class="btn ghost small" data-act="openclientes">👥 Clientes</button>'+
-          '<button class="btn ghost small" data-act="openhistorico">🕘 Histórico'+histBadgeHtml()+'</button>'+
-        '</div>'+
+        authZoneHtml()+
       '</div>'+
 
       '<div class="card" style="padding:14px 16px;margin-bottom:16px;">'+
@@ -5396,7 +5386,8 @@ window.__voReady.then(function(){
     if (!can("avisos")) avisosBtn = "";
     if (!(isMaster || can("vendas"))) backupBtns = "";
     var osBtn = can("os") ? '<button class="btn ghost small" data-act="openos" title="Carros em loja com O.S. aberta">🔧 O.S.</button>' : '';
-    var menuItems = osBtn+estoqueBtn+clientesBtn+notasBtn+orcamentosBtn+regBtn+avisosBtn+historicoBtn+usuariosBtn+backupBtns;
+    var inicioBtn = (state.view!=="dashboard" && (isMaster || can("vendas"))) ? '<button class="btn ghost small" data-act="back" title="Voltar ao painel de vendas">🏠 Painel de vendas</button>' : '';
+    var menuItems = inicioBtn+osBtn+estoqueBtn+clientesBtn+notasBtn+orcamentosBtn+regBtn+avisosBtn+historicoBtn+usuariosBtn+backupBtns;
     // atalhos só com ícone, ao lado das Opções: tabela dos pneus novos e tabela principal (pneus usados, de hoje)
     var svgTire = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 3v5M12 16v5M3 12h5M16 12h5"/></svg>';
     var svgTable = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v16"/></svg>';
@@ -7757,13 +7748,7 @@ window.__voReady.then(function(){
     root.innerHTML =
       '<div class="topbar">'+
         '<div class="brand"><span class="mark"></span><h1>Estoque</h1><span class="tag">MEDIDA · MARCA · QUANTIDADE · PREÇO</span>'+syncBadgeHtml()+'</div>'+
-        '<div class="auth-zone">'+
-          (estoquista ? '' : '<button class="btn ghost small" data-act="back">‹ Painel de vendas</button>')+
-          '<button class="btn ghost small" data-act="openclientes" title="Cadastrar e editar clientes">👥 Clientes</button>'+
-          (state.role==="master" ? '<button class="btn ghost small" data-act="openhistorico" title="Ver logins e movimentações de estoque">🕘 Histórico'+histBadgeHtml()+'</button>' : '')+
-          (state.role==="master" ? '<button class="btn ghost small" data-act="openusuarios" title="Criar logins e alterar cargos">👤 Usuários</button>' : '')+
-          (sb ? '<button class="btn ghost small" data-act="accountlogout" title="Sair da sua conta">Sair da conta</button>' : '')+
-        '</div>'+
+        authZoneHtml()+
       '</div>'+
 
       '<div class="totals-bar">'+
@@ -7953,7 +7938,7 @@ window.__voReady.then(function(){
         '<div class="auth-zone">'+
           '<button class="btn ghost small" data-act="orcback">'+(state.orcReturn==="orcamentos" ? '‹ Voltar aos orçamentos' : '‹ Voltar à tabela')+'</button>'+
           '<button class="btn ghost small" data-act="openorcamentos">📋 Orçamentos salvos</button>'+
-          '<button class="btn ghost small" data-act="openclientes">👥 Clientes</button>'+
+          authZoneHtml()+
         '</div>'+
       '</div>'+
 
@@ -8518,19 +8503,7 @@ window.__voReady.then(function(){
     var avisosCount = avisosPendentesCount();
     return '<div class="topbar">'+
       '<div class="brand"><span class="mark"></span><h1>'+titulo+'</h1><span class="tag">'+tag+'</span>'+syncBadgeHtml()+'</div>'+
-      '<div class="auth-zone">'+
-        (estoquista ? '' : '<button class="btn ghost small" data-act="back">‹ Painel de vendas</button>')+
-        '<button class="btn ghost small" data-act="openestoque">📦 Estoque</button>'+
-        '<button class="btn ghost small" data-act="openclientes">👥 Clientes</button>'+
-        '<button class="btn ghost small" data-act="opennotas">🧾 Notas</button>'+
-        '<button class="btn ghost small" data-act="openorcamentos">📋 Orçamentos</button>'+
-        '<button class="btn ghost small" data-act="opennovos">🆕 Pneus novos</button>'+
-        (can("registro") ? '<button class="btn ghost small" data-act="openregmes">🗂 Pneus do mês</button>' : '')+
-        '<button class="btn ghost small" data-act="openavisos">🔔 Avisos'+(avisosCount>0?'<span class="nav-badge">'+avisosCount+'</span>':'')+'</button>'+
-        (state.role==="master" ? '<button class="btn ghost small" data-act="openhistorico">🕘 Histórico'+histBadgeHtml()+'</button>' : '')+
-        (state.role==="master" ? '<button class="btn ghost small" data-act="openusuarios">👤 Usuários</button>' : '')+
-        (sb ? '<button class="btn ghost small" data-act="accountlogout">Sair da conta</button>' : '')+
-      '</div>'+
+      authZoneHtml()+
     '</div>';
   }
 
