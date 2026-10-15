@@ -6608,7 +6608,8 @@ window.__voReady.then(function(){
   function osReconciliarNovos(){
     try{
       if (!can("vendas")) return;
-      var lista = loadOS().filter(function(o){ return o && o.tabela==="novos" && o.dia; });
+      var todasOS = loadOS(), osMudou = false;
+      var lista = todasOS.filter(function(o){ return o && o.tabela==="novos" && o.dia; });
       if (!lista.length) return;
       lista.forEach(function(o){
         var month = String(o.dia).slice(0,7);
@@ -6636,21 +6637,74 @@ window.__voReady.then(function(){
           }
           delete ap[id]; mudou = true;
         });
-        if (!mudou) return;
-        row.osAplicados = ap;
-        if (doEstado) novosCommit(); else saveNovosMonth(month, fonte);
-        // o servidor lança o serviço do montador numa linha de seminovos: tira essa linha, que não é desta tabela
-        var dias = {}; servs.forEach(function(sv){ if (sv && sv.data) dias[sv.data] = 1; }); dias[o.dia] = 1;
-        Object.keys(dias).forEach(function(d){
-          var rs = lsGetJSON(K_ROWS+d, []);
-          if (!Array.isArray(rs)) return;
-          var resto = rs.filter(function(r){ return !(r && r.osId===o.id); });
-          if (resto.length===rs.length) return;
-          if (d===state.date) state.rows = resto;
-          saveRows(d, resto).catch(function(){});
-        });
+        if (mudou){
+          row.osAplicados = ap;
+          if (doEstado) novosCommit(); else saveNovosMonth(month, fonte);
+        }
+        // o mesmo serviço também vai (duplicado) para a tabela de seminovos do dia, na linha do mesmo "Carro N"
+        if (o.status==="aberta" && osEspelharSeminovos(o)) osMudou = true;
       });
+      if (osMudou) saveOS(todasOS);
     }catch(e){ /* a conferência nunca pode impedir o trabalho */ }
+  }
+  // soma (sinal=1) ou tira (sinal=-1) um serviço de O.S. nos campos de uma linha
+  function osSomarCampos(row, tipo, qtd, valor, sinal){
+    var f = OS_CAMPOS[tipo]; if (!f) return;
+    if (f.q) row[f.q] = String(Math.max(0, (parseInt(row[f.q],10)||0) + sinal*(parseInt(qtd,10)||1)));
+    var v = Math.max(0, parseNum(row[f.v]) + sinal*(Number(valor)||0));
+    row[f.v] = v>0 ? osFmtNum(v) : "";
+  }
+  // O.S. aberta a partir da tabela de pneus novos: o serviço também é lançado (duplicado) na tabela de seminovos do mesmo dia,
+  // na linha do mesmo "Carro N". Se essa linha não existe, cria uma com o serviço. Cada serviço fica anotado na linha
+  // (row.osEspelhados), então rodar de novo nunca soma em dobro e serviço removido da O.S. sai das duas tabelas.
+  // Devolve true se marcou a O.S. (quem chama grava a lista de O.S.).
+  function osEspelharSeminovos(o){
+    var dia = o.dia; if (!dia) return false;
+    var servs = (o.servicos||[]).filter(function(sv){ return sv && sv.id && OS_CAMPOS[sv.tipo]; });
+    var usaEstado = (dia===state.date && Array.isArray(state.rows));
+    var rows = usaEstado ? state.rows : lsGetJSON(K_ROWS+dia, []);
+    if (!Array.isArray(rows)) rows = [];
+    var alvo = rows.filter(function(r){ return r && r.osId===o.id; })[0] ||
+               (o.linhaCarro ? rows.filter(function(r){ return r && r.carro===o.linhaCarro; })[0] : null) || null;
+    var criou = false, mudou = false;
+    if (!alvo){
+      // sem linha desse carro nos seminovos: cria (só se já tem serviço e se a linha não foi apagada de propósito antes)
+      if (!servs.length || o.semEspelhado) return false;
+      alvo = newRow();
+      alvo.osId = o.id; alvo.osNum = o.num;
+      alvo.detalhes = "O.S. #"+o.num+" · "+(o.carro||"")+(o.placa?" · "+String(o.placa).toUpperCase():"");
+      alvo.vendedor = VENDEDORES[0];
+      alvo.carro = o.linhaCarro || osProximoCarro(rows);
+      rows.push(alvo); criou = true; mudou = true;
+    }
+    var ap = alvo.osEspelhados;
+    if (!ap){
+      ap = alvo.osEspelhados = {}; mudou = true;
+      // linha que o servidor já criou com os serviços do montador (guarda o osId da O.S.): não soma de novo
+      if (!criou && alvo.osId===o.id) servs.forEach(function(sv){ ap[sv.id] = {tipo:sv.tipo, qtd:sv.qtd, valor:sv.valor}; });
+    }
+    servs.forEach(function(sv){
+      if (ap[sv.id]) return;
+      osSomarCampos(alvo, sv.tipo, sv.qtd, sv.valor, 1);
+      ap[sv.id] = {tipo:sv.tipo, qtd:sv.qtd, valor:sv.valor}; mudou = true;
+    });
+    Object.keys(ap).forEach(function(id){
+      if (servs.some(function(sv){ return sv.id===id; })) return;
+      var a = ap[id];
+      osSomarCampos(alvo, a.tipo, a.qtd, a.valor, -1);
+      delete ap[id]; mudou = true;
+    });
+    // linha criada só para essa O.S. que ficou sem nenhum serviço: some
+    if (alvo.osId===o.id && !Object.keys(ap).length && computeSubtotal(alvo)===0 &&
+        !(parseInt(alvo.qtdBicos,10)>0) && !(parseInt(alvo.qtdCambagem,10)>0) && !(parseInt(alvo.qtdRodas,10)>0)){
+      rows = rows.filter(function(r){ return r!==alvo; }); mudou = true;
+    }
+    if (mudou){
+      if (usaEstado) state.rows = rows;
+      saveRows(dia, rows).catch(function(){});
+    }
+    if (!o.semEspelhado){ o.semEspelhado = true; return true; }
+    return false;
   }
   function osEhNovos(osId){ var o = loadOS().filter(function(x){ return x.id===osId; })[0]; return !!(o && o.tabela==="novos"); }
   // soma (sinal=1) ou tira (sinal=-1) um serviço na linha da O.S. do dia; devolve o array de linhas novo
