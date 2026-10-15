@@ -4697,7 +4697,7 @@ window.__voReady.then(function(){
     var apagadasRaw = loadLinhasApagadas().slice().reverse();
     var edicoesRaw = loadEdicoesLog().slice().reverse();
     // O.S.: o que está no registro + serviços que já estão nas O.S. mas não foram registrados (ex.: lançados pelo montador)
-    var osLogBase = (function(){ var vistos = {}; return loadOsLog().filter(function(x){ if (!x || !x.id || vistos[x.id]) return false; vistos[x.id] = 1; return true; }); })();
+    var osLogBase = (function(){ var vistos = {}; return loadOsLog().filter(function(x){ if (!x || !x.id || vistos[x.id] || x.acao==="teste") return false; vistos[x.id] = 1; return true; }); })();
     var osJaVistos = {};
     osLogBase.forEach(function(x){ if (x.servId && x.acao==="lancou") osJaVistos[x.servId] = 1; });
     var osSint = [];
@@ -4884,6 +4884,7 @@ window.__voReady.then(function(){
         '</div>'+
       '</div>'+
 
+      (tab==="os" && sb ? '<div style="margin:0 0 10px;font-size:12.5px;color:var(--text-dim);">Ações do montador não aparecem aqui? <button class="btn small ghost" id="osTestarLog">Testar registro no servidor</button></div>' : '')+
       (tab!=="logins" ? '<div class="card" style="padding:12px 16px;margin-bottom:14px;">'+
         '<input type="text" id="histSearch" class="dash-cust-search" placeholder="'+(tab==="apagadas" ? 'Buscar por cliente, medida ou usuário...' : tab==="edicoes" ? 'Buscar por cliente, campo ou usuário...' : tab==="os" ? 'Buscar por carro, nº da O.S., serviço ou usuário...' : 'Buscar por medida (ex: 175/70 R14)...')+'" value="'+escAttr(state.historicoQuery||"")+'">'+
       '</div>' : '')+
@@ -4894,6 +4895,17 @@ window.__voReady.then(function(){
         '</div>'+
       '</div>';
 
+    var osTestar = document.getElementById("osTestarLog");
+    if (osTestar){
+      osTestar.addEventListener("click", function(){
+        osTestar.disabled = true; osTestar.textContent = "Testando...";
+        sb.rpc("os_registrar_evento", {p_evento:{id:uid(), ts:new Date().toISOString(), acao:"teste", email:state.userEmail||"", osId:"teste", osNum:0}}).then(function(r){
+          osTestar.disabled = false; osTestar.textContent = "Testar registro no servidor";
+          if (r && r.error) alert("O servidor NÃO aceitou o registro.\n\nMensagem: "+(r.error.message||r.error.code||"erro")+"\n\nSe diz que a função não existe, rode o arquivo supabase-os-historico.sql no SQL Editor do Supabase.");
+          else alert("Funcionando: o servidor aceitou o registro. As próximas ações de todos (inclusive do montador) vão aparecer aqui.");
+        }, function(){ osTestar.disabled = false; osTestar.textContent = "Testar registro no servidor"; alert("Sem conexão com o servidor."); });
+      });
+    }
     var histUser = document.getElementById("histUser");
     if (histUser){
       histUser.addEventListener("change", function(){ state.historicoUser = histUser.value; renderHistorico(); });
@@ -6537,10 +6549,16 @@ window.__voReady.then(function(){
       if (extra){ for (var k in extra){ if (Object.prototype.hasOwnProperty.call(extra,k)) e[k] = extra[k]; } }
       list.push(e);
       if (list.length>1000) list = list.slice(list.length-1000);
-      lsSetJSON(K_OS_LOG, list);
-      // o montador pode não ter permissão de gravar direto na nuvem: o registro também vai por uma função do servidor
-      // (supabase-os-historico.sql). Se a função ainda não existir, o erro é ignorado.
-      if (sb){ try{ sb.rpc("os_registrar_evento", {p_evento:e}).then(function(){}, function(){}); }catch(e2){} }
+      if (!sb){ lsSetJSON(K_OS_LOG, list); return; }
+      // com nuvem: o registro vai por uma função do servidor (supabase-os-historico.sql), que funciona também
+      // para o montador (ele não grava direto na nuvem). Aqui só guarda uma cópia no aparelho.
+      try{ localStorage.setItem(K_OS_LOG, JSON.stringify(list)); }catch(e1){}
+      function viaAntigo(){ lsSetJSON(K_OS_LOG, list); } // sem a função no servidor: grava o jeito antigo
+      try{
+        sb.rpc("os_registrar_evento", {p_evento:e}).then(function(r){
+          if (r && r.error){ console.error("os_registrar_evento:", r.error); viaAntigo(); }
+        }, function(err){ console.error("os_registrar_evento:", err); viaAntigo(); });
+      }catch(e2){ viaAntigo(); }
     }catch(err){ /* o histórico nunca pode impedir o trabalho */ }
   }
   function osHora(ts){ var d = new Date(ts); return ("0"+d.getHours()).slice(-2)+":"+("0"+d.getMinutes()).slice(-2); }
