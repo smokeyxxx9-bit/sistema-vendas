@@ -3861,6 +3861,7 @@ window.__voReady.then(function(){
     var estoquista = state.role === "estoquista";
     var isMaster = state.role === "master";
     if (!(state.view==="novos" && state.novosTab==="vendas")) state.novosRows = null;
+    osReconciliarNovos(); // serviços de O.S. dos pneus novos que o montador lançou entram na linha certa
     var restrito = !!sb && !can("vendas"); // sem painel de vendas: só vê as telas liberadas (ex.: montador → O.S.)
     root.classList.toggle("wide", (state.view==="table" || (state.view==="novos" && state.novosTab==="vendas")) && !restrito);
     if (restrito){
@@ -6587,18 +6588,55 @@ window.__voReady.then(function(){
     var n = parseInt(m[1],10)+1;
     return n<=19 ? last.replace(/(\d+)\s*$/, String(n)) : last;
   }
-  // O.S. aberta a partir da tabela de pneus novos: o serviço soma na linha de pneus novos que guarda o osId
-  function osAplicarNovos(os, serv, sinal){
-    var f = OS_CAMPOS[serv.tipo]; if (!f) return;
-    var month = String(serv.data || os.dia || today).slice(0,7);
-    var list = loadNovosMonth(month);
-    var row = list.filter(function(r){ return r && r.osId===os.id; })[0];
-    if (!row) return;
-    if (f.q) row[f.q] = String(Math.max(0, (parseInt(row[f.q],10)||0) + sinal*(parseInt(serv.qtd,10)||1)));
-    var novoV = Math.max(0, parseNum(row[f.v]) + sinal*(Number(serv.valor)||0));
-    row[f.v] = novoV>0 ? osFmtNum(novoV) : "";
-    saveNovosMonth(month, list);
-    state.novosRows = null;
+  // O.S. aberta a partir da tabela de pneus novos: os serviços da O.S. somam na linha de pneus novos que guarda o osId.
+  // A linha guarda quais serviços já foram somados (row.osAplicados), então rodar de novo nunca soma em dobro e
+  // serviços lançados/removidos pelo montador (cujo servidor só mexe na tabela de seminovos) são acertados aqui.
+  function osReconciliarNovos(){
+    try{
+      if (!can("vendas")) return;
+      var lista = loadOS().filter(function(o){ return o && o.tabela==="novos" && o.dia; });
+      if (!lista.length) return;
+      lista.forEach(function(o){
+        var month = String(o.dia).slice(0,7);
+        var doEstado = !!(state.novosRows && state.novosDate && String(state.novosDate).slice(0,7)===month);
+        var fonte = doEstado ? state.novosRows : loadNovosMonth(month);
+        var row = fonte.filter(function(r){ return r && r.osId===o.id; })[0];
+        if (!row) return;
+        var ap = row.osAplicados || {}, mudou = false;
+        var servs = o.servicos || [];
+        servs.forEach(function(sv){
+          if (!sv || !sv.id || ap[sv.id]) return;
+          var f = OS_CAMPOS[sv.tipo]; if (!f) return;
+          if (f.q) row[f.q] = String(Math.max(0, (parseInt(row[f.q],10)||0) + (parseInt(sv.qtd,10)||1)));
+          var v = Math.max(0, parseNum(row[f.v]) + (Number(sv.valor)||0));
+          row[f.v] = v>0 ? osFmtNum(v) : "";
+          ap[sv.id] = {tipo:sv.tipo, qtd:sv.qtd, valor:sv.valor}; mudou = true;
+        });
+        Object.keys(ap).forEach(function(id){
+          if (servs.some(function(sv){ return sv && sv.id===id; })) return;
+          var a = ap[id], f = OS_CAMPOS[a.tipo];
+          if (f){
+            if (f.q) row[f.q] = String(Math.max(0, (parseInt(row[f.q],10)||0) - (parseInt(a.qtd,10)||1)));
+            var v = Math.max(0, parseNum(row[f.v]) - (Number(a.valor)||0));
+            row[f.v] = v>0 ? osFmtNum(v) : "";
+          }
+          delete ap[id]; mudou = true;
+        });
+        if (!mudou) return;
+        row.osAplicados = ap;
+        if (doEstado) novosCommit(); else saveNovosMonth(month, fonte);
+        // o servidor lança o serviço do montador numa linha de seminovos: tira essa linha, que não é desta tabela
+        var dias = {}; servs.forEach(function(sv){ if (sv && sv.data) dias[sv.data] = 1; }); dias[o.dia] = 1;
+        Object.keys(dias).forEach(function(d){
+          var rs = lsGetJSON(K_ROWS+d, []);
+          if (!Array.isArray(rs)) return;
+          var resto = rs.filter(function(r){ return !(r && r.osId===o.id); });
+          if (resto.length===rs.length) return;
+          if (d===state.date) state.rows = resto;
+          saveRows(d, resto).catch(function(){});
+        });
+      });
+    }catch(e){ /* a conferência nunca pode impedir o trabalho */ }
   }
   function osEhNovos(osId){ var o = loadOS().filter(function(x){ return x.id===osId; })[0]; return !!(o && o.tabela==="novos"); }
   // soma (sinal=1) ou tira (sinal=-1) um serviço na linha da O.S. do dia; devolve o array de linhas novo
@@ -6653,18 +6691,17 @@ window.__voReady.then(function(){
       o.servicos = o.servicos || []; o.servicos.push(serv);
       var dia = serv.data;
       if (can("vendas")){
-        if (o.tabela==="novos") osAplicarNovos(o, serv, 1);
-        else {
+        if (o.tabela!=="novos"){
           var rows = osAplicarNaLinha(lsGetJSON(K_ROWS+dia, []), o, serv, 1);
           saveRows(dia, rows).catch(function(){});
         }
       }
-      saveOS(lista); cb(null);
+      saveOS(lista); osReconciliarNovos(); cb(null);
     }
     if (!sb || (can("vendas") && osEhNovos(osId))) return local();
     sb.rpc("os_lancar_servico", {p_os_id:osId, p_servico:serv}).then(function(r){
       if (r.error){ if (osErroRpcAusente(r.error)) return local(); return cb(r.error.message||"Não foi possível lançar."); }
-      osFinalizar(r.data); osConferirQtds(serv.data); cb(null);
+      osFinalizar(r.data); osReconciliarNovos(); osConferirQtds(serv.data); cb(null);
     }).catch(function(){ cb("Sem conexão. Tente de novo."); });
   }
   function osRemoverServico(osId, servId, cb){
@@ -6681,10 +6718,9 @@ window.__voReady.then(function(){
       var sv = (o.servicos||[]).filter(function(x){ return x.id===servId; })[0];
       o.servicos = (o.servicos||[]).filter(function(x){ return x.id!==servId; });
       if (sv && sv.data && can("vendas")){
-        if (o.tabela==="novos") osAplicarNovos(o, sv, -1);
-        else saveRows(sv.data, osAplicarNaLinha(lsGetJSON(K_ROWS+sv.data, []), o, sv, -1)).catch(function(){});
+        if (o.tabela!=="novos") saveRows(sv.data, osAplicarNaLinha(lsGetJSON(K_ROWS+sv.data, []), o, sv, -1)).catch(function(){});
       }
-      saveOS(lista); cb(null);
+      saveOS(lista); osReconciliarNovos(); cb(null);
     }
     if (!sb || (can("vendas") && osEhNovos(osId))) return local();
     sb.rpc("os_remover_servico", {p_os_id:osId, p_serv_id:servId}).then(function(r){
@@ -9996,7 +10032,7 @@ window.__voReady.then(function(){
     // não atropela quem está preenchendo um formulário de O.S. no celular
     if (key===K_OS && state.modal && (state.modal.type==="osForm" || state.modal.type==="osServico")) return;
     // o servidor pode ter somado só 1 bico quando o montador lançou 4: confere o dia de hoje e o dia aberto
-    if (key===K_OS || key.indexOf(K_ROWS)===0){ osConferirQtds(toISO(new Date())); if (state.date) osConferirQtds(state.date); }
+    if (key===K_OS || key.indexOf(K_ROWS)===0){ osReconciliarNovos(); osConferirQtds(toISO(new Date())); if (state.date) osConferirQtds(state.date); }
     if (key.indexOf(K_ROWS)===0){
       var date = key.slice(K_ROWS.length);
       var month = date.slice(0,7);
