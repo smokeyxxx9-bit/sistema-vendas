@@ -4697,7 +4697,7 @@ window.__voReady.then(function(){
     var apagadasRaw = loadLinhasApagadas().slice().reverse();
     var edicoesRaw = loadEdicoesLog().slice().reverse();
     // O.S.: o que está no registro + serviços que já estão nas O.S. mas não foram registrados (ex.: lançados pelo montador)
-    var osLogBase = loadOsLog();
+    var osLogBase = (function(){ var vistos = {}; return loadOsLog().filter(function(x){ if (!x || !x.id || vistos[x.id]) return false; vistos[x.id] = 1; return true; }); })();
     var osJaVistos = {};
     osLogBase.forEach(function(x){ if (x.servId && x.acao==="lancou") osJaVistos[x.servId] = 1; });
     var osSint = [];
@@ -6538,6 +6538,9 @@ window.__voReady.then(function(){
       list.push(e);
       if (list.length>1000) list = list.slice(list.length-1000);
       lsSetJSON(K_OS_LOG, list);
+      // o montador pode não ter permissão de gravar direto na nuvem: o registro também vai por uma função do servidor
+      // (supabase-os-historico.sql). Se a função ainda não existir, o erro é ignorado.
+      if (sb){ try{ sb.rpc("os_registrar_evento", {p_evento:e}).then(function(){}, function(){}); }catch(e2){} }
     }catch(err){ /* o histórico nunca pode impedir o trabalho */ }
   }
   function osHora(ts){ var d = new Date(ts); return ("0"+d.getHours()).slice(-2)+":"+("0"+d.getMinutes()).slice(-2); }
