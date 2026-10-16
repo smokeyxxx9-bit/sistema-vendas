@@ -4032,6 +4032,7 @@ window.__voReady.then(function(){
     var isMaster = state.role === "master";
     if (!(state.view==="novos" && state.novosTab==="vendas")) state.novosRows = null;
     osReconciliarNovos(); // serviços de O.S. dos pneus novos que o montador lançou entram na linha certa
+    osFecharVencidas(); osSincronizarPago();
     var restrito = !!sb && !can("vendas"); // sem painel de vendas: só vê as telas liberadas (ex.: montador → O.S.)
     root.classList.toggle("wide", (state.view==="table" || (state.view==="novos" && state.novosTab==="vendas")) && !restrito);
     if (restrito){
@@ -4049,6 +4050,7 @@ window.__voReady.then(function(){
     else if (state.view==="regmes") renderRegMes();
     else if (state.view==="orcamento") renderOrcamento();
     else if (state.view==="orcamentos") renderOrcamentos();
+    else if (state.view==="conversor") renderConversor();
     else if (state.view==="historico" && isMaster) renderHistorico();
     else if (state.view==="usuarios" && isMaster) renderUsuarios();
     else if (state.view==="dashboard") renderDashboard();
@@ -4946,7 +4948,7 @@ window.__voReady.then(function(){
               else if (e.acao==="removeu") frase = 'removeu <b style="color:'+a[1]+';">'+servTxt+'</b>'+(e.lancadoPor ? ' <span style="color:var(--text-dim);">(lançado por '+escHtml(e.lancadoPor)+')</span>' : '');
               else if (e.acao==="abriu") frase = 'abriu a O.S.'+(e.linha ? ' na linha <b>'+escHtml(e.linha)+'</b>' : '');
               else if (e.acao==="editou") frase = 'editou os dados da O.S.';
-              else if (e.acao==="encerrou") frase = 'encerrou a O.S.';
+              else if (e.acao==="encerrou") frase = e.auto ? 'encerrou a O.S. automaticamente (15 min após o carro pronto)' : 'encerrou a O.S.';
               else if (e.acao==="pronto") frase = 'marcou o carro como <b style="color:'+a[1]+';">pronto</b>';
               else if (e.acao==="desfez_pronto") frase = 'desfez o "carro pronto"';
               else frase = escHtml(e.acao);
@@ -5147,8 +5149,165 @@ window.__voReady.then(function(){
     state.role = (state.baseRole!=="master" && o && o.cargo==="montador") ? "montador" : state.baseRole;
   }
   var VIEW_PERM = {dashboard:"vendas", table:"vendas", estoque:"estoque", clientes:"clientes", notas:"notas",
-    orcamento:"notas", orcamentos:"notas", novos:"novos", regmes:"registro", avisos:"avisos", os:"os"};
+    orcamento:"notas", orcamentos:"notas", novos:"novos", regmes:"registro", avisos:"avisos", os:"os", conversor:"vendas"};
   function viewPermitida(v){ var k = VIEW_PERM[v]; return !k || can(k); }
+  // ---------- Conversor TXT -> Excel (TXT do relógio de ponto) ----------
+  var cv = {raw:"", name:"registro.txt", headers:[], rows:[], sep:"auto", conv:true, pasteTxt:"", msg:"", msgCls:""};
+  var CV_DEFAULT = ["Tra. No.","Nome","Dept.","Data","Hora","Máquina No."];
+  var CV_DT = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/, CV_TM = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/;
+  var CV_DTX = /(\d{1,2}\/\d{1,2}\/\d{4})\s+(\d{1,2}:\d{2}(?::\d{2})?)/;
+  function cvDecode(buf){
+    var u = new Uint8Array(buf);
+    if (u[0]===0xFF && u[1]===0xFE) return new TextDecoder("utf-16le").decode(buf);
+    if (u[0]===0xFE && u[1]===0xFF) return new TextDecoder("utf-16be").decode(buf);
+    try{ return new TextDecoder("utf-8",{fatal:true}).decode(buf); }catch(e){ return new TextDecoder("windows-1252").decode(buf); }
+  }
+  function cvExpand(t){
+    var o = [];
+    t.forEach(function(x){ var m = x.match(/^(\d{1,2}\/\d{1,2}\/\d{4})\s+(\d{1,2}:\d{2}(?::\d{2})?)$/); if (m) o.push(m[1], m[2]); else o.push(x); });
+    return o;
+  }
+  function cvSplitLine(l, mode){
+    var t;
+    if (mode==="tab") t = l.split("\t");
+    else if (mode==="semi") t = l.split(";");
+    else if (mode==="comma") t = l.split(",");
+    else t = l.split(/\t+|\s{2,}/).filter(function(x){ return x.trim()!==""; });
+    t = cvExpand(t.map(function(x){ return x.trim(); }));
+    if (mode==="auto" && t.length<5){
+      var m = l.match(CV_DTX);
+      if (m){
+        var i = l.indexOf(m[0]);
+        var a = l.slice(0,i).trim().split(/\s+/), b = l.slice(i+m[0].length).trim().split(/\s+/).filter(Boolean);
+        var first = a.shift()||"", dept = a.length>1 ? a.pop() : "";
+        t = [first, a.join(" "), dept, m[1], m[2]].concat(b);
+      }
+    }
+    return t;
+  }
+  function cvParse(){
+    var lines = cv.raw.split(/\r?\n/).filter(function(l){ return l.trim()!==""; });
+    if (lines.length && !/\d{1,2}\/\d{1,2}\/\d{4}/.test(lines[0])) lines.shift();
+    cv.rows = lines.map(function(l){ return cvSplitLine(l, cv.sep); });
+    var n = cv.rows.reduce(function(m,r){ return Math.max(m, r.length); }, 0);
+    cv.headers = n===6 ? CV_DEFAULT.slice() : Array.from({length:n}, function(_,i){ return "Coluna "+(i+1); });
+    cv.msg = ""; cv.msgCls = "";
+    cvAtualizar();
+  }
+  function cvAtualizar(){
+    var res = document.getElementById("cvRes"); if (!res) return;
+    res.hidden = !cv.raw;
+    var meta = document.getElementById("cvMeta"), tbl = document.getElementById("cvTbl"), go = document.getElementById("cvGo"), msg = document.getElementById("cvMsg");
+    msg.textContent = cv.msg; msg.className = "cv-msg"+(cv.msgCls ? " "+cv.msgCls : "");
+    if (!cv.rows.length){ tbl.innerHTML = ""; meta.textContent = "Nenhuma linha reconhecida."; go.disabled = true; return; }
+    go.disabled = false;
+    meta.textContent = cv.rows.length+" linhas · "+cv.headers.length+" colunas"+(cv.rows.length>100 ? " (mostrando as 100 primeiras)" : "");
+    var h = "<thead><tr>"+cv.headers.map(function(x){ return "<th>"+escHtml(x)+"</th>"; }).join("")+"</tr></thead><tbody>";
+    cv.rows.slice(0,100).forEach(function(r){ h += "<tr>"+cv.headers.map(function(_,i){ return "<td>"+escHtml(r[i]||"")+"</td>"; }).join("")+"</tr>"; });
+    tbl.innerHTML = h+"</tbody>";
+  }
+  function cvCell(v, conv){
+    if (v==="") return "";
+    var m;
+    if (conv){
+      if ((m = v.match(CV_DT))) return {t:"n", v:Date.UTC(+m[3], m[2]-1, +m[1])/864e5+25569, z:"dd/mm/yyyy"};
+      if ((m = v.match(CV_TM))) return {t:"n", v:(+m[1]*3600 + +m[2]*60 + (+m[3]||0))/86400, z:"hh:mm:ss"};
+    }
+    if (/^-?\d+$/.test(v) && v.length<16 && !/^0\d/.test(v)) return {t:"n", v:+v};
+    return v;
+  }
+  function cvBuildXlsx(){
+    var aoa = [cv.headers].concat(cv.rows.map(function(r){ return cv.headers.map(function(_,i){ return cvCell(r[i]||"", cv.conv); }); }));
+    var ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws["!cols"] = cv.headers.map(function(h,i){
+      var w = h.length; cv.rows.forEach(function(r){ w = Math.max(w, (r[i]||"").length); });
+      return {wch:Math.min(Math.max(w+2, 8), 40)};
+    });
+    ws["!autofilter"] = {ref:ws["!ref"]};
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Registro");
+    return XLSX.write(wb, {bookType:"xlsx", type:"array"});
+  }
+  // a biblioteca do Excel só é baixada quando alguém usa o conversor (o resto do sistema não precisa dela)
+  function cvCarregarXlsx(cb){
+    if (window.XLSX) return cb(null);
+    var sc = document.createElement("script");
+    sc.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+    sc.onload = function(){ cb(null); };
+    sc.onerror = function(){ cb("Não foi possível carregar a biblioteca do Excel (sem internet?). Tente de novo."); };
+    document.head.appendChild(sc);
+  }
+  function cvBaixar(){
+    var msg = document.getElementById("cvMsg"), go = document.getElementById("cvGo");
+    go.disabled = true; msg.className = "cv-msg"; msg.textContent = "Gerando o Excel…";
+    cvCarregarXlsx(function(err){
+      go.disabled = false;
+      if (err){ cv.msg = err; cv.msgCls = "err"; return cvAtualizar(); }
+      try{
+        var buf = cvBuildXlsx(), fname = cv.name.replace(/\.[^.]+$/, "")+".xlsx";
+        var a = document.createElement("a");
+        a.href = URL.createObjectURL(new Blob([buf], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+        a.download = fname; document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000);
+        cv.msg = "Excel gerado: "+fname; cv.msgCls = "ok";
+      }catch(e){
+        cv.msg = "Não foi possível gerar o arquivo"+(e && e.message ? ": "+e.message : "."); cv.msgCls = "err";
+      }
+      cvAtualizar();
+    });
+  }
+  function cvCarregarArquivo(file){
+    cv.name = file.name || "registro.txt";
+    var r = new FileReader();
+    r.onload = function(){ cv.raw = cvDecode(r.result); cv.pasteTxt = ""; var pt = document.getElementById("cvPaste"); if (pt) pt.value = ""; cvParse(); };
+    r.readAsArrayBuffer(file);
+  }
+  function renderConversor(){
+    root.classList.remove("wide");
+    root.innerHTML =
+      clientesTopbarHtml("Conversor TXT → Excel", "RELÓGIO DE PONTO")+
+      '<div class="card cv-card">'+
+        '<p class="cv-sub">Envie o TXT do relógio de ponto e baixe o Excel com as colunas separadas.</p>'+
+        '<div class="cv-drop" id="cvDrop" tabindex="0"><b>Toque para escolher o arquivo .txt</b>ou arraste e solte aqui</div>'+
+        '<input type="file" id="cvFile" accept=".txt,.csv,.log,text/plain" hidden>'+
+        '<details class="cv-paste"'+(cv.pasteTxt ? ' open' : '')+'><summary>Ou cole o texto</summary><textarea id="cvPaste" placeholder="Cole aqui o conteúdo do TXT..."></textarea></details>'+
+      '</div>'+
+      '<div class="card cv-card" id="cvRes" hidden>'+
+        '<div class="cv-row">'+
+          '<label>Separador <select id="cvSep">'+
+            '<option value="auto">Automático</option><option value="tab">Tabulação</option>'+
+            '<option value="semi">Ponto e vírgula (;)</option><option value="comma">Vírgula (,)</option></select></label>'+
+          '<label><input type="checkbox" id="cvConv"> Data/hora no formato do Excel</label>'+
+        '</div>'+
+        '<div class="cv-meta" id="cvMeta"></div>'+
+        '<div class="cv-wrap"><table id="cvTbl"></table></div>'+
+        '<div class="cv-row" style="margin-top:14px;">'+
+          '<button class="btn primary" id="cvGo">⬇ Baixar Excel (.xlsx)</button>'+
+          '<button class="btn ghost" id="cvClr">Limpar</button>'+
+        '</div>'+
+        '<div class="cv-msg" id="cvMsg"></div>'+
+      '</div>';
+    root.querySelectorAll("[data-act]").forEach(function(node){
+      node.addEventListener("click", function(){ handleAction(node.getAttribute("data-act"), node); });
+    });
+    bindBackupControls();
+    var $ = function(id){ return document.getElementById(id); };
+    $("cvSep").value = cv.sep; $("cvConv").checked = cv.conv; $("cvPaste").value = cv.pasteTxt;
+    var drop = $("cvDrop"), inp = $("cvFile");
+    drop.onclick = function(){ inp.click(); };
+    drop.onkeydown = function(e){ if (e.key==="Enter" || e.key===" ") inp.click(); };
+    inp.onchange = function(){ if (inp.files[0]) cvCarregarArquivo(inp.files[0]); };
+    ["dragover","dragenter"].forEach(function(ev){ drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.add("on"); }); });
+    ["dragleave","drop"].forEach(function(ev){ drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.remove("on"); }); });
+    drop.addEventListener("drop", function(e){ var f = e.dataTransfer.files[0]; if (f) cvCarregarArquivo(f); });
+    $("cvPaste").oninput = function(){ cv.name = "registro.txt"; cv.raw = this.value; cv.pasteTxt = this.value; cvParse(); };
+    $("cvSep").onchange = function(){ cv.sep = this.value; if (cv.raw) cvParse(); };
+    $("cvConv").onchange = function(){ cv.conv = this.checked; };
+    $("cvGo").onclick = cvBaixar;
+    $("cvClr").onclick = function(){ cv.raw = ""; cv.rows = []; cv.headers = []; cv.pasteTxt = ""; cv.msg = ""; cv.msgCls = ""; inp.value = ""; $("cvPaste").value = ""; cvAtualizar(); };
+    cvAtualizar();
+  }
+
   function renderUsuarios(){
     if (!sb){
       root.innerHTML =
@@ -5385,9 +5544,10 @@ window.__voReady.then(function(){
     if (!can("registro")) regBtn = "";
     if (!can("avisos")) avisosBtn = "";
     if (!(isMaster || can("vendas"))) backupBtns = "";
+    var conversorBtn = can("vendas") ? '<button class="btn ghost small" data-act="openconversor" title="Converter o TXT do relógio de ponto em planilha Excel (.xlsx)">📊 Conversor TXT → Excel</button>' : '';
     var osBtn = can("os") ? '<button class="btn ghost small" data-act="openos" title="Carros em loja com O.S. aberta">🔧 O.S.</button>' : '';
     var inicioBtn = (state.view!=="dashboard" && (isMaster || can("vendas"))) ? '<button class="btn ghost small" data-act="back" title="Voltar ao painel de vendas">🏠 Painel de vendas</button>' : '';
-    var menuItems = inicioBtn+osBtn+estoqueBtn+clientesBtn+notasBtn+orcamentosBtn+regBtn+avisosBtn+historicoBtn+usuariosBtn+backupBtns;
+    var menuItems = inicioBtn+osBtn+estoqueBtn+clientesBtn+notasBtn+orcamentosBtn+regBtn+avisosBtn+conversorBtn+historicoBtn+usuariosBtn+backupBtns;
     // atalhos só com ícone, ao lado das Opções: tabela dos pneus novos e tabela principal (pneus usados, de hoje)
     var svgTire = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 3v5M12 16v5M3 12h5M16 12h5"/></svg>';
     var svgTable = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v16"/></svg>';
@@ -5639,6 +5799,7 @@ window.__voReady.then(function(){
     else if (act==="openhistorico"){ if (state.role==="master"){ try{ localStorage.setItem("vf_hist_visto", String(Date.now())); }catch(e){} state.view="historico"; state.historicoTab = state.historicoTab || "logins"; render(); } }
     else if (act==="restaurarapagada"){ restaurarLinhaApagada(node.getAttribute("data-id")); }
     else if (act==="historicotab"){ state.historicoTab = node.getAttribute("data-tab"); state.historicoQuery = ""; render(); }
+    else if (act==="openconversor"){ if (can("vendas")){ state.view="conversor"; render(); } }
     else if (act==="openusuarios"){ if (state.role==="master"){ state.view="usuarios"; render(); } }
     else if (act==="selectmedida"){
       state.modal = {type:"selectMedida", rowId: node.getAttribute("data-id")};
@@ -5711,6 +5872,7 @@ window.__voReady.then(function(){
   }
   // grava o dia inteiro dentro da lista do mês (mantém as vendas dos outros dias como estão)
   function novosCommit(){
+    osAgendarSyncPago();
     var date = state.novosDate || today, month = date.slice(0,7);
     var rest = loadNovosMonth(month).filter(function(n){ return n.date!==date; });
     novosSaveLater(month, rest.concat(state.novosRows||[]));
@@ -6580,6 +6742,7 @@ window.__voReady.then(function(){
   }
 
   function scheduleSave(){
+    osAgendarSyncPago();
     if (isNovosTbl()){ novosCommit(); return; }
     state.saving = true;
     clearTimeout(saveTimer);
@@ -7039,6 +7202,71 @@ window.__voReady.then(function(){
     }catch(e){ /* a conferência nunca pode impedir o trabalho */ }
   }
 
+  // ---------- O.S.: pagamento visível pro montador + encerramento automático ----------
+  var OS_AUTO_FECHAR_MIN = 15; // minutos depois do "carro pronto" até a O.S. se encerrar sozinha
+  function osVencida(o){
+    return !!(o && o.status==="aberta" && o.pronto && o.prontoEm && (Date.now()-o.prontoEm) >= OS_AUTO_FECHAR_MIN*60000);
+  }
+  function osMinRestantes(o){
+    if (!o || !o.pronto || !o.prontoEm) return null;
+    return Math.max(0, Math.ceil((o.prontoEm + OS_AUTO_FECHAR_MIN*60000 - Date.now())/60000));
+  }
+  // quem pode gravar (vendas / gerir O.S.) fecha de verdade; o montador só deixa de ver (renderOS esconde as vencidas)
+  function osFecharVencidas(){
+    try{
+      if (!(can("vendas") || can("os_gerir"))) return false;
+      var l = loadOS(), mudou = false;
+      l.forEach(function(o){
+        if (!osVencida(o)) return;
+        o.status = "fechada"; o.fechadaEm = Date.now(); o.fechadaPor = "Automático ("+OS_AUTO_FECHAR_MIN+" min após carro pronto)"; o.fechadaAuto = true;
+        addOsLog("encerrou", o, {auto:true, nome:"Sistema (automático)", cargo:""});
+        mudou = true;
+      });
+      if (mudou) saveOS(l);
+      return mudou;
+    }catch(e){ return false; }
+  }
+  // linha da venda ligada à O.S. (tabela principal ou pneus novos)
+  function osLinhaDaVenda(o){
+    if (!o || !o.dia) return null;
+    function acha(arr){
+      if (!Array.isArray(arr)) return null;
+      return arr.filter(function(r){ return r && (r.osId===o.id || (o.rowId && r.id===o.rowId)); })[0] || null;
+    }
+    if (o.tabela==="novos"){
+      return acha(state.novosRows) || acha(loadNovosMonth(String(o.dia).slice(0,7)));
+    }
+    return acha((o.dia===state.date && Array.isArray(state.rows)) ? state.rows : lsGetJSON(K_ROWS+o.dia, []));
+  }
+  // guarda na própria O.S. se a venda está paga (o montador lê a O.S., não a tabela de vendas)
+  function osSincronizarPago(){
+    try{
+      if (!can("vendas")) return;
+      var l = loadOS(), mudou = false;
+      l.forEach(function(o){
+        if (!o || o.status!=="aberta" || !o.dia) return;
+        var r = osLinhaDaVenda(o); if (!r) return;
+        var pago = (r.pago==="✅");
+        if (!!o.pago !== pago){ o.pago = pago; if (pago) o.pagoEm = Date.now(); else delete o.pagoEm; mudou = true; }
+      });
+      if (mudou) saveOS(l);
+    }catch(e){ /* nunca pode impedir o trabalho */ }
+  }
+  var osPagoTimer = null;
+  function osAgendarSyncPago(){ clearTimeout(osPagoTimer); osPagoTimer = setTimeout(osSincronizarPago, 1200); }
+  var osUltimaAssinatura = "";
+  function osAssinatura(){
+    return JSON.stringify(loadOS().filter(function(o){ return o.status==="aberta" && !osVencida(o); })
+      .map(function(o){ return [o.id, !!o.pronto, !!o.pago, osMinRestantes(o), (o.servicos||[]).length]; }));
+  }
+  // a cada 30 s: fecha as vencidas e atualiza a tela de O.S. (contagem de minutos / sumiço do card) se algo mudou
+  setInterval(function(){
+    try{
+      osFecharVencidas();
+      if (state.view==="os" && !state.modal && osAssinatura()!==osUltimaAssinatura) render();
+    }catch(e){}
+  }, 30000);
+
   function osCardHtml(o){
     var gerir = can("os_gerir");
     var servs = o.servicos || [];
@@ -7051,12 +7279,16 @@ window.__voReady.then(function(){
         ((gerir||meu) ? '<button class="icon-btn" data-os="'+escAttr(o.id)+'" data-delserv="'+escAttr(x.id)+'" title="Remover este lançamento">✕</button>' : '')+
         '</span></div>';
     }).join("");
-    var chips = (o.pronto ? '<span class="os-chip os-chip-pronto">✅ Carro pronto'+(o.prontoPor?' · '+escHtml(o.prontoPor):'')+'</span>' : '')+(o.linhaCarro ? '<span class="os-chip">📌 '+escHtml(o.linhaCarro)+'</span>' : '')+'<span class="os-chip">🛞 '+(parseInt(o.qtdPneus,10)||0)+' pneu(s)</span>'+
+    var minR = osMinRestantes(o);
+    var chips = (o.pronto ? '<span class="os-chip os-chip-pronto">✅ Carro pronto'+(o.prontoPor?' · '+escHtml(o.prontoPor):'')+'</span>' : '')+
+      (o.pago ? '<span class="os-chip os-chip-pago">💰 Pago</span>' : (o.dia ? '<span class="os-chip os-chip-aguarda">⏳ Aguardando pagamento</span>' : ''))+
+      (minR!==null ? '<span class="os-chip dim">⏱ fecha em '+minR+' min</span>' : '')+(o.linhaCarro ? '<span class="os-chip">📌 '+escHtml(o.linhaCarro)+'</span>' : '')+'<span class="os-chip">🛞 '+(parseInt(o.qtdPneus,10)||0)+' pneu(s)</span>'+
       (o.medida ? '<span class="os-chip">'+escHtml(o.medida)+'</span>' : '')+
       '<span class="os-chip dim">'+osHa(o.criadaEm)+'</span>';
     return '<div class="os-card'+(o.pronto ? ' os-pronto' : '')+'">'+
       '<div class="os-head"><span class="os-num">#'+o.num+'</span><span class="os-carro">'+escHtml(o.carro||"Carro")+(o.placa?' <small>'+escHtml(String(o.placa).toUpperCase())+'</small>':'')+'</span></div>'+
       '<div class="os-chips">'+chips+'</div>'+
+      ((o.pago && o.pronto) ? '<div class="os-liberar">✅ Pago e pronto — pode liberar o carro</div>' : '')+
       ((gerir && o.cliente) ? '<div class="os-line">Cliente: <b>'+escHtml(o.cliente)+'</b></div>' : '')+
       (o.obs ? '<div class="os-obs">'+escHtml(o.obs)+'</div>' : '')+
       (servs.length ? '<div class="os-servs">'+servHtml+'<div class="os-total"><span>Total lançado</span><b>'+fmtCurrency(total)+'</b></div></div>' : '')+
@@ -7071,7 +7303,8 @@ window.__voReady.then(function(){
   function renderOS(){
     root.classList.remove("wide");
     var gerir = can("os_gerir");
-    var abertas = loadOS().filter(function(o){ return o.status==="aberta"; }).sort(function(a,b){ return a.criadaEm-b.criadaEm; });
+    var abertas = loadOS().filter(function(o){ return o.status==="aberta" && !osVencida(o); }).sort(function(a,b){ return a.criadaEm-b.criadaEm; });
+    osUltimaAssinatura = osAssinatura();
     var pneus = abertas.reduce(function(t,o){ return t+(parseInt(o.qtdPneus,10)||0); }, 0);
     root.innerHTML =
       '<div class="topbar">'+
@@ -10883,6 +11116,29 @@ body{font-size:16px}
 .os-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
 .os-card.os-pronto{border-color:#22c55e;box-shadow:0 0 0 1px #22c55e inset;}
 .os-chip-pronto{background:rgba(34,197,94,.18);border-color:#22c55e;color:#22c55e;font-weight:600;}
+.cv-sub{color:var(--text-dim);margin:0 0 14px;}
+.cv-card[hidden]{display:none!important;}
+.cv-card{margin-bottom:14px;}
+.cv-drop{border:2px dashed var(--border);border-radius:12px;padding:26px 12px;text-align:center;cursor:pointer;color:var(--text-dim);}
+.cv-drop.on{border-color:var(--green);color:var(--green);}
+.cv-drop b{display:block;color:var(--text);font-size:16px;margin-bottom:4px;}
+.cv-paste{margin-top:12px;}
+.cv-paste summary{cursor:pointer;color:var(--text-dim);}
+.cv-paste textarea{width:100%;min-height:90px;margin-top:10px;background:var(--panel-alt);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:10px;font:13px ui-monospace,Consolas,monospace;box-sizing:border-box;}
+.cv-row{display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-bottom:8px;}
+.cv-row label{display:flex;gap:6px;align-items:center;}
+.cv-row select{background:var(--panel-alt);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:7px 8px;font:inherit;}
+.cv-meta{color:var(--text-dim);font-size:13px;margin:8px 0;}
+.cv-wrap{overflow-x:auto;max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;max-width:100%;}
+.cv-wrap table{border-collapse:collapse;width:100%;font-size:13px;white-space:nowrap;}
+.cv-wrap th,.cv-wrap td{padding:6px 10px;border-bottom:1px solid var(--border-soft);text-align:left;}
+.cv-wrap th{background:var(--panel-alt);position:sticky;top:0;}
+.cv-msg{margin-top:10px;font-size:14px;}
+.cv-msg.err{color:var(--red);}
+.cv-msg.ok{color:var(--green);}
+.os-chip-pago{background:rgba(34,197,94,.18);border-color:#22c55e;color:#22c55e;font-weight:600;}
+.os-chip-aguarda{background:rgba(234,179,8,.16);border-color:#eab308;color:#eab308;font-weight:600;}
+.os-liberar{background:#16a34a;color:#fff;font-weight:700;font-size:15px;text-align:center;padding:10px 12px;border-radius:8px;}
 .os-actions .os-pronto-btn{flex:1 1 140px;min-height:46px;font-size:15px;justify-content:center;background:#16a34a;border-color:#16a34a;color:#fff;font-weight:600;}
 .os-actions .os-pronto-btn.on{background:transparent;color:#22c55e;border-color:#22c55e;}
 .os-actions .os-add{flex:1 1 140px;min-height:46px;font-size:15px;justify-content:center;}
