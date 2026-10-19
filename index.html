@@ -1263,29 +1263,41 @@ window.__voReady.then(function(){
     var c = lsGetJSON(K_TAXAS, null);
     if (!c || !Array.isArray(c.maquininhas) || !c.maquininhas.length) c = {maquininhas:[{id:"m1",nome:"Maquininha 1"},{id:"m2",nome:"Maquininha 2"}], taxas:{}};
     if (!c.taxas) c.taxas = {};
+    if (!c.debito) c.debito = {};
+    if (!c.descontar) c.descontar = {};
     return c;
   }
+  // o master escolhe, por tabela, se as taxas das maquininhas são descontadas (padrão: sim)
+  function descontaTaxas(novo){ return taxasCfg().descontar[novo ? "novos" : "normais"] !== false; }
+  function taxaDebitoPct(maqId){ return Math.max(0, parseNum(taxasCfg().debito[maqId])); }
+  function pctMaq(maqId, metodo, parcelas){ return metodo==="Débito" ? taxaDebitoPct(maqId) : taxaPct(maqId, parcelas); }
   function maqNome(id){ var m = taxasCfg().maquininhas.filter(function(x){ return x.id===id; })[0]; return m ? m.nome : ""; }
   function taxaPct(maqId, parcelas){ var t = taxasCfg().taxas[maqId]; return t ? Math.max(0, parseNum(t[String(parcelas||1)])) : 0; }
-  function creditoResumo(c){ return (c && c.maquininha) ? (parseInt(c.parcelas,10)||1)+"x · "+(maqNome(c.maquininha)||"?") : ""; }
+  function creditoResumo(c){
+    if (!c || !c.maquininha) return "";
+    if (c.formaPagamento==="Débito") return "Débito · "+(maqNome(c.maquininha)||"?");
+    return (parseInt(c.parcelas,10)||1)+"x · "+(maqNome(c.maquininha)||"?");
+  }
   // desconto da maquininha sobre o valor pago no crédito; usa a taxa gravada na venda (não muda se o master alterar o juros depois)
-  function taxaCartaoItem(c, valor){
+  function taxaCartaoItem(c, valor, metodo){
     if (!c || !c.maquininha || !(valor>0)) return 0;
-    var pct = (c.taxaPct!==undefined && c.taxaPct!==null && c.taxaPct!=="") ? parseNum(c.taxaPct) : taxaPct(c.maquininha, c.parcelas);
+    var pct = (c.taxaPct!==undefined && c.taxaPct!==null && c.taxaPct!=="") ? parseNum(c.taxaPct) : pctMaq(c.maquininha, metodo, c.parcelas);
     return Math.round(valor*pct)/100;
   }
-  function taxaCartao(row){
+  // novo = true quando a linha é da tabela de pneus novos; se o master desligou o desconto daquela tabela, não há taxa
+  function taxaCartao(row, novo){
+    if (!descontaTaxas(novo)) return 0;
     var fp = row.formaPagamento;
-    if (fp==="Crédito") return taxaCartaoItem(row, computeValor(row));
+    if (fp==="Crédito" || fp==="Débito") return taxaCartaoItem(row, computeValor(row), fp);
     if (fp && fp.indexOf("Múltiplo")===0 && Array.isArray(row.pagamentosMultiplos)){
       var s = 0;
-      row.pagamentosMultiplos.forEach(function(p){ if (p && p.metodo==="Crédito") s += taxaCartaoItem(p, Math.max(0, parseNum(p.valor))); });
+      row.pagamentosMultiplos.forEach(function(p){ if (p && (p.metodo==="Crédito" || p.metodo==="Débito")) s += taxaCartaoItem(p, Math.max(0, parseNum(p.valor)), p.metodo); });
       return s;
     }
     return 0;
   }
-  function taxaNoteTxt(row, valor){ var tx = taxaCartao(row); return tx>0 ? "taxa -"+fmtCurrency(tx)+" · líq. "+fmtCurrency(Math.max(0, valor-tx)) : ""; }
-  function snapshotTaxa(c){ c.taxaPct = c.maquininha ? taxaPct(c.maquininha, c.parcelas) : 0; }
+  function taxaNoteTxt(row, valor){ var tx = taxaCartao(row, isNovosTbl()); return tx>0 ? "taxa -"+fmtCurrency(tx)+" · líq. "+fmtCurrency(Math.max(0, valor-tx)) : ""; }
+  function snapshotTaxa(c, metodo){ c.taxaPct = c.maquininha ? pctMaq(c.maquininha, metodo || c.formaPagamento || "Crédito", c.parcelas) : 0; }
   function maqOptsHtml(sel){
     return taxasCfg().maquininhas.map(function(m){ return '<option value="'+escAttr(m.id)+'"'+(m.id===sel?" selected":"")+'>'+escHtml(m.nome)+'</option>'; }).join("");
   }
@@ -1295,7 +1307,10 @@ window.__voReady.then(function(){
     return h;
   }
   document.addEventListener("change", function(e){
-    if (e.target && e.target.id==="nfPag"){ var b = document.getElementById("nfCredito"); if (b) b.style.display = e.target.value==="Crédito" ? "" : "none"; }
+    if (e.target && e.target.id==="nfPag"){
+      var b = document.getElementById("nfCredito"); if (b) b.style.display = (e.target.value==="Crédito" || e.target.value==="Débito") ? "" : "none";
+      var pb = document.getElementById("nfParBox"); if (pb) pb.style.display = e.target.value==="Crédito" ? "" : "none";
+    }
   });
   function saveRows(date, rows){
     var ok1 = lsSetJSON(K_ROWS+date, rows);
@@ -6176,9 +6191,9 @@ window.__voReady.then(function(){
       (t.semForma>0.005 ? ". Atenção: "+fmtCurrency(t.semForma)+" em vendas sem forma de pagamento definida, que não entram neste total." : ""));
     out += pcard("💵 Dinheiro", "yellow", "", hv?'••••':fmtCurrency(t.porPagamento["Dinheiro"]), "Seminovos + pneus novos do dia");
     out += pcard("📲 Pix", "yellow", "", hv?'••••':fmtCurrency(t.porPagamento["Pix"]), "Seminovos + pneus novos do dia");
-    out += pcard("💳 Débito", "yellow", "", hv?'••••':fmtCurrency(t.porPagamento["Débito"]), "Seminovos + pneus novos do dia");
-    out += pcard("💳 Crédito", "yellow", "", hv?'••••':fmtCurrency(t.porPagamento["Crédito"]), "Seminovos + pneus novos do dia");
-    if (t.taxasCartao>0.004) out += pcard("🧾 Taxa das maquininhas", "yellow", "", hv?'••••':'-'+fmtCurrency(t.taxasCartao), "Desconto das maquininhas no crédito (seminovos + pneus novos do dia). Crédito líquido: "+fmtCurrency(t.porPagamento["Crédito"]-t.taxasCartao));
+    out += pcard("💳 Débito", "yellow", "", hv?'••••':fmtCurrency(t.porPagamento["Débito"]), "Seminovos + pneus novos do dia (valor bruto, antes da taxa da maquininha)");
+    out += pcard("💳 Crédito", "yellow", "", hv?'••••':fmtCurrency(t.porPagamento["Crédito"]), "Seminovos + pneus novos do dia (valor bruto, antes da taxa da maquininha)");
+    if (t.taxasCartao>0.004) out += pcard("🧾 Taxa das maquininhas", "yellow", "", hv?'••••':'-'+fmtCurrency(t.taxasCartao), "Desconto das maquininhas no débito e no crédito (seminovos + pneus novos do dia, conforme o que o master liberou em 💳 Taxas)");
     return out;
   }
   function tstat(label, val, accent){
@@ -6273,11 +6288,11 @@ window.__voReady.then(function(){
         return '<option value="'+escAttr(o)+'"'+(o===val?" selected":"")+'>'+escHtml(o)+'</option>';
       }).join("");
       var selectHtml = '<select class="cellval" data-field="'+col.key+'" data-id="'+row.id+'" '+(editable?"":"disabled")+'>'+opts+'</select>';
-      if (col.key==="formaPagamento" && val==="Crédito"){
+      if (col.key==="formaPagamento" && (val==="Crédito" || val==="Débito")){
         var selCred = '<select class="cellval" data-field="'+col.key+'" data-id="'+row.id+'" '+(editable?"":"disabled")+' style="flex:1;min-width:0;">'+opts+'</select>';
         var rsCred = creditoResumo(row);
         return '<div class="'+cellClass+'" style="display:flex;gap:4px;align-items:center;">'+selCred+
-          '<button class="icon-btn'+(rsCred?' has':'')+'" data-act="credito" data-id="'+row.id+'" '+(editable?"":"disabled")+' title="'+escAttr(rsCred ? ('Crédito: '+rsCred+' (clique para alterar)') : 'Escolher a maquininha e as parcelas')+'" style="flex:0 0 auto;">'+(rsCred ? escHtml(rsCred.split(" · ")[0]) : '💳')+'</button>'+
+          '<button class="icon-btn'+(rsCred?' has':'')+'" data-act="credito" data-id="'+row.id+'" '+(editable?"":"disabled")+' title="'+escAttr(rsCred ? (val+': '+rsCred+' (clique para alterar)') : (val==="Débito" ? 'Escolher a maquininha' : 'Escolher a maquininha e as parcelas'))+'" style="flex:0 0 auto;">'+(rsCred ? escHtml(rsCred.split(" · ")[0]) : '💳')+'</button>'+
         '</div>';
       }
       if (col.key==="formaPagamento" && val && val.indexOf("/")>-1){
@@ -6413,7 +6428,8 @@ window.__voReady.then(function(){
     });
     var eS = entrouDe(normais), eN = entrouDe(novos);
     t.taxasCartao = 0;
-    (normais||[]).concat(novos||[]).forEach(function(r){ t.taxasCartao += taxaCartao(r); });
+    (normais||[]).forEach(function(r){ t.taxasCartao += taxaCartao(r, false); });
+    (novos||[]).forEach(function(r){ t.taxasCartao += taxaCartao(r, true); });
     t.entrouSemi = eS.entrou; t.entrouNovos = eN.entrou;
     t.entrouTotal = eS.entrou + eN.entrou;
     t.semForma = eS.semForma + eN.semForma;
@@ -6796,7 +6812,7 @@ window.__voReady.then(function(){
           // precisa redesenhar a linha pra mostrar (ou esconder) na hora o botão "÷"/"⚙" de dividir o pagamento
           scheduleSave();
           renderTable();
-          if (row.formaPagamento==="Crédito"){ state.modal = {type:"credito", rowId: row.id}; renderModal(); return; }
+          if (row.formaPagamento==="Crédito" || row.formaPagamento==="Débito"){ state.modal = {type:"credito", rowId: row.id}; renderModal(); return; }
           if (row.formaPagamento && row.formaPagamento.indexOf("Múltiplo")===0){
             // já abre a divisão, já que aqui não existe um "meio a meio" padrão como nas combinações de 2 formas
             state.modal = {type:"multiPag", rowId: row.id};
@@ -9782,35 +9798,40 @@ window.__voReady.then(function(){
     var row = findTblRow(state.modal.rowId);
     if (!row){ state.modal = null; render(); return; }
     var total = computeValor(row);
+    var deb = row.formaPagamento==="Débito";
     var selS = "width:100%;background:var(--panel-alt);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:8px;";
     var div = document.createElement("div");
     div.className = "overlay";
     div.innerHTML =
       '<div class="modal">'+
-        '<h3>💳 Crédito — maquininha e parcelas</h3>'+
-        '<p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;">Valor no crédito: <b style="color:var(--text);">'+fmtCurrency(total)+'</b></p>'+
+        '<h3>💳 '+(deb?'Débito — maquininha':'Crédito — maquininha e parcelas')+'</h3>'+
+        '<p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;">Valor no '+(deb?'débito':'crédito')+': <b style="color:var(--text);">'+fmtCurrency(total)+'</b></p>'+
         '<div class="field-group"><label>Maquininha</label><select id="crMaq" style="'+selS+'">'+maqOptsHtml(row.maquininha)+'</select></div>'+
-        '<div class="field-group"><label>Parcelas</label><select id="crPar" style="'+selS+'">'+parOptsHtml(row.parcelas)+'</select></div>'+
+        (deb ? '' : '<div class="field-group"><label>Parcelas</label><select id="crPar" style="'+selS+'">'+parOptsHtml(row.parcelas)+'</select></div>')+
         '<div id="crResumo" style="font-size:12.5px;margin:6px 2px 12px;"></div>'+
         '<div class="modal-actions"><button class="btn ghost small" id="crCancel">Voltar</button><button class="btn primary small" id="crSave">Salvar</button></div>'+
       '</div>';
     document.body.appendChild(div);
-    function atual(){ return {maquininha: div.querySelector("#crMaq").value, parcelas: parseInt(div.querySelector("#crPar").value,10)||1}; }
+    function atual(){ return {maquininha: div.querySelector("#crMaq").value, parcelas: deb ? 1 : (parseInt(div.querySelector("#crPar").value,10)||1)}; }
     function resumo(){
-      var a = atual(), pct = taxaPct(a.maquininha, a.parcelas), tx = Math.round(total*pct)/100;
+      var a = atual(), pct = pctMaq(a.maquininha, deb?"Débito":"Crédito", a.parcelas), tx = Math.round(total*pct)/100;
+      if (!descontaTaxas(isNovosTbl())){
+        div.querySelector("#crResumo").innerHTML = '<span style="color:var(--text-dim);">O master desligou o desconto das taxas nesta tabela.</span>';
+        return;
+      }
       div.querySelector("#crResumo").innerHTML = pct>0
         ? 'Taxa de <b>'+String(pct).replace(".",",")+'%</b>: <span style="color:var(--red);">-'+fmtCurrency(tx)+'</span> · líquido <b>'+fmtCurrency(Math.max(0,total-tx))+'</b>'
-        : '<span style="color:var(--text-dim);">Sem taxa cadastrada para essa combinação (o master define em 💳 Taxas).</span>';
+        : '<span style="color:var(--text-dim);">Sem taxa cadastrada para '+(deb?'o débito dessa maquininha':'essa combinação')+' (o master define em 💳 Taxas).</span>';
     }
     resumo();
     div.querySelector("#crMaq").addEventListener("change", resumo);
-    div.querySelector("#crPar").addEventListener("change", resumo);
+    if (!deb) div.querySelector("#crPar").addEventListener("change", resumo);
     function fechar(){ state.modal = null; render(); }
     div.querySelector("#crCancel").addEventListener("click", fechar);
     div.addEventListener("click", function(e){ if (e.target===div) fechar(); });
     div.querySelector("#crSave").addEventListener("click", function(){
       var a = atual();
-      row.maquininha = a.maquininha; row.parcelas = a.parcelas; snapshotTaxa(row);
+      row.maquininha = a.maquininha; if (deb) delete row.parcelas; else row.parcelas = a.parcelas; snapshotTaxa(row, deb?"Débito":"Crédito");
       state.modal = null; render(); scheduleSave();
     });
   }
@@ -9827,8 +9848,13 @@ window.__voReady.then(function(){
         grid += '<label style="display:flex;align-items:center;gap:4px;font-size:12px;"><span style="width:26px;">'+p+'x</span>'+
           '<input type="text" inputmode="decimal" class="txPct" data-maq="'+escAttr(m.id)+'" data-par="'+p+'" value="'+escAttr(v>0?String(v).replace(".",","):"")+'" placeholder="0" style="'+inpS+'"><span>%</span></label>';
       }
+      var dv = parseNum((cfg.debito||{})[m.id]);
       return '<div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:10px;">'+
         '<input type="text" class="txNome" data-maq="'+escAttr(m.id)+'" value="'+escAttr(m.nome)+'" placeholder="Nome da maquininha" style="'+inpS+'font-weight:600;margin-bottom:8px;">'+
+        '<div style="font-size:12px;color:var(--text-dim);margin:0 0 4px;">Débito</div>'+
+        '<label style="display:flex;align-items:center;gap:4px;font-size:12px;margin-bottom:8px;max-width:200px;"><span style="width:44px;">Débito</span>'+
+          '<input type="text" inputmode="decimal" class="txDeb" data-maq="'+escAttr(m.id)+'" value="'+escAttr(dv>0?String(dv).replace(".",","):"")+'" placeholder="0" style="'+inpS+'"><span>%</span></label>'+
+        '<div style="font-size:12px;color:var(--text-dim);margin:0 0 4px;">Crédito (por parcela)</div>'+
         '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px 12px;">'+grid+'</div></div>';
     }).join("");
     var div = document.createElement("div");
@@ -9836,14 +9862,21 @@ window.__voReady.then(function(){
     div.innerHTML =
       '<div class="modal wide">'+
         '<h3>💳 Maquininhas e juros do crédito</h3>'+
-        '<p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;">Só o master vê e altera esta tela. Informe o juros (%) de cada parcela: ele é descontado do valor das vendas no crédito. Vendas já lançadas mantêm a taxa da época.</p>'+
-        '<div style="max-height:58vh;overflow:auto;">'+blocos+'</div>'+
+        '<p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;">Só o master vê e altera esta tela. Informe a taxa do débito e o juros (%) de cada parcela do crédito: eles são descontados do valor das vendas no cartão. Vendas já lançadas mantêm a taxa da época.</p>'+
+        '<div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:10px;">'+
+          '<div style="font-size:13px;font-weight:600;margin-bottom:6px;">Descontar as taxas das maquininhas em:</div>'+
+          '<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:4px;"><input type="checkbox" id="txDescNormais"'+((cfg.descontar||{}).normais!==false?' checked':'')+'> Tabela principal (seminovos)</label>'+
+          '<label style="display:flex;align-items:center;gap:8px;font-size:13px;"><input type="checkbox" id="txDescNovos"'+((cfg.descontar||{}).novos!==false?' checked':'')+'> Tabela de pneus novos</label>'+
+        '</div>'+
+        '<div style="max-height:52vh;overflow:auto;">'+blocos+'</div>'+
         '<div class="modal-actions"><button class="btn ghost small" id="txAdd">+ Maquininha</button><button class="btn ghost small" id="txCancel">Cancelar</button><button class="btn primary small" id="txSave">Salvar</button></div>'+
       '</div>';
     document.body.appendChild(div);
     function ler(){
-      var out = {maquininhas:[], taxas:{}};
+      var out = {maquininhas:[], taxas:{}, debito:{}, descontar:{normais: div.querySelector("#txDescNormais").checked, novos: div.querySelector("#txDescNovos").checked}};
       cfg.maquininhas.forEach(function(m){
+        var dEl = div.querySelector('.txDeb[data-maq="'+m.id+'"]'), dn = dEl ? parseNum(dEl.value) : 0;
+        out.debito[m.id] = (dn>0 && dn<100) ? dn : 0;
         out.maquininhas.push({id:m.id, nome:(div.querySelector('.txNome[data-maq="'+m.id+'"]').value.trim() || m.nome)});
         out.taxas[m.id] = {};
         div.querySelectorAll('.txPct[data-maq="'+m.id+'"]').forEach(function(i){
@@ -9892,9 +9925,9 @@ window.__voReady.then(function(){
         '<select class="mpMetodo" data-idx="'+i+'" style="flex:1.2;background:var(--panel-alt);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:8px;">'+selOpts+'</select>'+
         '<input type="text" inputmode="decimal" class="mpValor" data-idx="'+i+'" placeholder="0,00" value="'+escAttr(p.valor!==""&&p.valor!==undefined&&p.valor!==null?parseNum(p.valor):"")+'" style="flex:1;">'+
       '</div>'+
-        '<div class="mpCred" style="display:'+(p.metodo==="Crédito"?"flex":"none")+';gap:8px;margin-top:6px;">'+
+        '<div class="mpCred" style="display:'+((p.metodo==="Crédito"||p.metodo==="Débito")?"flex":"none")+';gap:8px;margin-top:6px;">'+
           '<select class="mpMaq" style="'+credStyle+'">'+maqOptsHtml(p.maquininha)+'</select>'+
-          '<select class="mpPar" style="'+credStyle+'">'+parOptsHtml(p.parcelas)+'</select>'+
+          '<select class="mpPar" style="'+credStyle+(p.metodo==="Débito"?'display:none;':'')+'">'+parOptsHtml(p.parcelas)+'</select>'+
         '</div></div>';
     }).join("");
 
@@ -9921,11 +9954,11 @@ window.__voReady.then(function(){
         var v = parseNum(valores[i].value);
         if (m!=="Nenhum" && v>0){
           var it = {metodo:m, valor:v};
-          if (m==="Crédito"){
+          if (m==="Crédito" || m==="Débito"){
             var ln = metodos[i].closest(".mpLinha");
             it.maquininha = ln.querySelector(".mpMaq").value;
-            it.parcelas = parseInt(ln.querySelector(".mpPar").value,10)||1;
-            snapshotTaxa(it);
+            if (m==="Crédito") it.parcelas = parseInt(ln.querySelector(".mpPar").value,10)||1;
+            snapshotTaxa(it, m);
           }
           lista.push(it);
         }
@@ -9948,7 +9981,11 @@ window.__voReady.then(function(){
     }
     atualizarResumo();
     div.querySelectorAll(".mpMetodo").forEach(function(el){
-      el.addEventListener("change", function(){ el.closest(".mpLinha").querySelector(".mpCred").style.display = el.value==="Crédito" ? "flex" : "none"; });
+      el.addEventListener("change", function(){
+        var ln = el.closest(".mpLinha");
+        ln.querySelector(".mpCred").style.display = (el.value==="Crédito" || el.value==="Débito") ? "flex" : "none";
+        ln.querySelector(".mpPar").style.display = el.value==="Débito" ? "none" : "";
+      });
     });
     div.querySelectorAll(".mpMetodo, .mpValor").forEach(function(el){
       el.addEventListener("input", atualizarResumo);
@@ -10998,9 +11035,9 @@ window.__voReady.then(function(){
             '<div><label>Forma de pagamento</label><select id="nfPag">'+opts((item && NOVOS_PAYMENTS.indexOf(item.formaPagamento)===-1 && item.formaPagamento) ? NOVOS_PAYMENTS.concat([item.formaPagamento]) : NOVOS_PAYMENTS, item?item.formaPagamento:"Nenhum")+'</select></div>'+
             '<div><label>Pago</label><select id="nfPago">'+opts(["❌","✅"], item?item.pago:"❌")+'</select></div>'+
           '</div>'+
-          '<div class="nv-two" id="nfCredito" style="'+((item && item.formaPagamento==="Crédito") ? '' : 'display:none;')+'">'+
+          '<div class="nv-two" id="nfCredito" style="'+((item && (item.formaPagamento==="Crédito"||item.formaPagamento==="Débito")) ? '' : 'display:none;')+'">'+
             '<div><label>Maquininha</label><select id="nfMaq">'+maqOptsHtml(item?item.maquininha:"")+'</select></div>'+
-            '<div><label>Parcelas</label><select id="nfPar">'+parOptsHtml(item?item.parcelas:1)+'</select></div>'+
+            '<div id="nfParBox" style="'+((item && item.formaPagamento==="Débito") ? 'display:none;' : '')+'"><label>Parcelas</label><select id="nfPar">'+parOptsHtml(item?item.parcelas:1)+'</select></div>'+
           '</div>'+
           '<label>Cliente (opcional)</label><input type="text" id="nfCliente" list="nfClientes" placeholder="Nome do cliente" value="'+escAttr(item?item.cliente:"")+'">'+
           '<datalist id="nfClientes">'+loadCustomers().map(function(c){ return '<option value="'+escAttr(c.nome||"")+'"></option>'; }).join("")+'</datalist>'+
@@ -11041,7 +11078,11 @@ window.__voReady.then(function(){
       dados.quantidade = String(qtd); dados.valorPneus = String(Math.round(qtd*unit*100)/100);
       dados.formaPagamento = g("nfPag").value; dados.pago = g("nfPago").value;
       delete dados.maquininha; delete dados.parcelas; delete dados.taxaPct;
-      if (dados.formaPagamento==="Crédito" && g("nfMaq")){ dados.maquininha = g("nfMaq").value; dados.parcelas = parseInt(g("nfPar").value,10)||1; snapshotTaxa(dados); }
+      if ((dados.formaPagamento==="Crédito" || dados.formaPagamento==="Débito") && g("nfMaq")){
+        dados.maquininha = g("nfMaq").value;
+        if (dados.formaPagamento==="Crédito") dados.parcelas = parseInt(g("nfPar").value,10)||1;
+        snapshotTaxa(dados, dados.formaPagamento);
+      }
       dados.vendedor = g("nfVend").value; dados.cliente = g("nfCliente").value.trim(); dados.detalhes = g("nfDet").value.trim();
       dados.criadoEm = item ? item.criadoEm : new Date().toISOString();
       if (dados.medidaId) syncRowEstoque(dados); // acerta a baixa no estoque se a quantidade mudou
