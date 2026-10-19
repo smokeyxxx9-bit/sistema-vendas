@@ -963,6 +963,7 @@ window.__voReady.then(function(){
   var K_PROCURADOS = "vo_procurados";
   var K_LEMBRETES = "vo_lembretes";
   var K_NOVOS = "vo_novos:";          // pneus novos: uma chave por mês (vo_novos:AAAA-MM)
+  var K_TAXAS = "vo_taxas_cartao"; // maquininhas e juros do crédito por parcela (só o master altera)
   var K_NOVOS_META = "vo_novos_meta";
   var K_ARQ = "arq:";                 // arquivo morto na nuvem: registros antigos tirados do navegador (nunca apagados)
   var K_BKP = "bkp:";                 // backups automáticos na nuvem (só nuvem; ficam fora do navegador)
@@ -1256,6 +1257,46 @@ window.__voReady.then(function(){
     if (buckets.hasOwnProperty(second)) buckets[second] += secondVal;
     return buckets;
   }
+  // ---------- crédito: maquininha + parcelas (o master define o juros de cada parcela) ----------
+  var PARCELAS_MAX = 12;
+  function taxasCfg(){
+    var c = lsGetJSON(K_TAXAS, null);
+    if (!c || !Array.isArray(c.maquininhas) || !c.maquininhas.length) c = {maquininhas:[{id:"m1",nome:"Maquininha 1"},{id:"m2",nome:"Maquininha 2"}], taxas:{}};
+    if (!c.taxas) c.taxas = {};
+    return c;
+  }
+  function maqNome(id){ var m = taxasCfg().maquininhas.filter(function(x){ return x.id===id; })[0]; return m ? m.nome : ""; }
+  function taxaPct(maqId, parcelas){ var t = taxasCfg().taxas[maqId]; return t ? Math.max(0, parseNum(t[String(parcelas||1)])) : 0; }
+  function creditoResumo(c){ return (c && c.maquininha) ? (parseInt(c.parcelas,10)||1)+"x · "+(maqNome(c.maquininha)||"?") : ""; }
+  // desconto da maquininha sobre o valor pago no crédito; usa a taxa gravada na venda (não muda se o master alterar o juros depois)
+  function taxaCartaoItem(c, valor){
+    if (!c || !c.maquininha || !(valor>0)) return 0;
+    var pct = (c.taxaPct!==undefined && c.taxaPct!==null && c.taxaPct!=="") ? parseNum(c.taxaPct) : taxaPct(c.maquininha, c.parcelas);
+    return Math.round(valor*pct)/100;
+  }
+  function taxaCartao(row){
+    var fp = row.formaPagamento;
+    if (fp==="Crédito") return taxaCartaoItem(row, computeValor(row));
+    if (fp && fp.indexOf("Múltiplo")===0 && Array.isArray(row.pagamentosMultiplos)){
+      var s = 0;
+      row.pagamentosMultiplos.forEach(function(p){ if (p && p.metodo==="Crédito") s += taxaCartaoItem(p, Math.max(0, parseNum(p.valor))); });
+      return s;
+    }
+    return 0;
+  }
+  function taxaNoteTxt(row, valor){ var tx = taxaCartao(row); return tx>0 ? "taxa -"+fmtCurrency(tx)+" · líq. "+fmtCurrency(Math.max(0, valor-tx)) : ""; }
+  function snapshotTaxa(c){ c.taxaPct = c.maquininha ? taxaPct(c.maquininha, c.parcelas) : 0; }
+  function maqOptsHtml(sel){
+    return taxasCfg().maquininhas.map(function(m){ return '<option value="'+escAttr(m.id)+'"'+(m.id===sel?" selected":"")+'>'+escHtml(m.nome)+'</option>'; }).join("");
+  }
+  function parOptsHtml(sel){
+    var h = "";
+    for (var p=1; p<=PARCELAS_MAX; p++) h += '<option value="'+p+'"'+(p===(parseInt(sel,10)||1)?" selected":"")+'>'+p+'x'+(p===1?" (à vista)":"")+'</option>';
+    return h;
+  }
+  document.addEventListener("change", function(e){
+    if (e.target && e.target.id==="nfPag"){ var b = document.getElementById("nfCredito"); if (b) b.style.display = e.target.value==="Crédito" ? "" : "none"; }
+  });
   function saveRows(date, rows){
     var ok1 = lsSetJSON(K_ROWS+date, rows);
     var month = date.slice(0,7);
@@ -3344,6 +3385,73 @@ window.__voReady.then(function(){
     });
   }
 
+  // ======================= SAÍDAS DO CAIXA (dinheiro que saiu pra comprar algo pra loja) =======================
+  var K_SAIDAS = "vo_saidas:"; // uma lista por dia: [{id, valor, motivo, por, em}]
+  function loadSaidas(d){ var l = lsGetJSON(K_SAIDAS+d, []); return Array.isArray(l) ? l : []; }
+  function saidasTotal(d){ return loadSaidas(d).reduce(function(a,x){ return a + Math.max(0, parseNum(x.valor)); }, 0); }
+  function podeSaidas(){ return state.role==="master" || state.role==="vendedor"; }
+  function renderSaidasModal(){
+    if (!podeSaidas()){ state.modal = null; return; }
+    var d = state.modal.date, lista = loadSaidas(d), ed = isEditable(d), isM = state.role==="master";
+    var cel = 'padding:7px 6px;border-bottom:1px solid var(--border-soft);font-size:13px;';
+    var inpS = 'margin:0;letter-spacing:normal;';
+    var linhas = lista.map(function(x){
+      var hora = x.em ? new Date(x.em).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}) : "";
+      return '<tr><td style="'+cel+'">'+escHtml(hora)+'</td><td style="'+cel+'">'+escHtml(x.motivo||"")+
+        '<div style="font-size:11px;color:var(--text-faint);">'+escHtml(x.por||"")+'</div></td>'+
+        '<td style="'+cel+'text-align:right;white-space:nowrap;color:var(--red);">-'+fmtCurrency(parseNum(x.valor))+'</td>'+
+        '<td style="'+cel+'text-align:right;">'+(isM && ed ? '<button class="icon-btn" data-del="'+escAttr(x.id)+'" title="Remover esta saída (só o master)">✕</button>' : '')+'</td></tr>';
+    }).join("");
+    var div = document.createElement("div");
+    div.className = "overlay";
+    div.innerHTML =
+      '<div class="modal wide">'+
+        '<h3>💸 Saídas do caixa — '+escHtml(fmtDateBR(d))+'</h3>'+
+        '<p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;">Registre o dinheiro que saiu do caixa (ex.: compra de material pra loja) e o motivo. O valor é descontado do dinheiro esperado na gaveta no Fechamento.</p>'+
+        (ed ?
+          '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">'+
+            '<input type="text" inputmode="decimal" id="sdValor" placeholder="Valor (R$)" style="'+inpS+'flex:1 1 110px;">'+
+            '<input type="text" id="sdMotivo" placeholder="Motivo da saída" maxlength="120" style="'+inpS+'flex:3 1 200px;">'+
+            '<button class="btn primary small" id="sdAdd">Adicionar</button>'+
+          '</div><div class="err" id="sdErr"></div>'
+        : '<p style="font-size:12.5px;color:var(--yellow);">Para lançar saídas de dias anteriores, entre com a senha no painel.</p>')+
+        (lista.length
+          ? '<table style="width:100%;border-collapse:collapse;"><tbody>'+linhas+'</tbody></table>'+
+            '<div style="text-align:right;font-size:15px;margin:10px 2px 0;">Total de saídas: <b style="color:var(--red);">-'+fmtCurrency(saidasTotal(d))+'</b></div>'
+          : '<p style="font-size:13px;color:var(--text-dim);">Nenhuma saída registrada neste dia.</p>')+
+        '<div class="modal-actions"><button class="btn ghost small" id="sdClose">Fechar</button></div>'+
+      '</div>';
+    document.body.appendChild(div);
+    function fechar(){ state.modal = null; render(); }
+    div.querySelector("#sdClose").addEventListener("click", fechar);
+    div.addEventListener("click", function(e){ if (e.target===div) fechar(); });
+    var add = div.querySelector("#sdAdd");
+    if (add){
+      function adicionar(){
+        var v = parseNum(div.querySelector("#sdValor").value), mot = div.querySelector("#sdMotivo").value.trim();
+        var err = div.querySelector("#sdErr");
+        if (!(v>0)){ err.textContent = "Informe o valor da saída."; return; }
+        if (!mot){ err.textContent = "Informe o motivo da saída."; return; }
+        var atual = loadSaidas(d); // lê de novo: outro aparelho pode ter lançado agora
+        atual.push({id:uid(), valor:Math.round(v*100)/100, motivo:mot, por:state.userEmail||"", em:Date.now()});
+        if (!lsSetJSON(K_SAIDAS+d, atual)){ err.textContent = "Não foi possível salvar. Verifique o espaço de armazenamento do navegador."; return; }
+        renderModal();
+      }
+      add.addEventListener("click", adicionar);
+      div.querySelectorAll("#sdValor,#sdMotivo").forEach(function(i){ i.addEventListener("keydown", function(e){ if (e.key==="Enter") adicionar(); }); });
+      div.querySelector("#sdValor").focus();
+    }
+    div.querySelectorAll("[data-del]").forEach(function(b){
+      b.addEventListener("click", function(){
+        if (state.role!=="master") return;
+        if (!window.confirm("Remover esta saída do caixa?")) return;
+        var id = b.getAttribute("data-del");
+        lsSetJSON(K_SAIDAS+d, loadSaidas(d).filter(function(x){ return x.id!==id; }));
+        renderModal();
+      });
+    });
+  }
+
   // ======================= MODAL: FECHAMENTO DO DIA =======================
   var FC_METODOS = ["Dinheiro","Débito","Crédito","Pix"];
   function fcNomeVenda(r, tipo){
@@ -3392,7 +3500,7 @@ window.__voReady.then(function(){
     var metodos = FC_METODOS.map(function(m){
       var lanc = 0; vendas.forEach(function(v){ lanc += v.pb[m]; });
       var txt = (contado && contado[m]!==undefined && contado[m]!==null) ? String(contado[m]).trim() : "";
-      var entrou = txt==="" ? null : parseNum(txt) - (m==="Dinheiro" ? fundo : 0);
+      var entrou = txt==="" ? null : parseNum(txt) - (m==="Dinheiro" ? fundo - saidasTotal(d) : 0);
       return {m:m, lanc:lanc, entrou:entrou, dif:(entrou===null ? null : entrou-lanc), notas:[]};
     });
     function pool(m, modo){
@@ -3561,6 +3669,7 @@ window.__voReady.then(function(){
     var d = state.modal.date, t = null;
     try{ t = computeTotals(); }catch(e){}
     if (!t){ state.modal = null; render(); return; }
+    var saidasD = saidasTotal(d);
     var chave = "vo_fechamento:"+d, salvo = lsGetJSON(chave, {}) || {};
     var contado = salvo.contado || {};
     var metodos = ["Dinheiro","Pix","Débito","Crédito"];
@@ -3598,6 +3707,7 @@ window.__voReady.then(function(){
             '<input type="text" inputmode="decimal" class="fcFundoIn" placeholder="0,00" value="'+fundoVal+'" style="margin:0;max-width:160px;text-align:right;letter-spacing:normal;"></div>'+
           '<div style="font-size:15px;line-height:1.7;margin:6px 0 14px;">'+
             'Total lançado como entrada: <b style="color:var(--text);">'+fmtCurrency(t.entrouTotal||0)+'</b><br>'+
+            (saidasD>0.004 ? 'Saídas do caixa: <b style="color:var(--red);">-'+fmtCurrency(saidasD)+'</b> (já descontadas do dinheiro esperado na gaveta)<br>' : '')+
             (pend.length ? '⚠ '+pend.length+' venda(s) ainda pendente(s) de pagamento: <b>'+fmtCurrency(pendValor)+'</b><br>' : '✓ Nenhuma venda pendente de pagamento<br>')+
             (avisos ? '⚠ '+avisos+' venda(s) com problema na forma de pagamento (marcadas em amarelo na tabela)<br>' : '')+
             (t.semForma>0.005 ? '⚠ '+fmtCurrency(t.semForma)+' em vendas sem forma de pagamento definida<br>' : '')+
@@ -3721,7 +3831,7 @@ window.__voReady.then(function(){
         var m = inp.getAttribute("data-m"), cel = div.querySelector('.fcDif[data-m="'+m+'"]');
         if (!cel) return;
         if (inp.value.trim()===""){ cel.textContent = "—"; cel.style.color = ""; return; }
-        var dif = parseNum(inp.value) - (m==="Dinheiro" ? fundo : 0) - (t.porPagamento[m]||0);
+        var dif = parseNum(inp.value) - (m==="Dinheiro" ? fundo - saidasD : 0) - (t.porPagamento[m]||0);
         cel.textContent = (dif>0.004?"+":"")+fmtCurrency(dif);
         cel.style.color = Math.abs(dif)<0.005 ? "var(--green)" : "var(--red)";
       });
@@ -3832,7 +3942,7 @@ window.__voReady.then(function(){
     var data = {};
     for (var i=0;i<localStorage.length;i++){
       var k = localStorage.key(i);
-      if (k && (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS || k===K_ORCAMENTOS || k.indexOf(K_NOVOS)===0 || k===K_NOVOS_META)) data[k] = localStorage.getItem(k);
+      if (k && (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS || k===K_ORCAMENTOS || k.indexOf(K_NOVOS)===0 || k===K_NOVOS_META || k===K_TAXAS || k.indexOf(K_SAIDAS)===0)) data[k] = localStorage.getItem(k);
     }
     var now = new Date();
     var stamp = today+"-"+pad(now.getHours())+"h"+pad(now.getMinutes());
@@ -3849,7 +3959,7 @@ window.__voReady.then(function(){
     var data = {};
     for (var i=0;i<localStorage.length;i++){
       var k = localStorage.key(i);
-      if (k && (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS || k===K_ORCAMENTOS || k.indexOf(K_NOVOS)===0 || k===K_NOVOS_META)) data[k] = localStorage.getItem(k);
+      if (k && (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS || k===K_ORCAMENTOS || k.indexOf(K_NOVOS)===0 || k===K_NOVOS_META || k===K_TAXAS || k.indexOf(K_SAIDAS)===0)) data[k] = localStorage.getItem(k);
     }
     try{
       localStorage.setItem(K_AUTOBACKUP, JSON.stringify({ts:Date.now(), data:data}));
@@ -3864,7 +3974,7 @@ window.__voReady.then(function(){
         try{
           var n = 0;
           Object.keys(data).forEach(function(k){
-            if (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS || k===K_ORCAMENTOS || k.indexOf(K_NOVOS)===0 || k===K_NOVOS_META){
+            if (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS || k===K_ORCAMENTOS || k.indexOf(K_NOVOS)===0 || k===K_NOVOS_META || k===K_TAXAS || k.indexOf(K_SAIDAS)===0){
               localStorage.setItem(k, data[k]); n++;
               try{ cloudPush(k, JSON.parse(data[k])); }catch(e2){}
             }
@@ -4201,6 +4311,20 @@ window.__voReady.then(function(){
       else if (state.dashMonth > curMonthKey) daysLeft = countBusinessDays(state.dashMonth, 1);
       else daysLeft = countBusinessDays(state.dashMonth, parseInt(today.slice(8,10),10));
 
+      // total de saídas do caixa (só o master vê): do mês aberto no painel e do dia selecionado
+      function saidasDashHtml(dia){
+        if (state.role!=="master") return "";
+        var mesTot = 0, qtd = 0;
+        for (var i=1;i<=nd;i++){ var l = loadSaidas(state.dashMonth+"-"+pad(i)); qtd += l.length; mesTot += l.reduce(function(a,x){ return a+Math.max(0,parseNum(x.valor)); },0); }
+        var diaTot = dia ? saidasTotal(dia) : 0;
+        var mv = function(v){ return state.hideValues ? '••••' : fmtCurrency(v); };
+        return '<div class="card" style="margin-bottom:14px;">'+
+          '<h3>💸 Saídas do caixa</h3>'+
+          '<div style="display:flex;gap:24px;flex-wrap:wrap;">'+
+            '<div><div style="font-size:12px;color:var(--text-dim);">No mês ('+qtd+' saída(s))</div><div style="font-size:22px;color:var(--red);font-weight:600;">-'+mv(mesTot)+'</div></div>'+
+            (dia ? '<div><div style="font-size:12px;color:var(--text-dim);">Em '+escHtml(fmtDateBR(dia))+'</div><div style="font-size:22px;color:var(--red);font-weight:600;">-'+mv(diaTot)+'</div></div>' : '')+
+          '</div></div>';
+      }
       function dailyTargetCardHtml(label, goal){
         var remaining = goal - monthTotal;
         var percent = Math.min(100, (monthTotal/goal)*100);
@@ -4292,6 +4416,7 @@ window.__voReady.then(function(){
           dailyTargetCardHtml("Meta 350 mil", GOAL_1)+
           dailyTargetCardHtml("Meta 450 mil", GOAL_2)+
         '</div>'+
+        saidasDashHtml(selDay)+
 
         '<div class="row2">'+
           '<div class="card">'+
@@ -5536,6 +5661,7 @@ window.__voReady.then(function(){
       (avisosCount>0 ? '<span class="nav-badge">'+avisosCount+'</span>' : '')+'</button>';
     var historicoBtn = isMaster ? '<button class="btn ghost small" data-act="openhistorico" title="Ver logins e movimentações de estoque">🕘 Histórico'+histBadgeHtml()+'</button>' : '';
     var usuariosBtn = isMaster ? '<button class="btn ghost small" data-act="openusuarios" title="Criar logins e alterar cargos">👤 Usuários</button>' : '';
+    if (isMaster) usuariosBtn += '<button class="btn ghost small" data-act="opentaxas" title="Maquininhas e juros de cada parcela do crédito">💳 Taxas</button>';
     if (isMaster) usuariosBtn += '<button class="btn ghost small" data-act="openferramentas" title="Relatório do mês por pessoa, backups automáticos e migração de dados">🛠 Ferramentas</button>';
     if (!can("estoque")) estoqueBtn = "";
     if (!can("clientes")) clientesBtn = "";
@@ -5728,7 +5854,9 @@ window.__voReady.then(function(){
     else if (act==="cmpyear"){ state.cmpMode="year"; render(); }
     else if (act==="back"){ state.view="dashboard"; render(); }
     else if (act==="addrow"){ addRow(); }
+    else if (act==="opentaxas"){ if (state.role==="master"){ state.modal = {type:"taxasCartao"}; render(); } }
     else if (act==="openferramentas"){ if (state.role==="master"){ state.modal = {type:"ferramentas"}; render(); } }
+    else if (act==="opensaidas"){ if (podeSaidas()){ state.modal = {type:"saidas", date:tblDate()}; render(); } }
     else if (act==="openfechamento"){ if (state.role==="master" || state.role==="vendedor"){ state.modal = {type:"fechamento", date:tblDate()}; render(); } }
     else if (act==="prevday" || act==="nextday"){
       var dd = act==="prevday" ? -1 : 1;
@@ -5950,6 +6078,7 @@ window.__voReady.then(function(){
                 return '<option value="'+escAttr(v)+'"'+(vendFilt===v?' selected':'')+'>'+escHtml(v)+'</option>';
               }).join("")+
             '</select>'+
+            ((state.role==="master" || state.role==="vendedor") ? '<button class="btn small ghost" data-act="opensaidas" title="Registrar dinheiro que saiu do caixa e o motivo">💸 Saídas</button>' : '')+
             ((state.role==="master" || state.role==="vendedor") ? '<button class="btn small ghost" data-act="openfechamento" title="Conferir o caixa do dia: o que foi lançado x o que está na gaveta/maquininha">💵 Fechamento</button>' : '')+
             (state.role==="master" ? '<button class="btn small ghost" data-act="exportdiacsv" title="Baixar as vendas deste dia em planilha (CSV)">⇩ CSV</button>' : '')+
             '<button class="btn small ghost" data-act="toggletabletotals" title="'+(state.hideTableTotals?"Mostrar o valor total do dia e as somas das formas de pagamento":"Ocultar o valor total do dia e as somas das formas de pagamento")+'">'+(state.hideTableTotals?"🙈 Mostrar totais":"👁 Ocultar totais")+'</button>'+
@@ -6049,6 +6178,7 @@ window.__voReady.then(function(){
     out += pcard("📲 Pix", "yellow", "", hv?'••••':fmtCurrency(t.porPagamento["Pix"]), "Seminovos + pneus novos do dia");
     out += pcard("💳 Débito", "yellow", "", hv?'••••':fmtCurrency(t.porPagamento["Débito"]), "Seminovos + pneus novos do dia");
     out += pcard("💳 Crédito", "yellow", "", hv?'••••':fmtCurrency(t.porPagamento["Crédito"]), "Seminovos + pneus novos do dia");
+    if (t.taxasCartao>0.004) out += pcard("🧾 Taxa das maquininhas", "yellow", "", hv?'••••':'-'+fmtCurrency(t.taxasCartao), "Desconto das maquininhas no crédito (seminovos + pneus novos do dia). Crédito líquido: "+fmtCurrency(t.porPagamento["Crédito"]-t.taxasCartao));
     return out;
   }
   function tstat(label, val, accent){
@@ -6126,8 +6256,9 @@ window.__voReady.then(function(){
     var warnTitle = pagAviso ? ' title="⚠ '+escAttr(pagAviso)+'"' : (mismatch ? ' title="Confira: a quantidade e o valor deste grupo não batem"' : '');
     if (col.type==="computed"){
       var descv = descontoValor(row);
+      var txNote = '<div class="taxa-note" style="font-size:9px;color:var(--red);line-height:1.2;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escHtml(taxaNoteTxt(row, computedValor))+'</div>';
       var descNote = descv>0 ? '<div style="font-size:9px;color:var(--yellow);line-height:1.2;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">-'+fmtCurrency(descv)+' desc.</div>' : '';
-      return '<div class="'+cellClass+'"><div style="display:flex;flex-direction:column;width:100%;min-width:0;"><input class="cellval computed" value="'+escAttr(fmtCurrency(computedValor))+'" disabled>'+descNote+'</div></div>';
+      return '<div class="'+cellClass+'"><div style="display:flex;flex-direction:column;width:100%;min-width:0;"><input class="cellval computed" value="'+escAttr(fmtCurrency(computedValor))+'" disabled>'+descNote+txNote+'</div></div>';
     }
     if (col.type==="lucro"){
       var li = lucroCellInfo(row);
@@ -6142,6 +6273,13 @@ window.__voReady.then(function(){
         return '<option value="'+escAttr(o)+'"'+(o===val?" selected":"")+'>'+escHtml(o)+'</option>';
       }).join("");
       var selectHtml = '<select class="cellval" data-field="'+col.key+'" data-id="'+row.id+'" '+(editable?"":"disabled")+'>'+opts+'</select>';
+      if (col.key==="formaPagamento" && val==="Crédito"){
+        var selCred = '<select class="cellval" data-field="'+col.key+'" data-id="'+row.id+'" '+(editable?"":"disabled")+' style="flex:1;min-width:0;">'+opts+'</select>';
+        var rsCred = creditoResumo(row);
+        return '<div class="'+cellClass+'" style="display:flex;gap:4px;align-items:center;">'+selCred+
+          '<button class="icon-btn'+(rsCred?' has':'')+'" data-act="credito" data-id="'+row.id+'" '+(editable?"":"disabled")+' title="'+escAttr(rsCred ? ('Crédito: '+rsCred+' (clique para alterar)') : 'Escolher a maquininha e as parcelas')+'" style="flex:0 0 auto;">'+(rsCred ? escHtml(rsCred.split(" · ")[0]) : '💳')+'</button>'+
+        '</div>';
+      }
       if (col.key==="formaPagamento" && val && val.indexOf("/")>-1){
         var selectHtmlNarrow = '<select class="cellval" data-field="'+col.key+'" data-id="'+row.id+'" '+(editable?"":"disabled")+' style="flex:1;min-width:0;">'+opts+'</select>';
         return '<div class="'+cellClass+'" style="display:flex;gap:4px;align-items:center;">'+selectHtmlNarrow+
@@ -6274,6 +6412,8 @@ window.__voReady.then(function(){
       Object.keys(t.porPagamento).forEach(function(k){ t.porPagamento[k] += pb[k]; });
     });
     var eS = entrouDe(normais), eN = entrouDe(novos);
+    t.taxasCartao = 0;
+    (normais||[]).concat(novos||[]).forEach(function(r){ t.taxasCartao += taxaCartao(r); });
     t.entrouSemi = eS.entrou; t.entrouNovos = eN.entrou;
     t.entrouTotal = eS.entrou + eN.entrou;
     t.semForma = eS.semForma + eN.semForma;
@@ -6621,6 +6761,12 @@ window.__voReady.then(function(){
         scheduleSave();
       });
     });
+    root.querySelectorAll("[data-act=credito]").forEach(function(node){
+      node.addEventListener("click", function(){
+        state.modal = {type:"credito", rowId: node.getAttribute("data-id")};
+        renderModal();
+      });
+    });
     root.querySelectorAll("[data-act=multipag]").forEach(function(node){
       node.addEventListener("click", function(){
         var id = node.getAttribute("data-id");
@@ -6634,7 +6780,7 @@ window.__voReady.then(function(){
         var field = node.getAttribute("data-field");
         var row = findTblRow(id);
         if (!row) return;
-        if (field==="formaPagamento") { delete row.splitValor; delete row.pagamentosMultiplos; } // forma mudou: descarta divisões manuais antigas
+        if (field==="formaPagamento") { delete row.splitValor; delete row.pagamentosMultiplos; delete row.maquininha; delete row.parcelas; delete row.taxaPct; } // forma mudou: descarta divisões manuais antigas
         var qtdAntiga = parseNum(row.quantidade);
         row[field] = node.value;
         // mudou a quantidade de uma linha que já tem medida escolhida: acerta a baixa no estoque e o valor dos pneus
@@ -6650,6 +6796,7 @@ window.__voReady.then(function(){
           // precisa redesenhar a linha pra mostrar (ou esconder) na hora o botão "÷"/"⚙" de dividir o pagamento
           scheduleSave();
           renderTable();
+          if (row.formaPagamento==="Crédito"){ state.modal = {type:"credito", rowId: row.id}; renderModal(); return; }
           if (row.formaPagamento && row.formaPagamento.indexOf("Múltiplo")===0){
             // já abre a divisão, já que aqui não existe um "meio a meio" padrão como nas combinações de 2 formas
             state.modal = {type:"multiPag", rowId: row.id};
@@ -6684,6 +6831,7 @@ window.__voReady.then(function(){
       if (!rowNode) return;
       var computedInput = rowNode.querySelector('input.computed');
       if (computedInput) computedInput.value = fmtCurrency(computeValor(r));
+      var taxaNode = rowNode.querySelector('.taxa-note'); if (taxaNode) taxaNode.textContent = taxaNoteTxt(r, computeValor(r));
       var lcInput = rowNode.querySelector('input.lucro-cell');
       if (lcInput){ var lInfo = lucroCellInfo(r); lcInput.value = lInfo.text; lcInput.style.color = lInfo.color; }
     });
@@ -6787,6 +6935,8 @@ window.__voReady.then(function(){
     else if (state.modal.type==="estoqueForm") renderEstoqueFormModal();
     else if (state.modal.type==="garantiaForm") renderGarantiaFormModal();
     else if (state.modal.type==="multiPag") renderMultiPagModal();
+    else if (state.modal.type==="credito") renderCreditoModal();
+    else if (state.modal.type==="taxasCartao") renderTaxasModal();
     else if (state.modal.type==="globalSearch") renderGlobalSearchModal();
     else if (state.modal.type==="novoForm") renderNovoFormModal();
     else if (state.modal.type==="novosMeta") renderNovosMetaModal();
@@ -6799,6 +6949,7 @@ window.__voReady.then(function(){
     else if (state.modal.type==="ferramentas") renderFerramentasModal();
     else if (state.modal.type==="importTabelas") renderImportTabelasModal();
     else if (state.modal.type==="fechamento") renderFechamentoModal();
+    else if (state.modal.type==="saidas") renderSaidasModal();
     else if (state.modal.type==="perfil") renderPerfilModal();
     else if (state.modal.type==="osLinha") renderOSLinhaModal();
     else if (state.modal.type==="osPickRow") renderOSPickRowModal();
@@ -9626,6 +9777,96 @@ window.__voReady.then(function(){
     }
   }
 
+  // ---------- modal: maquininha e parcelas do crédito ----------
+  function renderCreditoModal(){
+    var row = findTblRow(state.modal.rowId);
+    if (!row){ state.modal = null; render(); return; }
+    var total = computeValor(row);
+    var selS = "width:100%;background:var(--panel-alt);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:8px;";
+    var div = document.createElement("div");
+    div.className = "overlay";
+    div.innerHTML =
+      '<div class="modal">'+
+        '<h3>💳 Crédito — maquininha e parcelas</h3>'+
+        '<p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;">Valor no crédito: <b style="color:var(--text);">'+fmtCurrency(total)+'</b></p>'+
+        '<div class="field-group"><label>Maquininha</label><select id="crMaq" style="'+selS+'">'+maqOptsHtml(row.maquininha)+'</select></div>'+
+        '<div class="field-group"><label>Parcelas</label><select id="crPar" style="'+selS+'">'+parOptsHtml(row.parcelas)+'</select></div>'+
+        '<div id="crResumo" style="font-size:12.5px;margin:6px 2px 12px;"></div>'+
+        '<div class="modal-actions"><button class="btn ghost small" id="crCancel">Voltar</button><button class="btn primary small" id="crSave">Salvar</button></div>'+
+      '</div>';
+    document.body.appendChild(div);
+    function atual(){ return {maquininha: div.querySelector("#crMaq").value, parcelas: parseInt(div.querySelector("#crPar").value,10)||1}; }
+    function resumo(){
+      var a = atual(), pct = taxaPct(a.maquininha, a.parcelas), tx = Math.round(total*pct)/100;
+      div.querySelector("#crResumo").innerHTML = pct>0
+        ? 'Taxa de <b>'+String(pct).replace(".",",")+'%</b>: <span style="color:var(--red);">-'+fmtCurrency(tx)+'</span> · líquido <b>'+fmtCurrency(Math.max(0,total-tx))+'</b>'
+        : '<span style="color:var(--text-dim);">Sem taxa cadastrada para essa combinação (o master define em 💳 Taxas).</span>';
+    }
+    resumo();
+    div.querySelector("#crMaq").addEventListener("change", resumo);
+    div.querySelector("#crPar").addEventListener("change", resumo);
+    function fechar(){ state.modal = null; render(); }
+    div.querySelector("#crCancel").addEventListener("click", fechar);
+    div.addEventListener("click", function(e){ if (e.target===div) fechar(); });
+    div.querySelector("#crSave").addEventListener("click", function(){
+      var a = atual();
+      row.maquininha = a.maquininha; row.parcelas = a.parcelas; snapshotTaxa(row);
+      state.modal = null; render(); scheduleSave();
+    });
+  }
+
+  // ---------- modal: maquininhas e juros por parcela (SÓ O MASTER) ----------
+  function renderTaxasModal(){
+    if (state.role!=="master"){ state.modal = null; return; }
+    var cfg = state.modal.draft || taxasCfg();
+    var inpS = "background:var(--panel-alt);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:6px;width:100%;box-sizing:border-box;";
+    var blocos = cfg.maquininhas.map(function(m){
+      var grid = "";
+      for (var p=1; p<=PARCELAS_MAX; p++){
+        var v = parseNum((cfg.taxas[m.id]||{})[String(p)]);
+        grid += '<label style="display:flex;align-items:center;gap:4px;font-size:12px;"><span style="width:26px;">'+p+'x</span>'+
+          '<input type="text" inputmode="decimal" class="txPct" data-maq="'+escAttr(m.id)+'" data-par="'+p+'" value="'+escAttr(v>0?String(v).replace(".",","):"")+'" placeholder="0" style="'+inpS+'"><span>%</span></label>';
+      }
+      return '<div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:10px;">'+
+        '<input type="text" class="txNome" data-maq="'+escAttr(m.id)+'" value="'+escAttr(m.nome)+'" placeholder="Nome da maquininha" style="'+inpS+'font-weight:600;margin-bottom:8px;">'+
+        '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px 12px;">'+grid+'</div></div>';
+    }).join("");
+    var div = document.createElement("div");
+    div.className = "overlay";
+    div.innerHTML =
+      '<div class="modal wide">'+
+        '<h3>💳 Maquininhas e juros do crédito</h3>'+
+        '<p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;">Só o master vê e altera esta tela. Informe o juros (%) de cada parcela: ele é descontado do valor das vendas no crédito. Vendas já lançadas mantêm a taxa da época.</p>'+
+        '<div style="max-height:58vh;overflow:auto;">'+blocos+'</div>'+
+        '<div class="modal-actions"><button class="btn ghost small" id="txAdd">+ Maquininha</button><button class="btn ghost small" id="txCancel">Cancelar</button><button class="btn primary small" id="txSave">Salvar</button></div>'+
+      '</div>';
+    document.body.appendChild(div);
+    function ler(){
+      var out = {maquininhas:[], taxas:{}};
+      cfg.maquininhas.forEach(function(m){
+        out.maquininhas.push({id:m.id, nome:(div.querySelector('.txNome[data-maq="'+m.id+'"]').value.trim() || m.nome)});
+        out.taxas[m.id] = {};
+        div.querySelectorAll('.txPct[data-maq="'+m.id+'"]').forEach(function(i){
+          var n = parseNum(i.value);
+          out.taxas[m.id][i.getAttribute("data-par")] = (n>0 && n<100) ? n : 0;
+        });
+      });
+      return out;
+    }
+    function fechar(){ state.modal = null; render(); }
+    div.querySelector("#txCancel").addEventListener("click", fechar);
+    div.querySelector("#txAdd").addEventListener("click", function(){
+      var cur = ler();
+      cur.maquininhas.push({id:"m"+Date.now().toString(36), nome:"Maquininha "+(cur.maquininhas.length+1)});
+      state.modal = {type:"taxasCartao", draft:cur}; renderModal();
+    });
+    div.querySelector("#txSave").addEventListener("click", function(){
+      if (state.role!=="master") return;
+      lsSetJSON(K_TAXAS, ler());
+      fechar();
+    });
+  }
+
   // ---------- modal: dividir o pagamento entre até 4 formas ----------
   function renderMultiPagModal(){
     var rowId = state.modal.rowId;
@@ -9646,10 +9887,15 @@ window.__voReady.then(function(){
       var selOpts = opcoesMetodo.map(function(m){
         return '<option value="'+m+'"'+(p.metodo===m?" selected":"")+'>'+m+'</option>';
       }).join("");
-      return '<div style="display:flex;gap:8px;margin-bottom:8px;">'+
+      var credStyle = "flex:1;background:var(--panel-alt);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:8px;";
+      return '<div class="mpLinha" style="margin-bottom:8px;"><div style="display:flex;gap:8px;">'+
         '<select class="mpMetodo" data-idx="'+i+'" style="flex:1.2;background:var(--panel-alt);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:8px;">'+selOpts+'</select>'+
         '<input type="text" inputmode="decimal" class="mpValor" data-idx="'+i+'" placeholder="0,00" value="'+escAttr(p.valor!==""&&p.valor!==undefined&&p.valor!==null?parseNum(p.valor):"")+'" style="flex:1;">'+
-      '</div>';
+      '</div>'+
+        '<div class="mpCred" style="display:'+(p.metodo==="Crédito"?"flex":"none")+';gap:8px;margin-top:6px;">'+
+          '<select class="mpMaq" style="'+credStyle+'">'+maqOptsHtml(p.maquininha)+'</select>'+
+          '<select class="mpPar" style="'+credStyle+'">'+parOptsHtml(p.parcelas)+'</select>'+
+        '</div></div>';
     }).join("");
 
     div.innerHTML =
@@ -9673,7 +9919,16 @@ window.__voReady.then(function(){
       for (var i=0;i<metodos.length;i++){
         var m = metodos[i].value;
         var v = parseNum(valores[i].value);
-        if (m!=="Nenhum" && v>0) lista.push({metodo:m, valor:v});
+        if (m!=="Nenhum" && v>0){
+          var it = {metodo:m, valor:v};
+          if (m==="Crédito"){
+            var ln = metodos[i].closest(".mpLinha");
+            it.maquininha = ln.querySelector(".mpMaq").value;
+            it.parcelas = parseInt(ln.querySelector(".mpPar").value,10)||1;
+            snapshotTaxa(it);
+          }
+          lista.push(it);
+        }
       }
       return lista;
     }
@@ -9692,6 +9947,9 @@ window.__voReady.then(function(){
       }
     }
     atualizarResumo();
+    div.querySelectorAll(".mpMetodo").forEach(function(el){
+      el.addEventListener("change", function(){ el.closest(".mpLinha").querySelector(".mpCred").style.display = el.value==="Crédito" ? "flex" : "none"; });
+    });
     div.querySelectorAll(".mpMetodo, .mpValor").forEach(function(el){
       el.addEventListener("input", atualizarResumo);
       el.addEventListener("change", atualizarResumo);
@@ -10740,6 +10998,10 @@ window.__voReady.then(function(){
             '<div><label>Forma de pagamento</label><select id="nfPag">'+opts((item && NOVOS_PAYMENTS.indexOf(item.formaPagamento)===-1 && item.formaPagamento) ? NOVOS_PAYMENTS.concat([item.formaPagamento]) : NOVOS_PAYMENTS, item?item.formaPagamento:"Nenhum")+'</select></div>'+
             '<div><label>Pago</label><select id="nfPago">'+opts(["❌","✅"], item?item.pago:"❌")+'</select></div>'+
           '</div>'+
+          '<div class="nv-two" id="nfCredito" style="'+((item && item.formaPagamento==="Crédito") ? '' : 'display:none;')+'">'+
+            '<div><label>Maquininha</label><select id="nfMaq">'+maqOptsHtml(item?item.maquininha:"")+'</select></div>'+
+            '<div><label>Parcelas</label><select id="nfPar">'+parOptsHtml(item?item.parcelas:1)+'</select></div>'+
+          '</div>'+
           '<label>Cliente (opcional)</label><input type="text" id="nfCliente" list="nfClientes" placeholder="Nome do cliente" value="'+escAttr(item?item.cliente:"")+'">'+
           '<datalist id="nfClientes">'+loadCustomers().map(function(c){ return '<option value="'+escAttr(c.nome||"")+'"></option>'; }).join("")+'</datalist>'+
           '<label>Detalhes (opcional)</label><input type="text" id="nfDet" placeholder="Ex: montagem inclusa" value="'+escAttr(item?item.detalhes:"")+'">'+
@@ -10778,6 +11040,8 @@ window.__voReady.then(function(){
       dados.date = date; dados.medida = medida; dados.marca = "";
       dados.quantidade = String(qtd); dados.valorPneus = String(Math.round(qtd*unit*100)/100);
       dados.formaPagamento = g("nfPag").value; dados.pago = g("nfPago").value;
+      delete dados.maquininha; delete dados.parcelas; delete dados.taxaPct;
+      if (dados.formaPagamento==="Crédito" && g("nfMaq")){ dados.maquininha = g("nfMaq").value; dados.parcelas = parseInt(g("nfPar").value,10)||1; snapshotTaxa(dados); }
       dados.vendedor = g("nfVend").value; dados.cliente = g("nfCliente").value.trim(); dados.detalhes = g("nfDet").value.trim();
       dados.criadoEm = item ? item.criadoEm : new Date().toISOString();
       if (dados.medidaId) syncRowEstoque(dados); // acerta a baixa no estoque se a quantidade mudou
