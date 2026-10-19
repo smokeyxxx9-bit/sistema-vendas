@@ -1285,17 +1285,22 @@ window.__voReady.then(function(){
     return Math.round(valor*pct)/100;
   }
   // novo = true quando a linha é da tabela de pneus novos; se o master desligou o desconto daquela tabela, não há taxa
-  function taxaCartao(row, novo){
-    if (!descontaTaxas(novo)) return 0;
+  function taxaCartaoSplit(row, novo){
+    var r = {deb:0, cred:0};
+    if (!descontaTaxas(novo)) return r;
     var fp = row.formaPagamento;
-    if (fp==="Crédito" || fp==="Débito") return taxaCartaoItem(row, computeValor(row), fp);
-    if (fp && fp.indexOf("Múltiplo")===0 && Array.isArray(row.pagamentosMultiplos)){
-      var s = 0;
-      row.pagamentosMultiplos.forEach(function(p){ if (p && (p.metodo==="Crédito" || p.metodo==="Débito")) s += taxaCartaoItem(p, Math.max(0, parseNum(p.valor)), p.metodo); });
-      return s;
+    if (fp==="Crédito") r.cred = taxaCartaoItem(row, computeValor(row), fp);
+    else if (fp==="Débito") r.deb = taxaCartaoItem(row, computeValor(row), fp);
+    else if (fp && fp.indexOf("Múltiplo")===0 && Array.isArray(row.pagamentosMultiplos)){
+      row.pagamentosMultiplos.forEach(function(p){
+        if (!p) return;
+        if (p.metodo==="Crédito") r.cred += taxaCartaoItem(p, Math.max(0, parseNum(p.valor)), p.metodo);
+        else if (p.metodo==="Débito") r.deb += taxaCartaoItem(p, Math.max(0, parseNum(p.valor)), p.metodo);
+      });
     }
-    return 0;
+    return r;
   }
+  function taxaCartao(row, novo){ var r = taxaCartaoSplit(row, novo); return r.deb + r.cred; }
   function taxaNoteTxt(row, valor){ var tx = taxaCartao(row, isNovosTbl()); return tx>0 ? "taxa -"+fmtCurrency(tx)+" · líq. "+fmtCurrency(Math.max(0, valor-tx)) : ""; }
   function snapshotTaxa(c, metodo){ c.taxaPct = c.maquininha ? pctMaq(c.maquininha, metodo || c.formaPagamento || "Crédito", c.parcelas) : 0; }
   function maqOptsHtml(sel){
@@ -4178,6 +4183,7 @@ window.__voReady.then(function(){
     else if (state.view==="conversor") renderConversor();
     else if (state.view==="historico" && isMaster) renderHistorico();
     else if (state.view==="usuarios" && isMaster) renderUsuarios();
+    else if (state.view==="admin" && isMaster) renderAdmin();
     else if (state.view==="dashboard") renderDashboard();
     else renderTable();
     if (state.modal) renderModal(); else {
@@ -5290,7 +5296,116 @@ window.__voReady.then(function(){
   }
   var VIEW_PERM = {dashboard:"vendas", table:"vendas", estoque:"estoque", clientes:"clientes", notas:"notas",
     orcamento:"notas", orcamentos:"notas", novos:"novos", regmes:"registro", avisos:"avisos", os:"os", conversor:"vendas"};
-  function viewPermitida(v){ var k = VIEW_PERM[v]; return !k || can(k); }
+  function viewPermitida(v){ if (v==="admin") return state.role==="master"; var k = VIEW_PERM[v]; return !k || can(k); }
+  // ---------- Área administrativa (só master): entradas, saídas e taxas das maquininhas ----------
+  function adminDadosMes(month){
+    var nd = daysInMonth(month);
+    var novosMes = loadNovosMonth(month).filter(function(n){ return !isBlankNovo(n); });
+    var tot = {entrou:0, porPag:{"Dinheiro":0,"Pix":0,"Débito":0,"Crédito":0}, taxaDeb:0, taxaCred:0, saidas:0, nSaidas:0, brutoDeb:0, brutoCred:0};
+    var dias = [], saidasLista = [];
+    for (var i=1;i<=nd;i++){
+      var iso = month+"-"+pad(i);
+      var d = {iso:iso, entrou:0, taxaDeb:0, taxaCred:0, saidas:0, movimento:false};
+      function somar(r, novo){
+        var pb = paymentBreakdown(r);
+        Object.keys(tot.porPag).forEach(function(k){ tot.porPag[k] += pb[k]; });
+        d.entrou += pb["Dinheiro"]+pb["Pix"]+pb["Débito"]+pb["Crédito"];
+        var tx = taxaCartaoSplit(r, novo);
+        d.taxaDeb += tx.deb; d.taxaCred += tx.cred;
+      }
+      rowsOfDay(iso).forEach(function(r){ somar(r, false); });
+      novosMes.forEach(function(n){ if (n.date===iso) somar(n, true); });
+      loadSaidas(iso).forEach(function(x){
+        var v = Math.max(0, parseNum(x.valor));
+        d.saidas += v; tot.nSaidas++;
+        saidasLista.push({iso:iso, valor:v, motivo:x.motivo||"", por:x.por||"", em:x.em||""});
+      });
+      d.movimento = d.entrou>0.004 || d.saidas>0.004 || d.taxaDeb+d.taxaCred>0.004;
+      tot.entrou += d.entrou; tot.taxaDeb += d.taxaDeb; tot.taxaCred += d.taxaCred; tot.saidas += d.saidas;
+      dias.push(d);
+    }
+    return {tot:tot, dias:dias, saidas:saidasLista};
+  }
+  function renderAdmin(){
+    if (state.role!=="master"){ state.view="dashboard"; return renderDashboard(); }
+    root.classList.remove("wide");
+    var month = state.adminMonth || today.slice(0,7);
+    var D = adminDadosMes(month), T = D.tot;
+    var mv = function(v){ return state.hideValues ? "••••" : fmtCurrency(v); };
+    var taxas = T.taxaDeb + T.taxaCred;
+    var resultado = T.entrou - taxas - T.saidas;
+    function card(titulo, valor, cor, sub){
+      return '<div class="card" style="flex:1 1 200px;min-width:180px;">'+
+        '<div style="font-size:12px;color:var(--text-dim);">'+titulo+'</div>'+
+        '<div style="font-size:22px;font-weight:600;color:'+cor+';margin-top:4px;">'+valor+'</div>'+
+        (sub ? '<div style="font-size:11.5px;color:var(--text-dim);margin-top:4px;">'+sub+'</div>' : '')+
+      '</div>';
+    }
+    var aviso = "";
+    var cfg = taxasCfg();
+    if (cfg.descontar.normais===false || cfg.descontar.novos===false){
+      var off = [];
+      if (cfg.descontar.normais===false) off.push("tabela principal");
+      if (cfg.descontar.novos===false) off.push("tabela de pneus novos");
+      aviso = '<div class="card" style="margin-bottom:14px;font-size:12.5px;color:var(--yellow);">⚠ O desconto das taxas está desligado em: '+off.join(" e ")+'. Essas vendas não entram na soma de taxas abaixo (ajuste em 💳 Taxas).</div>';
+    }
+    var th = 'style="text-align:left;padding:8px 10px;font-size:12px;color:var(--text-dim);border-bottom:1px solid var(--border);white-space:nowrap;"';
+    var thr = 'style="text-align:right;padding:8px 10px;font-size:12px;color:var(--text-dim);border-bottom:1px solid var(--border);white-space:nowrap;"';
+    var td = 'style="padding:8px 10px;border-bottom:1px solid var(--border-soft);white-space:nowrap;"';
+    var tdr = 'style="padding:8px 10px;border-bottom:1px solid var(--border-soft);text-align:right;white-space:nowrap;"';
+    var linhas = D.dias.filter(function(d){ return d.movimento; }).map(function(d){
+      var tx = d.taxaDeb + d.taxaCred, res = d.entrou - tx - d.saidas;
+      return '<tr><td '+td+'>'+escHtml(fmtDateBR(d.iso))+'</td>'+
+        '<td '+tdr+'>'+mv(d.entrou)+'</td>'+
+        '<td '+tdr+' ><span style="color:var(--red);">'+(tx>0.004 ? '-'+mv(tx) : '—')+'</span></td>'+
+        '<td '+tdr+'><span style="color:var(--red);">'+(d.saidas>0.004 ? '-'+mv(d.saidas) : '—')+'</span></td>'+
+        '<td '+tdr+'><b style="color:'+(res>=0?'var(--green)':'var(--red)')+';">'+mv(res)+'</b></td></tr>';
+    }).join("");
+    if (!linhas) linhas = '<tr><td '+td+' colspan="5"><span style="color:var(--text-dim);">Nenhum movimento neste mês.</span></td></tr>';
+    var saidasHtml = D.saidas.length ? D.saidas.map(function(x){
+      return '<tr><td '+td+'>'+escHtml(fmtDateBR(x.iso))+'</td><td style="padding:8px 10px;border-bottom:1px solid var(--border-soft);">'+escHtml(x.motivo||"—")+'</td>'+
+        '<td '+td+'>'+escHtml(x.por||"—")+'</td><td '+tdr+'><span style="color:var(--red);">-'+mv(x.valor)+'</span></td></tr>';
+    }).join("") : '<tr><td '+td+' colspan="4"><span style="color:var(--text-dim);">Nenhuma saída registrada neste mês.</span></td></tr>';
+    root.innerHTML =
+      clientesTopbarHtml("Administrativo", "MASTER")+
+      '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 14px;">'+
+        '<button class="btn ghost small" data-act="adminprev" aria-label="Mês anterior">←</button>'+
+        '<b style="min-width:150px;text-align:center;text-transform:capitalize;">'+escHtml(monthLabel(month))+'</b>'+
+        '<button class="btn ghost small" data-act="adminnext" aria-label="Próximo mês">→</button>'+
+        (month!==today.slice(0,7) ? '<button class="btn ghost small" data-act="adminhoje">Mês atual</button>' : '')+
+      '</div>'+
+      aviso+
+      '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;">'+
+        card("💰 Entrou", mv(T.entrou), "var(--green)", "Seminovos + pneus novos (valor bruto)")+
+        card("💸 Saiu do caixa", '-'+mv(T.saidas), "var(--red)", T.nSaidas+" saída(s) registrada(s)")+
+        card("🧾 Taxas das maquininhas", '-'+mv(taxas), "var(--red)", "Débito: -"+mv(T.taxaDeb)+" · Crédito: -"+mv(T.taxaCred))+
+        card("📊 Resultado", mv(resultado), resultado>=0?"var(--green)":"var(--red)", "Entrou − taxas − saídas")+
+      '</div>'+
+      '<div class="card" style="margin-bottom:14px;">'+
+        '<h3>Entradas por forma de pagamento</h3>'+
+        '<div style="display:flex;gap:24px;flex-wrap:wrap;">'+
+          ["Dinheiro","Pix","Débito","Crédito"].map(function(k){
+            return '<div><div style="font-size:12px;color:var(--text-dim);">'+k+'</div><div style="font-size:18px;font-weight:600;">'+mv(T.porPag[k])+'</div></div>';
+          }).join("")+
+        '</div>'+
+      '</div>'+
+      '<div class="card" style="margin-bottom:14px;">'+
+        '<h3>Dia a dia</h3>'+
+        '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13.5px;">'+
+          '<thead><tr><th '+th+'>Dia</th><th '+thr+'>Entrou</th><th '+thr+'>Taxas</th><th '+thr+'>Saídas</th><th '+thr+'>Resultado</th></tr></thead>'+
+          '<tbody>'+linhas+'</tbody></table></div>'+
+      '</div>'+
+      '<div class="card" style="margin-bottom:14px;">'+
+        '<h3>Saídas do caixa no mês</h3>'+
+        '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13.5px;">'+
+          '<thead><tr><th '+th+'>Dia</th><th '+th+'>Motivo</th><th '+th+'>Quem registrou</th><th '+thr+'>Valor</th></tr></thead>'+
+          '<tbody>'+saidasHtml+'</tbody></table></div>'+
+      '</div>';
+    root.querySelectorAll("[data-act]").forEach(function(node){
+      node.addEventListener("click", function(){ handleAction(node.getAttribute("data-act"), node); });
+    });
+    bindBackupControls();
+  }
   // ---------- Conversor TXT -> Excel (TXT do relógio de ponto) ----------
   var cv = {raw:"", name:"registro.txt", headers:[], rows:[], sep:"auto", conv:true, pasteTxt:"", msg:"", msgCls:""};
   var CV_DEFAULT = ["Tra. No.","Nome","Dept.","Data","Hora","Máquina No."];
@@ -5694,12 +5809,14 @@ window.__voReady.then(function(){
     var svgTable = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v16"/></svg>';
     var quickNovosBtn = can("novos") ? '<button class="menu-toggle quick-btn" data-act="opennovostable" aria-label="Tabela de pneus novos" title="Tabela de pneus novos">'+svgTire+'</button>' : '';
     var quickTableBtn = can("vendas") ? '<button class="menu-toggle quick-btn" data-act="opentoday" aria-label="Tabela principal" title="Tabela principal (vendas de hoje)">'+svgTable+'</button>' : '';
+    var svgAdmin = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>';
+    var quickAdminBtn = isMaster ? '<button class="menu-toggle quick-btn" data-act="openadmin" aria-label="Área administrativa" title="Área administrativa (entradas, saídas e taxas das maquininhas)">'+svgAdmin+'</button>' : '';
     var pill = state.authed ? '<span class="pill on">✓ edição de dias anteriores liberada</span>' : '';
     var papelRot = papelLabel(state.role);
     var editBtn = state.authed
       ? '<button class="btn ghost small" data-act="logout" title="Bloquear de novo a edição de dias anteriores">🔒 Sair da edição</button>'
       : '<button class="btn small" data-act="login" title="Liberar a edição de dias anteriores">🔑 Entrar com senha</button>';
-    return '<div class="top-actions">'+pill+quickTableBtn+quickNovosBtn+
+    return '<div class="top-actions">'+pill+quickTableBtn+quickNovosBtn+quickAdminBtn+
       (menuItems ? '<div class="top-menu">'+
         '<button class="menu-toggle" data-menu-toggle="1" aria-label="Abrir menu de opções" aria-expanded="false" title="Opções">'+
           '<span class="bars"><i></i><i></i><i></i></span>'+
@@ -5934,6 +6051,10 @@ window.__voReady.then(function(){
     else if (act==="opennotas"){ state.view="notas"; render(); }
     else if (act==="opennovos"){ state.view="novos"; render(); }
     else if (act==="openregmes"){ if (can("registro")){ state.view="regmes"; render(); } }
+    else if (act==="openadmin"){ if (state.role==="master"){ state.view="admin"; if (!state.adminMonth) state.adminMonth = today.slice(0,7); render(); } }
+    else if (act==="adminprev"){ if (state.role==="master"){ state.adminMonth = addMonths(state.adminMonth || today.slice(0,7), -1); render(); } }
+    else if (act==="adminnext"){ if (state.role==="master"){ state.adminMonth = addMonths(state.adminMonth || today.slice(0,7), 1); render(); } }
+    else if (act==="adminhoje"){ if (state.role==="master"){ state.adminMonth = today.slice(0,7); render(); } }
     else if (act==="opennovostable"){ state.view="novos"; state.novosTab="vendas"; state.novosRows=null; render(); }
     else if (act==="openavisos"){ state.view="avisos"; render(); }
     else if (act==="avisostab"){ state.avisosTab = node.getAttribute("data-tab"); render(); }
