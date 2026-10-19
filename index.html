@@ -5402,7 +5402,8 @@ window.__voReady.then(function(){
         card("🧾 Taxas das maquininhas", '-'+mv(taxas), "var(--red)", "Débito: -"+mv(T.taxaDeb)+" · Crédito: -"+mv(T.taxaCred))+
         card("📊 Resultado", mv(resultado), resultado>=0?"var(--green)":"var(--red)", "Entrou − taxas − saídas")+
       '</div>'+
-      '<div class="card" style="margin-bottom:14px;">'+
+      '<div class="card" style="margin-bottom:14px;display:flex;gap:12px 40px;flex-wrap:wrap;align-items:flex-start;">'+
+      '<div style="flex:0 1 auto;min-width:0;">'+
         '<h3>Entradas por forma de pagamento (mês)</h3>'+
         '<div style="display:flex;gap:24px;flex-wrap:wrap;">'+
           ["Dinheiro","Pix","Débito","Crédito"].map(function(k){
@@ -5410,7 +5411,7 @@ window.__voReady.then(function(){
           }).join("")+
         '</div>'+
       '</div>'+
-      '<div class="card" style="margin-bottom:14px;">'+
+      '<div style="flex:1 1 380px;min-width:0;">'+
         '<h3>Entradas por forma de pagamento por dia</h3>'+
         '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 12px;">'+
           '<button class="btn ghost small" data-act="admindiaprev" aria-label="Dia anterior">←</button>'+
@@ -5429,6 +5430,7 @@ window.__voReady.then(function(){
           '<div><div style="font-size:12px;color:var(--text-dim);">Taxas das maquininhas</div><div style="font-size:16px;font-weight:600;color:var(--red);">-'+mv(DD.taxaDeb+DD.taxaCred)+'</div></div>'+
           '<div><div style="font-size:12px;color:var(--text-dim);">Saídas do caixa</div><div style="font-size:16px;font-weight:600;color:var(--red);">-'+mv(DD.saidas)+'</div></div>'+
         '</div>'+
+      '</div>'+
       '</div>'+
       '<div class="card" style="margin-bottom:14px;">'+
         '<h3>Dia a dia</h3>'+
