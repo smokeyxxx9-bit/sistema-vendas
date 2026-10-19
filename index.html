@@ -5326,11 +5326,32 @@ window.__voReady.then(function(){
     }
     return {tot:tot, dias:dias, saidas:saidasLista};
   }
+  function adminDadosDia(iso){
+    var r = {porPag:{"Dinheiro":0,"Pix":0,"Débito":0,"Crédito":0}, entrou:0, taxaDeb:0, taxaCred:0, saidas:0};
+    function somar(x, novo){
+      var pb = paymentBreakdown(x);
+      Object.keys(r.porPag).forEach(function(k){ r.porPag[k] += pb[k]; });
+      r.entrou += pb["Dinheiro"]+pb["Pix"]+pb["Débito"]+pb["Crédito"];
+      var tx = taxaCartaoSplit(x, novo);
+      r.taxaDeb += tx.deb; r.taxaCred += tx.cred;
+    }
+    rowsOfDay(iso).forEach(function(x){ somar(x, false); });
+    loadNovosMonth(iso.slice(0,7)).forEach(function(n){ if (n.date===iso && !isBlankNovo(n)) somar(n, true); });
+    r.saidas = saidasTotal(iso);
+    return r;
+  }
+  function adminMudaDia(delta){
+    var d = fromISO(state.adminDia || today);
+    d.setDate(d.getDate()+delta);
+    state.adminDia = toISO(d);
+    render();
+  }
   function renderAdmin(){
     if (state.role!=="master"){ state.view="dashboard"; return renderDashboard(); }
     root.classList.remove("wide");
     var month = state.adminMonth || today.slice(0,7);
     var D = adminDadosMes(month), T = D.tot;
+    var dia = state.adminDia || today, DD = adminDadosDia(dia);
     var mv = function(v){ return state.hideValues ? "••••" : fmtCurrency(v); };
     var taxas = T.taxaDeb + T.taxaCred;
     var resultado = T.entrou - taxas - T.saidas;
@@ -5382,11 +5403,31 @@ window.__voReady.then(function(){
         card("📊 Resultado", mv(resultado), resultado>=0?"var(--green)":"var(--red)", "Entrou − taxas − saídas")+
       '</div>'+
       '<div class="card" style="margin-bottom:14px;">'+
-        '<h3>Entradas por forma de pagamento</h3>'+
+        '<h3>Entradas por forma de pagamento (mês)</h3>'+
         '<div style="display:flex;gap:24px;flex-wrap:wrap;">'+
           ["Dinheiro","Pix","Débito","Crédito"].map(function(k){
             return '<div><div style="font-size:12px;color:var(--text-dim);">'+k+'</div><div style="font-size:18px;font-weight:600;">'+mv(T.porPag[k])+'</div></div>';
           }).join("")+
+        '</div>'+
+      '</div>'+
+      '<div class="card" style="margin-bottom:14px;">'+
+        '<h3>Entradas por forma de pagamento por dia</h3>'+
+        '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 12px;">'+
+          '<button class="btn ghost small" data-act="admindiaprev" aria-label="Dia anterior">←</button>'+
+          '<input type="date" id="adminDiaInp" value="'+escAttr(dia)+'" style="background:var(--panel-alt);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:6px 8px;" aria-label="Escolher o dia no calendário">'+
+          '<button class="btn ghost small" data-act="admindianext" aria-label="Próximo dia">→</button>'+
+          (dia!==today ? '<button class="btn ghost small" data-act="admindiahoje">Hoje</button>' : '')+
+          '<span style="font-size:12.5px;color:var(--text-dim);text-transform:capitalize;">'+escHtml(weekdayLabel(dia))+'</span>'+
+        '</div>'+
+        '<div style="display:flex;gap:24px;flex-wrap:wrap;">'+
+          ["Dinheiro","Pix","Débito","Crédito"].map(function(k){
+            return '<div><div style="font-size:12px;color:var(--text-dim);">'+k+'</div><div style="font-size:18px;font-weight:600;">'+mv(DD.porPag[k])+'</div></div>';
+          }).join("")+
+        '</div>'+
+        '<div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:12px;padding-top:10px;border-top:1px solid var(--border-soft);">'+
+          '<div><div style="font-size:12px;color:var(--text-dim);">Entrou no dia</div><div style="font-size:16px;font-weight:600;color:var(--green);">'+mv(DD.entrou)+'</div></div>'+
+          '<div><div style="font-size:12px;color:var(--text-dim);">Taxas das maquininhas</div><div style="font-size:16px;font-weight:600;color:var(--red);">-'+mv(DD.taxaDeb+DD.taxaCred)+'</div></div>'+
+          '<div><div style="font-size:12px;color:var(--text-dim);">Saídas do caixa</div><div style="font-size:16px;font-weight:600;color:var(--red);">-'+mv(DD.saidas)+'</div></div>'+
         '</div>'+
       '</div>'+
       '<div class="card" style="margin-bottom:14px;">'+
@@ -5403,6 +5444,10 @@ window.__voReady.then(function(){
       '</div>';
     root.querySelectorAll("[data-act]").forEach(function(node){
       node.addEventListener("click", function(){ handleAction(node.getAttribute("data-act"), node); });
+    });
+    var diaInp = document.getElementById("adminDiaInp");
+    if (diaInp) diaInp.addEventListener("change", function(){
+      if (/^\d{4}-\d{2}-\d{2}$/.test(diaInp.value)){ state.adminDia = diaInp.value; render(); }
     });
     bindBackupControls();
   }
@@ -6054,6 +6099,9 @@ window.__voReady.then(function(){
     else if (act==="openadmin"){ if (state.role==="master"){ state.view="admin"; if (!state.adminMonth) state.adminMonth = today.slice(0,7); render(); } }
     else if (act==="adminprev"){ if (state.role==="master"){ state.adminMonth = addMonths(state.adminMonth || today.slice(0,7), -1); render(); } }
     else if (act==="adminnext"){ if (state.role==="master"){ state.adminMonth = addMonths(state.adminMonth || today.slice(0,7), 1); render(); } }
+    else if (act==="admindiaprev"){ if (state.role==="master") adminMudaDia(-1); }
+    else if (act==="admindianext"){ if (state.role==="master") adminMudaDia(1); }
+    else if (act==="admindiahoje"){ if (state.role==="master"){ state.adminDia = today; render(); } }
     else if (act==="adminhoje"){ if (state.role==="master"){ state.adminMonth = today.slice(0,7); render(); } }
     else if (act==="opennovostable"){ state.view="novos"; state.novosTab="vendas"; state.novosRows=null; render(); }
     else if (act==="openavisos"){ state.view="avisos"; render(); }
