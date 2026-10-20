@@ -3437,62 +3437,154 @@ window.__voReady.then(function(){
   function smLoad(m){ var l = lsGetJSON(K_SAIDAS_MASTER+m, []); return Array.isArray(l) ? l : []; }
   function smSave(m, l){ return lsSetJSON(K_SAIDAS_MASTER+m, l); }
 
+  // junta as duas fontes de saída do mês: as do master (vo_saidas_master) e as lançadas no caixa pelos vendedores (vo_saidas)
+  function smItensMes(m){
+    var out = [];
+    smLoad(m).forEach(function(x){
+      out.push({id:x.id, src:"master", iso:x.data||(m+"-01"), destino:x.destino||"", cat:x.cat||smCategoria(x.destino), valor:Math.max(0,parseNum(x.valor)), por:x.por||"", em:x.em||0});
+    });
+    var nd = daysInMonth(m);
+    for (var i=1;i<=nd;i++){
+      (function(iso){
+        loadSaidas(iso).forEach(function(x){
+          out.push({id:x.id, src:"caixa", iso:iso, destino:x.motivo||"", cat:x.cat||smCategoria(x.motivo), valor:Math.max(0,parseNum(x.valor)), por:x.por||"", em:x.em||0});
+        });
+      })(m+"-"+pad(i));
+    }
+    return out;
+  }
+  function smMesAnterior(m){ var p = m.split("-"); return toISO(new Date(parseInt(p[0],10), parseInt(p[1],10)-2, 1)).slice(0,7); }
+  function smInjetaCss(){
+    if (document.getElementById("smStyle")) return;
+    var st = document.createElement("style"); st.id = "smStyle";
+    st.textContent =
+      '.sm-label{font-size:12px;color:var(--text-dim);font-weight:500;letter-spacing:.2px;}'+
+      '.sm-form{display:grid;grid-template-columns:150px 1fr 160px auto;gap:10px;align-items:end;}'+
+      '.sm-form .sm-f{display:flex;flex-direction:column;gap:5px;min-width:0;}'+
+      '.sm-form input{margin:0!important;width:100%;box-sizing:border-box;}'+
+      '.sm-hint{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:12.5px;color:var(--text-dim);}'+
+      '.sm-chip{display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:600;background:var(--panel-alt);border:1px solid var(--border-soft);color:var(--text);}'+
+      '.sm-nav{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 16px;}'+
+      '.sm-nav b{min-width:160px;text-align:center;text-transform:capitalize;font-size:16px;}'+
+      '.sm-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:16px;}'+
+      '.sm-stat{border:1px solid var(--border-soft);border-radius:6px;background:var(--panel);padding:16px 18px;border-top:3px solid var(--border);}'+
+      '.sm-stat.total{border-top-color:var(--red);}'+
+      '.sm-stat .v{font-size:23px;font-weight:700;margin-top:6px;font-variant-numeric:tabular-nums;}'+
+      '.sm-stat .s{font-size:12px;color:var(--text-dim);margin-top:5px;}'+
+      '.sm-up{color:var(--red);font-weight:600;}.sm-down{color:var(--green);font-weight:600;}'+
+      '.sm-card{border:1px solid var(--border-soft);border-radius:6px;background:var(--panel);padding:20px 22px;margin-bottom:16px;}'+
+      '.sm-card h3{margin:0 0 14px;font-size:15px;}'+
+      '.sm-cat{display:grid;grid-template-columns:minmax(120px,210px) 1fr auto;gap:14px;align-items:center;padding:7px 0;font-size:13.5px;}'+
+      '.sm-cat .bar{height:8px;border-radius:4px;background:var(--panel-alt);overflow:hidden;}'+
+      '.sm-cat .bar i{display:block;height:100%;border-radius:4px;background:var(--red);}'+
+      '.sm-cat .pct{color:var(--text-dim);font-size:12px;margin-left:8px;}'+
+      '.sm-tools{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;}'+
+      '.sm-tools h3{margin:0;}'+
+      '.sm-seg{display:inline-flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;}'+
+      '.sm-seg button{background:transparent;border:0;color:var(--text-dim);padding:6px 14px;font:inherit;font-size:13px;cursor:pointer;}'+
+      '.sm-seg button+button{border-left:1px solid var(--border);}'+
+      '.sm-seg button.on{background:var(--yellow);color:#1a1500;font-weight:600;}'+
+      '.sm-tbl{width:100%;border-collapse:collapse;font-size:13.5px;}'+
+      '.sm-tbl th{text-align:left;padding:10px 12px;font-size:12px;font-weight:600;color:var(--text-dim);background:var(--panel-alt);border-bottom:1px solid var(--border);white-space:nowrap;}'+
+      '.sm-tbl th.r,.sm-tbl td.r{text-align:right;}'+
+      '.sm-tbl td{padding:10px 12px;border-bottom:1px solid var(--border-soft);vertical-align:middle;}'+
+      '.sm-tbl tbody tr:hover td{background:var(--panel-alt);}'+
+      '.sm-tbl td.val{white-space:nowrap;color:var(--red);font-weight:600;font-variant-numeric:tabular-nums;}'+
+      '.sm-tbl select{margin:0;min-width:150px;}'+
+      '.sm-org{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap;}'+
+      '.sm-org.master{background:rgba(255,196,0,.14);color:var(--yellow);}'+
+      '.sm-org.caixa{background:rgba(55,201,189,.14);color:var(--teal,#37c9bd);}'+
+      '.sm-por{font-size:11.5px;color:var(--text-faint);margin-top:2px;}'+
+      '.sm-vazio{padding:28px 10px;text-align:center;color:var(--text-dim);font-size:13.5px;}'+
+      '.sm-foot td{font-weight:700;background:var(--panel-alt);border-bottom:0;}'+
+      '@media (max-width:760px){.sm-form{grid-template-columns:1fr 1fr;}.sm-form .sm-f.dest{grid-column:1/-1;}.sm-form .sm-btn{grid-column:1/-1;}.sm-cat{grid-template-columns:1fr auto;}.sm-cat .bar{grid-column:1/-1;order:3;}}';
+    document.head.appendChild(st);
+  }
+
   function renderSaidasMaster(){
     if (state.role!=="master"){ state.view="dashboard"; return renderDashboard(); }
+    smInjetaCss();
     root.classList.remove("wide");
     var month = state.smMonth || today.slice(0,7);
-    var lista = smLoad(month).slice().sort(function(a,b){ return (b.em||0)-(a.em||0); });
+    var filtro = state.smFiltro || "todas";
+    var todos = smItensMes(month);
     var mv = function(v){ return state.hideValues ? "••••" : fmtCurrency(v); };
-    var total = 0, porCat = {};
-    lista.forEach(function(x){ var v = Math.max(0, parseNum(x.valor)); total += v; porCat[x.cat] = (porCat[x.cat]||0) + v; });
+    var fmtPct = function(p){ return p.toFixed(1).replace(".",",")+"%"; };
+    var total = 0, totM = 0, totC = 0, nM = 0, nC = 0, porCat = {};
+    todos.forEach(function(x){
+      total += x.valor; porCat[x.cat] = (porCat[x.cat]||0) + x.valor;
+      if (x.src==="master"){ totM += x.valor; nM++; } else { totC += x.valor; nC++; }
+    });
+    var totAnt = 0; smItensMes(smMesAnterior(month)).forEach(function(x){ totAnt += x.valor; });
+    var varHtml = totAnt>0.004
+      ? (function(){ var p = (total-totAnt)/totAnt*100; return '<span class="'+(p>0?'sm-up':'sm-down')+'">'+(p>0?'▲ ':'▼ ')+fmtPct(Math.abs(p))+'</span> em relação ao mês anterior'; })()
+      : 'Sem dados no mês anterior para comparar';
     var cats = Object.keys(porCat).sort(function(a,b){ return porCat[b]-porCat[a]; });
     var catsHtml = cats.length ? cats.map(function(c){
       var pct = total ? porCat[c]/total*100 : 0;
-      return adminLinha(escHtml(c)+adminBarra(pct, "var(--red)"), '<b>'+mv(porCat[c])+'</b>', pct.toFixed(1).replace(".",",")+"% do mês");
-    }).join("") : adminVazio("Nenhuma saída neste mês.");
-    var th = 'style="text-align:left;padding:8px 10px;font-size:12px;color:var(--text-dim);border-bottom:1px solid var(--border);white-space:nowrap;"';
-    var td = 'style="padding:8px 10px;border-bottom:1px solid var(--border-soft);"';
-    var tdr = 'style="padding:8px 10px;border-bottom:1px solid var(--border-soft);text-align:right;white-space:nowrap;"';
+      return '<div class="sm-cat"><span>'+escHtml(c)+'</span><div class="bar"><i style="width:'+pct.toFixed(1)+'%"></i></div><span><b>'+mv(porCat[c])+'</b><span class="pct">'+fmtPct(pct)+'</span></span></div>';
+    }).join("") : '<div class="sm-vazio">Nenhuma saída neste mês.</div>';
+    var maior = cats.length ? cats[0] : null;
+
+    var lista = todos.filter(function(x){ return filtro==="todas" || x.src===filtro; }).sort(function(a,b){
+      return a.iso<b.iso ? 1 : a.iso>b.iso ? -1 : (b.em||0)-(a.em||0);
+    });
+    var totLista = lista.reduce(function(a,x){ return a+x.valor; }, 0);
     var linhas = lista.map(function(x){
-      var opts = SM_CATS.map(function(c){ return '<option'+(c===x.cat?' selected':'')+'>'+escHtml(c)+'</option>'; }).join("");
-      return '<tr><td '+td+'>'+escHtml(fmtDateBR(x.data||(month+"-01")))+'</td><td '+td+'>'+escHtml(x.destino||"")+'</td>'+
-        '<td '+td+'><select data-smcat="'+escAttr(x.id)+'" style="margin:0;">'+opts+'</select></td>'+
-        '<td '+tdr+'><span style="color:var(--red);">-'+mv(Math.max(0,parseNum(x.valor)))+'</span></td>'+
-        '<td '+tdr+'><button class="icon-btn" data-smdel="'+escAttr(x.id)+'" title="Apagar esta saída">✕</button></td></tr>';
-    }).join("") || '<tr><td '+td+' colspan="5"><span style="color:var(--text-dim);">Nenhuma saída registrada neste mês.</span></td></tr>';
+      var opts = SM_CATS.concat(SM_CATS.indexOf(x.cat)<0 ? [x.cat] : []).map(function(c){ return '<option'+(c===x.cat?' selected':'')+'>'+escHtml(c)+'</option>'; }).join("");
+      var quem = String(x.por||"").split("@")[0];
+      return '<tr><td>'+escHtml(fmtDateBR(x.iso))+'</td>'+
+        '<td>'+escHtml(x.destino)+(quem ? '<div class="sm-por">lançado por '+escHtml(quem)+'</div>' : '')+'</td>'+
+        '<td><span class="sm-org '+x.src+'">'+(x.src==="master" ? 'Master' : 'Caixa (vendedor)')+'</span></td>'+
+        '<td><select data-smcat="'+escAttr(x.id)+'" data-smsrc="'+x.src+'" data-smiso="'+escAttr(x.iso)+'">'+opts+'</select></td>'+
+        '<td class="r val">-'+mv(x.valor)+'</td>'+
+        '<td class="r"><button class="icon-btn" data-smdel="'+escAttr(x.id)+'" data-smsrc="'+x.src+'" data-smiso="'+escAttr(x.iso)+'" title="Apagar esta saída">✕</button></td></tr>';
+    }).join("") || '<tr><td colspan="6"><div class="sm-vazio">Nenhuma saída registrada neste mês'+(filtro!=="todas" ? ' para este filtro' : '')+'.</div></td></tr>';
+    var rodape = lista.length ? '<tr class="sm-foot"><td colspan="4">Total ('+lista.length+' lançamento'+(lista.length>1?'s':'')+')</td><td class="r" style="color:var(--red);">-'+mv(totLista)+'</td><td></td></tr>' : '';
+    var chip = function(v, t){ return '<button data-smf="'+v+'" class="'+(filtro===v?'on':'')+'">'+t+'</button>'; };
+
     root.innerHTML =
       clientesTopbarHtml("Saídas", "MASTER · SALÁRIOS · FORNECEDORES · INSUMOS · DESPESAS")+
-      '<div class="card" style="margin-bottom:14px;"><h3>➕ Nova saída</h3>'+
-        '<div style="display:flex;gap:8px;flex-wrap:wrap;">'+
-          '<input type="text" inputmode="decimal" id="smValor" placeholder="Valor (R$)" style="flex:1 1 120px;margin:0;">'+
-          '<input type="text" id="smDestino" placeholder="Para onde foi? (ex.: salário do João, fornecedor, marmita da piazada)" maxlength="120" style="flex:3 1 240px;margin:0;">'+
-          '<button class="btn primary small" id="smAdd">Adicionar</button>'+
+      '<div class="sm-card"><h3>Nova saída</h3>'+
+        '<div class="sm-form">'+
+          '<div class="sm-f"><label class="sm-label" for="smValor">Valor (R$)</label><input type="text" inputmode="decimal" id="smValor" placeholder="0,00"></div>'+
+          '<div class="sm-f dest"><label class="sm-label" for="smDestino">Para onde foi</label><input type="text" id="smDestino" placeholder="Ex.: salário do João, fornecedor, marmita da piazada" maxlength="120"></div>'+
+          '<div class="sm-f"><label class="sm-label" for="smData">Data</label><input type="date" id="smData" value="'+today+'" max="'+today+'"></div>'+
+          '<div class="sm-f sm-btn"><button class="btn primary" id="smAdd">Adicionar saída</button></div>'+
         '</div>'+
-        '<div style="font-size:12px;color:var(--text-dim);margin-top:8px;">Categoria automática: <b id="smPrev">—</b></div>'+
+        '<div class="sm-hint">Categoria automática: <span class="sm-chip" id="smPrev">—</span><span style="color:var(--text-faint);">você pode trocar depois na lista</span></div>'+
         '<div class="err" id="smErr"></div>'+
       '</div>'+
-      '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 14px;">'+
+      '<div class="sm-nav">'+
         '<button class="btn ghost small" data-act="smprev" aria-label="Mês anterior">←</button>'+
-        '<b style="min-width:150px;text-align:center;text-transform:capitalize;">'+escHtml(monthLabel(month))+'</b>'+
+        '<b>'+escHtml(monthLabel(month))+'</b>'+
         '<button class="btn ghost small" data-act="smnext" aria-label="Próximo mês">→</button>'+
         (month!==today.slice(0,7) ? '<button class="btn ghost small" data-act="smhoje">Mês atual</button>' : '')+
       '</div>'+
-      '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;">'+
-        '<div class="card" style="flex:1 1 200px;min-width:180px;"><div style="font-size:12px;color:var(--text-dim);">📤 Total de saídas do mês</div><div style="font-size:22px;font-weight:600;color:var(--red);margin-top:4px;">-'+mv(total)+'</div><div style="font-size:11.5px;color:var(--text-dim);margin-top:4px;">'+lista.length+' lançamento(s)</div></div>'+
-        '<div class="card" style="flex:3 1 320px;min-width:260px;"><h3>Por categoria</h3>'+catsHtml+'</div>'+
+      '<div class="sm-stats">'+
+        '<div class="sm-stat total"><div class="sm-label">Total de saídas do mês</div><div class="v" style="color:var(--red);">-'+mv(total)+'</div><div class="s">'+todos.length+' lançamento(s) · '+varHtml+'</div></div>'+
+        '<div class="sm-stat"><div class="sm-label">Lançadas pelo master</div><div class="v">-'+mv(totM)+'</div><div class="s">'+nM+' lançamento(s)</div></div>'+
+        '<div class="sm-stat"><div class="sm-label">Lançadas no caixa (vendedores)</div><div class="v">-'+mv(totC)+'</div><div class="s">'+nC+' lançamento(s) · já descontadas da gaveta</div></div>'+
+        '<div class="sm-stat"><div class="sm-label">Maior categoria</div><div class="v" style="font-size:18px;">'+(maior ? escHtml(maior) : '—')+'</div><div class="s">'+(maior ? mv(porCat[maior])+' · '+fmtPct(total ? porCat[maior]/total*100 : 0)+' do mês' : 'Sem saídas no mês')+'</div></div>'+
       '</div>'+
-      '<div class="card" style="margin-bottom:14px;"><h3>Lançamentos do mês</h3>'+
-        '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13.5px;"><thead><tr><th '+th+'>Dia</th><th '+th+'>Para onde foi</th><th '+th+'>Categoria</th><th '+th+'>Valor</th><th '+th+'></th></tr></thead><tbody>'+linhas+'</tbody></table></div>'+
+      '<div class="sm-card"><h3>Por categoria</h3>'+catsHtml+'</div>'+
+      '<div class="sm-card">'+
+        '<div class="sm-tools"><h3>Lançamentos do mês</h3><div class="sm-seg">'+chip("todas","Todas")+chip("master","Master")+chip("caixa","Caixa (vendedores)")+'</div></div>'+
+        '<div style="overflow-x:auto;"><table class="sm-tbl"><thead><tr><th>Dia</th><th>Para onde foi</th><th>Origem</th><th>Categoria</th><th class="r">Valor</th><th></th></tr></thead><tbody>'+linhas+rodape+'</tbody></table></div>'+
       '</div>';
+
     root.querySelectorAll("[data-act]").forEach(function(node){ node.addEventListener("click", function(){ handleAction(node.getAttribute("data-act"), node); }); });
+    root.querySelectorAll("[data-smf]").forEach(function(b){ b.addEventListener("click", function(){ state.smFiltro = b.getAttribute("data-smf"); renderSaidasMaster(); }); });
     var dest = document.getElementById("smDestino"), prev = document.getElementById("smPrev");
     dest.addEventListener("input", function(){ prev.textContent = dest.value.trim() ? smCategoria(dest.value) : "—"; });
     function adicionar(){
       var v = parseNum(document.getElementById("smValor").value), d = dest.value.trim(), err = document.getElementById("smErr");
+      var dt = document.getElementById("smData").value || today;
       if (!(v>0)){ err.textContent = "Informe o valor."; return; }
       if (!d){ err.textContent = "Informe para onde foi o dinheiro."; return; }
-      var m = today.slice(0,7), l = smLoad(m);
-      l.push({id:uid(), valor:Math.round(v*100)/100, destino:d, cat:smCategoria(d), data:today, por:state.userEmail||"", em:Date.now()});
+      if (dt>today) dt = today;
+      var m = dt.slice(0,7), l = smLoad(m);
+      l.push({id:uid(), valor:Math.round(v*100)/100, destino:d, cat:smCategoria(d), data:dt, por:state.userEmail||"", em:Date.now()});
       if (!smSave(m, l)){ err.textContent = "Não foi possível salvar. Verifique o espaço de armazenamento do navegador."; return; }
       state.smMonth = m; renderSaidasMaster();
     }
@@ -3500,16 +3592,20 @@ window.__voReady.then(function(){
     [document.getElementById("smValor"), dest].forEach(function(i){ i.addEventListener("keydown", function(e){ if (e.key==="Enter") adicionar(); }); });
     root.querySelectorAll("[data-smcat]").forEach(function(s){
       s.addEventListener("change", function(){
-        var id = s.getAttribute("data-smcat");
-        smSave(month, smLoad(month).map(function(x){ if (x.id===id) x.cat = s.value; return x; }));
+        var id = s.getAttribute("data-smcat"), src = s.getAttribute("data-smsrc"), iso = s.getAttribute("data-smiso");
+        var troca = function(x){ if (x.id===id) x.cat = s.value; return x; };
+        if (src==="caixa") lsSetJSON(K_SAIDAS+iso, loadSaidas(iso).map(troca));
+        else smSave(month, smLoad(month).map(troca));
         renderSaidasMaster();
       });
     });
     root.querySelectorAll("[data-smdel]").forEach(function(b){
       b.addEventListener("click", function(){
-        if (!window.confirm("Apagar esta saída?")) return;
-        var id = b.getAttribute("data-smdel");
-        smSave(month, smLoad(month).filter(function(x){ return x.id!==id; }));
+        var src = b.getAttribute("data-smsrc"), iso = b.getAttribute("data-smiso"), id = b.getAttribute("data-smdel");
+        if (!window.confirm(src==="caixa" ? "Apagar esta saída lançada no caixa? Ela também deixa de ser descontada da gaveta no fechamento do dia." : "Apagar esta saída?")) return;
+        var fora = function(x){ return x.id!==id; };
+        if (src==="caixa") lsSetJSON(K_SAIDAS+iso, loadSaidas(iso).filter(fora));
+        else smSave(month, smLoad(month).filter(fora));
         renderSaidasMaster();
       });
     });
