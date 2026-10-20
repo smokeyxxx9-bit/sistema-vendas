@@ -3412,6 +3412,198 @@ window.__voReady.then(function(){
     });
   }
 
+  // ======================= SAÍDAS DO MASTER + PNEUS RESERVADOS =======================
+  var K_SAIDAS_MASTER = "vo_saidas_master:"; // uma lista por mês (AAAA-MM): [{id, valor, destino, cat, data, por, em}]
+  var K_RESERVADOS = "vo_pneus_reservados";  // [{id, marca, medida, preco, sinal, dataSinal, cliente, contato, retirado, retiradoEm}]
+  function kExtraBackup(k){ return k===K_RESERVADOS || k.indexOf(K_SAIDAS_MASTER)===0; }
+
+  // ---- saídas do master: só valor + para onde foi; o sistema escolhe a categoria ----
+  var SM_CATS = ["Salários","Fornecedores","Insumos","Higiene e limpeza","Alimentação (marmita)","Despesas fixas","Manutenção","Combustível / transporte","Outros"];
+  var SM_REGRAS = [
+    ["Salários", /salari|folha|funcionari|colaborador|ordenado|adiantamento|\bvale\b|13o|decimo|ferias|rescis|comissao|diaria|pro.?labore|holerite/],
+    ["Alimentação (marmita)", /marmit|piazada|almoc|janta|lanche|cafe|refeic|comida|pizza|padaria|quentinha/],
+    ["Higiene e limpeza", /higien|limpez|sabao|sabonete|detergente|desinfet|desengord|vassoura|rodo|toalha|alcool|flanela|shampoo|esponja|sanitaria|cloro|lixo/],
+    ["Fornecedores", /fornecedor|distribuidor|atacad|revenda|representante|mercadoria|pirelli|goodyear|michelin|bridgestone|continental|firestone|dunlop|pneu/],
+    ["Insumos", /insum|material|\bcola\b|remendo|chumbo|\bbico|valvula|graxa|oleo|pasta|lubrific|parafuso|estopa|luva|embalag|selante|vulcaniz|manchao|talco|produto|peca/],
+    ["Despesas fixas", /alug|\bluz\b|energia|celesc|samae|internet|telefone|\bagua\b|imposto|contador|mensalidade|seguro|boleto|iptu|\bdas\b|simples|taxa|\bgas\b/],
+    ["Manutenção", /manut|conserto|reparo|reform|ferrament|compressor|equipament|maquina|elevador|alinhador|balanceadora/],
+    ["Combustível / transporte", /combust|gasolina|diesel|etanol|uber|frete|entrega|motoboy|transporte|estaciona|pedagio/]
+  ];
+  function smCategoria(txt){
+    var t = adminNorm(txt);
+    for (var i=0;i<SM_REGRAS.length;i++) if (SM_REGRAS[i][1].test(t)) return SM_REGRAS[i][0];
+    return "Outros";
+  }
+  function smLoad(m){ var l = lsGetJSON(K_SAIDAS_MASTER+m, []); return Array.isArray(l) ? l : []; }
+  function smSave(m, l){ return lsSetJSON(K_SAIDAS_MASTER+m, l); }
+
+  function renderSaidasMaster(){
+    if (state.role!=="master"){ state.view="dashboard"; return renderDashboard(); }
+    root.classList.remove("wide");
+    var month = state.smMonth || today.slice(0,7);
+    var lista = smLoad(month).slice().sort(function(a,b){ return (b.em||0)-(a.em||0); });
+    var mv = function(v){ return state.hideValues ? "••••" : fmtCurrency(v); };
+    var total = 0, porCat = {};
+    lista.forEach(function(x){ var v = Math.max(0, parseNum(x.valor)); total += v; porCat[x.cat] = (porCat[x.cat]||0) + v; });
+    var cats = Object.keys(porCat).sort(function(a,b){ return porCat[b]-porCat[a]; });
+    var catsHtml = cats.length ? cats.map(function(c){
+      var pct = total ? porCat[c]/total*100 : 0;
+      return adminLinha(escHtml(c)+adminBarra(pct, "var(--red)"), '<b>'+mv(porCat[c])+'</b>', pct.toFixed(1).replace(".",",")+"% do mês");
+    }).join("") : adminVazio("Nenhuma saída neste mês.");
+    var th = 'style="text-align:left;padding:8px 10px;font-size:12px;color:var(--text-dim);border-bottom:1px solid var(--border);white-space:nowrap;"';
+    var td = 'style="padding:8px 10px;border-bottom:1px solid var(--border-soft);"';
+    var tdr = 'style="padding:8px 10px;border-bottom:1px solid var(--border-soft);text-align:right;white-space:nowrap;"';
+    var linhas = lista.map(function(x){
+      var opts = SM_CATS.map(function(c){ return '<option'+(c===x.cat?' selected':'')+'>'+escHtml(c)+'</option>'; }).join("");
+      return '<tr><td '+td+'>'+escHtml(fmtDateBR(x.data||(month+"-01")))+'</td><td '+td+'>'+escHtml(x.destino||"")+'</td>'+
+        '<td '+td+'><select data-smcat="'+escAttr(x.id)+'" style="margin:0;">'+opts+'</select></td>'+
+        '<td '+tdr+'><span style="color:var(--red);">-'+mv(Math.max(0,parseNum(x.valor)))+'</span></td>'+
+        '<td '+tdr+'><button class="icon-btn" data-smdel="'+escAttr(x.id)+'" title="Apagar esta saída">✕</button></td></tr>';
+    }).join("") || '<tr><td '+td+' colspan="5"><span style="color:var(--text-dim);">Nenhuma saída registrada neste mês.</span></td></tr>';
+    root.innerHTML =
+      clientesTopbarHtml("Saídas", "MASTER · SALÁRIOS · FORNECEDORES · INSUMOS · DESPESAS")+
+      '<div class="card" style="margin-bottom:14px;"><h3>➕ Nova saída</h3>'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;">'+
+          '<input type="text" inputmode="decimal" id="smValor" placeholder="Valor (R$)" style="flex:1 1 120px;margin:0;">'+
+          '<input type="text" id="smDestino" placeholder="Para onde foi? (ex.: salário do João, fornecedor, marmita da piazada)" maxlength="120" style="flex:3 1 240px;margin:0;">'+
+          '<button class="btn primary small" id="smAdd">Adicionar</button>'+
+        '</div>'+
+        '<div style="font-size:12px;color:var(--text-dim);margin-top:8px;">Categoria automática: <b id="smPrev">—</b></div>'+
+        '<div class="err" id="smErr"></div>'+
+      '</div>'+
+      '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 14px;">'+
+        '<button class="btn ghost small" data-act="smprev" aria-label="Mês anterior">←</button>'+
+        '<b style="min-width:150px;text-align:center;text-transform:capitalize;">'+escHtml(monthLabel(month))+'</b>'+
+        '<button class="btn ghost small" data-act="smnext" aria-label="Próximo mês">→</button>'+
+        (month!==today.slice(0,7) ? '<button class="btn ghost small" data-act="smhoje">Mês atual</button>' : '')+
+      '</div>'+
+      '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;">'+
+        '<div class="card" style="flex:1 1 200px;min-width:180px;"><div style="font-size:12px;color:var(--text-dim);">📤 Total de saídas do mês</div><div style="font-size:22px;font-weight:600;color:var(--red);margin-top:4px;">-'+mv(total)+'</div><div style="font-size:11.5px;color:var(--text-dim);margin-top:4px;">'+lista.length+' lançamento(s)</div></div>'+
+        '<div class="card" style="flex:3 1 320px;min-width:260px;"><h3>Por categoria</h3>'+catsHtml+'</div>'+
+      '</div>'+
+      '<div class="card" style="margin-bottom:14px;"><h3>Lançamentos do mês</h3>'+
+        '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13.5px;"><thead><tr><th '+th+'>Dia</th><th '+th+'>Para onde foi</th><th '+th+'>Categoria</th><th '+th+'>Valor</th><th '+th+'></th></tr></thead><tbody>'+linhas+'</tbody></table></div>'+
+      '</div>';
+    root.querySelectorAll("[data-act]").forEach(function(node){ node.addEventListener("click", function(){ handleAction(node.getAttribute("data-act"), node); }); });
+    var dest = document.getElementById("smDestino"), prev = document.getElementById("smPrev");
+    dest.addEventListener("input", function(){ prev.textContent = dest.value.trim() ? smCategoria(dest.value) : "—"; });
+    function adicionar(){
+      var v = parseNum(document.getElementById("smValor").value), d = dest.value.trim(), err = document.getElementById("smErr");
+      if (!(v>0)){ err.textContent = "Informe o valor."; return; }
+      if (!d){ err.textContent = "Informe para onde foi o dinheiro."; return; }
+      var m = today.slice(0,7), l = smLoad(m);
+      l.push({id:uid(), valor:Math.round(v*100)/100, destino:d, cat:smCategoria(d), data:today, por:state.userEmail||"", em:Date.now()});
+      if (!smSave(m, l)){ err.textContent = "Não foi possível salvar. Verifique o espaço de armazenamento do navegador."; return; }
+      state.smMonth = m; renderSaidasMaster();
+    }
+    document.getElementById("smAdd").addEventListener("click", adicionar);
+    [document.getElementById("smValor"), dest].forEach(function(i){ i.addEventListener("keydown", function(e){ if (e.key==="Enter") adicionar(); }); });
+    root.querySelectorAll("[data-smcat]").forEach(function(s){
+      s.addEventListener("change", function(){
+        var id = s.getAttribute("data-smcat");
+        smSave(month, smLoad(month).map(function(x){ if (x.id===id) x.cat = s.value; return x; }));
+        renderSaidasMaster();
+      });
+    });
+    root.querySelectorAll("[data-smdel]").forEach(function(b){
+      b.addEventListener("click", function(){
+        if (!window.confirm("Apagar esta saída?")) return;
+        var id = b.getAttribute("data-smdel");
+        smSave(month, smLoad(month).filter(function(x){ return x.id!==id; }));
+        renderSaidasMaster();
+      });
+    });
+  }
+
+  // ---- pneus reservados: sinal, contato e aviso quando passam 30 dias ----
+  function rsLoad(){ var l = lsGetJSON(K_RESERVADOS, []); return Array.isArray(l) ? l : []; }
+  function rsSave(l){ return lsSetJSON(K_RESERVADOS, l); }
+  function rsDias(iso){ return iso ? Math.floor((Date.parse(today+"T00:00:00Z")-Date.parse(iso+"T00:00:00Z"))/86400000) : 0; }
+  function rsVencidos(){ return rsLoad().filter(function(r){ return !r.retirado && rsDias(r.dataSinal)>=30; }); }
+
+  function renderReservados(){
+    root.classList.remove("wide");
+    var todos = rsLoad(), ed = null;
+    if (state.rsEdit) todos.forEach(function(r){ if (r.id===state.rsEdit) ed = r; });
+    var abertos = todos.filter(function(r){ return !r.retirado; }).sort(function(a,b){ return String(a.dataSinal||"").localeCompare(String(b.dataSinal||"")); });
+    var retirados = todos.filter(function(r){ return r.retirado; }).sort(function(a,b){ return (b.retiradoEm||0)-(a.retiradoEm||0); }).slice(0,15);
+    function nf(n){ n = parseNum(n); return n ? String(n).replace(".",",") : ""; }
+    function campo(id, ph, v, extra){ return '<input type="text" id="'+id+'" placeholder="'+ph+'" value="'+escAttr(v)+'" style="flex:1 1 150px;margin:0;"'+(extra||"")+'>'; }
+    function linha(r){
+      var dias = rsDias(r.dataSinal), venc = !r.retirado && dias>=30;
+      var falta = Math.max(0, parseNum(r.preco)-parseNum(r.sinal)), zap = String(r.contato||"").replace(/\D/g,"");
+      var contato = r.contato ? ' · 📞 '+escHtml(r.contato)+(zap.length>=10 ? ' <a href="https://wa.me/'+(zap.length<=11?"55":"")+zap+'" target="_blank" rel="noopener" style="color:var(--green);">WhatsApp</a>' : '') : '';
+      var status = r.retirado ? 'Retirado' : (venc ? '⏰ '+dias+' dias desde o sinal — passou de 30 dias, falar com o cliente' : 'Há '+dias+' dia(s) do sinal · faltam '+(30-dias)+' para completar 30 dias');
+      var id = escAttr(r.id);
+      return '<div class="aviso-row'+(venc?' overdue':'')+'">'+
+        '<div><div class="aviso-title">'+escHtml(r.marca||"")+' · '+escHtml(r.medida||"")+(r.cliente?' — '+escHtml(r.cliente):'')+'</div>'+
+        '<div class="aviso-sub">Preço '+fmtCurrency(parseNum(r.preco))+' · Sinal '+fmtCurrency(parseNum(r.sinal))+' em '+escHtml(r.dataSinal?fmtDateBR(r.dataSinal):"—")+' · Falta '+fmtCurrency(falta)+contato+'</div>'+
+        '<div class="aviso-sub"'+(venc?' style="color:var(--red);font-weight:600;"':'')+'>'+status+'</div></div>'+
+        '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">'+
+          (r.retirado ? '<button class="btn ghost small" data-rsundo="'+id+'">↩ Reabrir</button>'
+                      : '<button class="btn ghost small" data-rsok="'+id+'">✓ Cliente retirou</button><button class="icon-btn" data-rsedit="'+id+'" title="Editar">✎</button>')+
+          '<button class="icon-btn" data-rsdel="'+id+'" title="Apagar">✕</button>'+
+        '</div></div>';
+    }
+    root.innerHTML =
+      clientesTopbarHtml("Reservados", "PNEUS COM SINAL · AVISO APÓS 30 DIAS")+
+      '<div class="card" style="margin-bottom:14px;"><h3>'+(ed?'✎ Editar reserva':'➕ Nova reserva')+'</h3>'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">'+
+          campo("rsMarca","Marca",ed&&ed.marca)+campo("rsMedida","Medida (ex.: 175/70 R14)",ed&&ed.medida)+
+          campo("rsPreco","Preço combinado (R$)",ed?nf(ed.preco):"",' inputmode="decimal"')+campo("rsSinal","Valor do sinal (R$)",ed?nf(ed.sinal):"",' inputmode="decimal"')+
+        '</div>'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">'+
+          '<label style="font-size:12px;color:var(--text-dim);white-space:nowrap;">Data do sinal <input type="date" id="rsData" value="'+escAttr(ed&&ed.dataSinal?ed.dataSinal:today)+'" style="margin:0 0 0 6px;background:var(--panel-alt);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:6px 8px;"></label>'+
+          campo("rsCliente","Nome do cliente",ed&&ed.cliente)+campo("rsContato","Contato (telefone/WhatsApp)",ed&&ed.contato)+
+          '<button class="btn primary small" id="rsSave">'+(ed?'Salvar alteração':'Reservar')+'</button>'+(ed?'<button class="btn ghost small" id="rsCancel">Cancelar</button>':'')+
+        '</div><div class="err" id="rsErr"></div>'+
+      '</div>'+
+      '<div class="aviso-card"><h3>🔖 Aguardando retirada ('+abertos.length+')</h3>'+(abertos.length ? abertos.map(linha).join("") : '<div class="aviso-empty">Nenhum pneu reservado no momento.</div>')+'</div>'+
+      (retirados.length ? '<div class="aviso-card"><h3>✓ Já retirados (últimos 15)</h3>'+retirados.map(linha).join("")+'</div>' : '');
+    root.querySelectorAll("[data-act]").forEach(function(node){ node.addEventListener("click", function(){ handleAction(node.getAttribute("data-act"), node); }); });
+    function g(id){ return document.getElementById(id).value.trim(); }
+    function refazer(){ renderReservados(); reservadosBanner(); }
+    function alterar(id, fn){ rsSave(rsLoad().map(function(r){ return r.id===id ? fn(r) : r; })); refazer(); }
+    document.getElementById("rsSave").addEventListener("click", function(){
+      var d = {marca:g("rsMarca"), medida:g("rsMedida"), preco:parseNum(g("rsPreco")), sinal:parseNum(g("rsSinal")), dataSinal:g("rsData"), cliente:g("rsCliente"), contato:g("rsContato")};
+      var err = document.getElementById("rsErr");
+      if (!d.marca || !d.medida){ err.textContent = "Informe a marca e a medida."; return; }
+      if (!(d.preco>0)){ err.textContent = "Informe o preço combinado."; return; }
+      if (d.sinal>d.preco){ err.textContent = "O sinal não pode ser maior que o preço."; return; }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d.dataSinal)){ err.textContent = "Informe a data do sinal."; return; }
+      if (!d.contato){ err.textContent = "Informe o contato do cliente."; return; }
+      var l = rsLoad();
+      if (ed) l = l.map(function(r){ if (r.id===ed.id) for (var k in d) r[k] = d[k]; return r; });
+      else { d.id = uid(); d.retirado = false; d.criado = Date.now(); d.por = state.userEmail||""; l.push(d); }
+      if (!rsSave(l)){ err.textContent = "Não foi possível salvar. Verifique o espaço de armazenamento do navegador."; return; }
+      state.rsEdit = null; refazer();
+    });
+    var cancel = document.getElementById("rsCancel");
+    if (cancel) cancel.addEventListener("click", function(){ state.rsEdit = null; renderReservados(); });
+    root.querySelectorAll("[data-rsedit]").forEach(function(b){ b.addEventListener("click", function(){ state.rsEdit = b.getAttribute("data-rsedit"); renderReservados(); window.scrollTo(0,0); }); });
+    root.querySelectorAll("[data-rsok]").forEach(function(b){ b.addEventListener("click", function(){ alterar(b.getAttribute("data-rsok"), function(r){ r.retirado = true; r.retiradoEm = Date.now(); return r; }); }); });
+    root.querySelectorAll("[data-rsundo]").forEach(function(b){ b.addEventListener("click", function(){ alterar(b.getAttribute("data-rsundo"), function(r){ r.retirado = false; return r; }); }); });
+    root.querySelectorAll("[data-rsdel]").forEach(function(b){
+      b.addEventListener("click", function(){
+        if (!window.confirm("Apagar esta reserva?")) return;
+        var id = b.getAttribute("data-rsdel");
+        rsSave(rsLoad().filter(function(r){ return r.id!==id; })); refazer();
+      });
+    });
+  }
+
+  // aviso fixo na tela: aparece em qualquer tela enquanto houver reserva com 30 dias ou mais (dispensável por hoje)
+  function reservadosBanner(){
+    var el = document.getElementById("reservBanner"), n = 0, dispensado = false;
+    try{ n = can("reservados") ? rsVencidos().length : 0; dispensado = localStorage.getItem("vf_reserv_banner")===today; }catch(e){}
+    if (!n || dispensado || state.view==="reservados"){ if (el) el.remove(); return; }
+    if (!el){ el = document.createElement("div"); el.id = "reservBanner"; document.body.appendChild(el); }
+    el.style.cssText = "position:fixed;left:16px;bottom:16px;z-index:950;max-width:340px;background:var(--panel);border:1px solid var(--red);border-left:4px solid var(--red);border-radius:8px;padding:12px 14px;box-shadow:0 6px 24px rgba(0,0,0,.35);font-size:13px;display:flex;gap:10px;align-items:flex-start;";
+    el.innerHTML = '<div style="flex:1;cursor:pointer;" data-rsopen="1"><b>⏰ '+n+' pneu(s) reservado(s) há 30 dias ou mais</b><div style="color:var(--text-dim);margin-top:3px;">Toque para ver e falar com o cliente.</div></div><button class="icon-btn" data-rsclose="1" title="Dispensar por hoje">✕</button>';
+    el.querySelector("[data-rsopen]").onclick = function(){ state.view = "reservados"; state.rsEdit = null; render(); };
+    el.querySelector("[data-rsclose]").onclick = function(){ try{ localStorage.setItem("vf_reserv_banner", today); }catch(e){} el.remove(); };
+  }
+
   // ======================= SAÍDAS DO CAIXA (dinheiro que saiu pra comprar algo pra loja) =======================
   var K_SAIDAS = "vo_saidas:"; // uma lista por dia: [{id, valor, motivo, por, em}]
   function loadSaidas(d){ var l = lsGetJSON(K_SAIDAS+d, []); return Array.isArray(l) ? l : []; }
@@ -3969,7 +4161,7 @@ window.__voReady.then(function(){
     var data = {};
     for (var i=0;i<localStorage.length;i++){
       var k = localStorage.key(i);
-      if (k && (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS || k===K_ORCAMENTOS || k.indexOf(K_NOVOS)===0 || k===K_NOVOS_META || k===K_TAXAS || k.indexOf(K_SAIDAS)===0)) data[k] = localStorage.getItem(k);
+      if (k && (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS || k===K_ORCAMENTOS || k.indexOf(K_NOVOS)===0 || k===K_NOVOS_META || k===K_TAXAS || k.indexOf(K_SAIDAS)===0 || kExtraBackup(k))) data[k] = localStorage.getItem(k);
     }
     var now = new Date();
     var stamp = today+"-"+pad(now.getHours())+"h"+pad(now.getMinutes());
@@ -3986,7 +4178,7 @@ window.__voReady.then(function(){
     var data = {};
     for (var i=0;i<localStorage.length;i++){
       var k = localStorage.key(i);
-      if (k && (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS || k===K_ORCAMENTOS || k.indexOf(K_NOVOS)===0 || k===K_NOVOS_META || k===K_TAXAS || k.indexOf(K_SAIDAS)===0)) data[k] = localStorage.getItem(k);
+      if (k && (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS || k===K_ORCAMENTOS || k.indexOf(K_NOVOS)===0 || k===K_NOVOS_META || k===K_TAXAS || k.indexOf(K_SAIDAS)===0 || kExtraBackup(k))) data[k] = localStorage.getItem(k);
     }
     try{
       localStorage.setItem(K_AUTOBACKUP, JSON.stringify({ts:Date.now(), data:data}));
@@ -4001,7 +4193,7 @@ window.__voReady.then(function(){
         try{
           var n = 0;
           Object.keys(data).forEach(function(k){
-            if (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS || k===K_ORCAMENTOS || k.indexOf(K_NOVOS)===0 || k===K_NOVOS_META || k===K_TAXAS || k.indexOf(K_SAIDAS)===0){
+            if (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS || k===K_ORCAMENTOS || k.indexOf(K_NOVOS)===0 || k===K_NOVOS_META || k===K_TAXAS || k.indexOf(K_SAIDAS)===0 || kExtraBackup(k)){
               localStorage.setItem(k, data[k]); n++;
               try{ cloudPush(k, JSON.parse(data[k])); }catch(e2){}
             }
@@ -4170,6 +4362,7 @@ window.__voReady.then(function(){
     if (!(state.view==="novos" && state.novosTab==="vendas")) state.novosRows = null;
     osReconciliarNovos(); // serviços de O.S. dos pneus novos que o montador lançou entram na linha certa
     osFecharVencidas(); osSincronizarPago();
+    setTimeout(reservadosBanner, 0);
     var restrito = !!sb && !can("vendas"); // sem painel de vendas: só vê as telas liberadas (ex.: montador → O.S.)
     root.classList.toggle("wide", (state.view==="table" || (state.view==="novos" && state.novosTab==="vendas")) && !restrito);
     if (restrito){
@@ -4191,6 +4384,8 @@ window.__voReady.then(function(){
     else if (state.view==="historico" && isMaster) renderHistorico();
     else if (state.view==="usuarios" && isMaster) renderUsuarios();
     else if (state.view==="admin" && isMaster) renderAdmin();
+    else if (state.view==="saidasmaster" && isMaster) renderSaidasMaster();
+    else if (state.view==="reservados") renderReservados();
     else if (state.view==="dashboard") renderDashboard();
     else renderTable();
     if (state.modal) renderModal(); else {
@@ -5278,6 +5473,8 @@ window.__voReady.then(function(){
     estoquista: ["estoque"],
     montador:   ["os"]
   };
+  PERMS.push({key:"reservados", label:"Pneus reservados (sinal e aviso de 30 dias)", short:"Reservados"});
+  PERMS_PADRAO.vendedor.push("reservados");
   function loadPerms(){ return lsGetJSON(K_PERMS, {}); }
   function savePerms(o){ return lsSetJSON(K_PERMS, o); }
   function permsEfetivas(cargo, ov){
@@ -5303,6 +5500,7 @@ window.__voReady.then(function(){
   }
   var VIEW_PERM = {dashboard:"vendas", table:"vendas", estoque:"estoque", clientes:"clientes", notas:"notas",
     orcamento:"notas", orcamentos:"notas", novos:"novos", regmes:"registro", avisos:"avisos", os:"os", conversor:"vendas"};
+  VIEW_PERM.reservados = "reservados";
   function viewPermitida(v){ if (v==="admin") return state.role==="master"; var k = VIEW_PERM[v]; return !k || can(k); }
   // ---------- Área administrativa (só master): entradas, saídas e taxas das maquininhas ----------
   function adminDadosMes(month){
@@ -6089,7 +6287,10 @@ window.__voReady.then(function(){
     var conversorBtn = can("vendas") ? '<button class="btn ghost small" data-act="openconversor" title="Converter o TXT do relógio de ponto em planilha Excel (.xlsx)">📊 Conversor TXT → Excel</button>' : '';
     var osBtn = can("os") ? '<button class="btn ghost small" data-act="openos" title="Carros em loja com O.S. aberta">🔧 O.S.</button>' : '';
     var inicioBtn = (state.view!=="dashboard" && (isMaster || can("vendas"))) ? '<button class="btn ghost small" data-act="back" title="Voltar ao painel de vendas">🏠 Painel de vendas</button>' : '';
-    var menuItems = inicioBtn+osBtn+estoqueBtn+clientesBtn+notasBtn+orcamentosBtn+regBtn+avisosBtn+conversorBtn+historicoBtn+usuariosBtn+backupBtns;
+    var rsN = rsVencidos().length;
+    var reservBtn = can("reservados") ? '<button class="btn ghost small" data-act="openreservados" title="Pneus reservados com sinal: aviso depois de 30 dias">🔖 Reservados'+(rsN>0 ? '<span class="nav-badge">'+rsN+'</span>' : '')+'</button>' : '';
+    var saidasMBtn = isMaster ? '<button class="btn ghost small" data-act="opensaidasmaster" title="Saídas do master: salários, fornecedores, insumos... com categoria automática">📤 Saídas (master)</button>' : '';
+    var menuItems = inicioBtn+osBtn+estoqueBtn+clientesBtn+notasBtn+orcamentosBtn+regBtn+reservBtn+avisosBtn+conversorBtn+historicoBtn+saidasMBtn+usuariosBtn+backupBtns;
     // atalhos só com ícone, ao lado das Opções: tabela dos pneus novos e tabela principal (pneus usados, de hoje)
     var svgTire = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 3v5M12 16v5M3 12h5M16 12h5"/></svg>';
     var svgTable = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v16"/></svg>';
@@ -6346,6 +6547,10 @@ window.__voReady.then(function(){
     else if (act==="adminhoje"){ if (state.role==="master"){ state.adminMonth = today.slice(0,7); render(); } }
     else if (act==="opennovostable"){ state.view="novos"; state.novosTab="vendas"; state.novosRows=null; render(); }
     else if (act==="openavisos"){ state.view="avisos"; render(); }
+    else if (act==="openreservados"){ if (can("reservados")){ state.view="reservados"; state.rsEdit=null; render(); } }
+    else if (act==="opensaidasmaster"){ if (state.role==="master"){ state.view="saidasmaster"; state.smMonth=today.slice(0,7); render(); } }
+    else if (act==="smprev" || act==="smnext"){ if (state.role==="master"){ state.smMonth = addMonths(state.smMonth||today.slice(0,7), act==="smprev"?-1:1); render(); } }
+    else if (act==="smhoje"){ if (state.role==="master"){ state.smMonth = today.slice(0,7); render(); } }
     else if (act==="avisostab"){ state.avisosTab = node.getAttribute("data-tab"); render(); }
     else if (act==="clientenew"){ state.modal = {type:"customerForm", error:""}; renderModal(); }
     else if (act==="clientedit"){ state.modal = {type:"customerForm", customerId: node.getAttribute("data-id"), error:""}; renderModal(); }
