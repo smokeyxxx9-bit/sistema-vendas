@@ -5344,7 +5344,7 @@ window.__voReady.then(function(){
     return "Outros";
   }
   function adminSec(titulo, corpo, nota){
-    return '<div class="card"><h3>'+titulo+'</h3>'+corpo+(nota ? '<div style="font-size:11.5px;color:var(--text-dim);margin-top:10px;">'+nota+'</div>' : '')+'</div>';
+    return '<div class="card" style="break-inside:avoid;-webkit-column-break-inside:avoid;display:inline-block;width:100%;box-sizing:border-box;margin:0 0 14px;"><h3>'+titulo+'</h3>'+corpo+(nota ? '<div style="font-size:11.5px;color:var(--text-dim);margin-top:10px;">'+nota+'</div>' : '')+'</div>';
   }
   function adminVazio(t){ return '<div style="font-size:13px;color:var(--text-dim);">'+t+'</div>'; }
   function adminLinha(esq, dir, sub){
@@ -5380,7 +5380,7 @@ window.__voReady.then(function(){
     var T = D.tot, V = D.vendas, out = "";
     var nVendas = V.length, totalVendas = V.reduce(function(a,x){ return a+x.v; }, 0);
     var taxas = T.taxaDeb + T.taxaCred;
-    var cores = {"Dinheiro":"var(--green)","Pix":"var(--teal)","Débito":"var(--yellow)","Crédito":"#8b7cf6"};
+    var cores = {"Dinheiro":"#22c55e","Pix":"#3b82f6","Débito":"#f97316","Crédito":"#ec4899"};
 
     // projeção de receita (média diária dos dias úteis com venda)
     var proj = null, mesAtual = today.slice(0,7);
@@ -5432,11 +5432,11 @@ window.__voReady.then(function(){
     var pagBarra = "", pagLista = "";
     ["Dinheiro","Pix","Débito","Crédito"].forEach(function(k){
       var p = totPag>0 ? T.porPag[k]/totPag*100 : 0;
-      pagBarra += '<div title="'+k+': '+p.toFixed(1)+'%" style="width:'+p.toFixed(2)+'%;background:'+cores[k]+';"></div>';
-      pagLista += adminLinha('<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:'+cores[k]+';margin-right:6px;"></span>'+k, '<b>'+p.toFixed(1).replace(".",",")+'%</b> <span style="color:var(--text-dim);">'+mv(T.porPag[k])+'</span>');
+      if (p>0) pagBarra += '<div title="'+k+': '+p.toFixed(1)+'%" style="flex:'+p.toFixed(2)+' 1 0;min-width:4px;border-radius:5px;background:'+cores[k]+';"></div>';
+      pagLista += adminLinha('<span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:'+cores[k]+';margin-right:7px;vertical-align:-1px;"></span>'+k, '<b>'+p.toFixed(1).replace(".",",")+'%</b> <span style="color:var(--text-dim);">'+mv(T.porPag[k])+'</span>');
     });
     blocos.push(adminSec("🥧 Participação por forma de pagamento",
-      (totPag>0 ? '<div style="display:flex;height:16px;border-radius:8px;overflow:hidden;background:var(--panel-alt);margin-bottom:8px;">'+pagBarra+'</div>'+pagLista : adminVazio("Sem entradas neste mês."))));
+      (totPag>0 ? '<div style="display:flex;gap:3px;height:22px;margin-bottom:10px;">'+pagBarra+'</div>'+pagLista : adminVazio("Sem entradas neste mês."))));
 
     // taxas efetivas
     var efetiva = function(tx, br){ return br>0 ? (tx/br*100).toFixed(2).replace(".",",")+"%" : "—"; };
@@ -5553,7 +5553,7 @@ window.__voReady.then(function(){
         : adminVazio("Nenhuma venda com cliente informado."),
       "Considera os últimos 6 meses até o mês aberto; conta dias diferentes de compra por cliente."));
 
-    out += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin-bottom:14px;align-items:start;">'+blocos.join("")+'</div>';
+    out += '<div style="column-width:320px;column-gap:14px;margin-bottom:0;">'+blocos.join("")+'</div>';
     return out;
   }
   function adminDadosDia(iso){
