@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Painel de Vendas — Oficina</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230d1117'/%3E%3Ccircle cx='32' cy='32' r='21' fill='none' stroke='%23f5b301' stroke-width='6'/%3E%3Ccircle cx='32' cy='32' r='8' fill='none' stroke='%23f5b301' stroke-width='4'/%3E%3Cpath d='M32 11v13M32 40v13M11 32h13M40 32h13' stroke='%23f5b301' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -5302,14 +5303,16 @@ window.__voReady.then(function(){
     var nd = daysInMonth(month);
     var novosMes = loadNovosMonth(month).filter(function(n){ return !isBlankNovo(n); });
     var tot = {entrou:0, porPag:{"Dinheiro":0,"Pix":0,"Débito":0,"Crédito":0}, taxaDeb:0, taxaCred:0, saidas:0, nSaidas:0, brutoDeb:0, brutoCred:0};
-    var dias = [], saidasLista = [];
+    var dias = [], saidasLista = [], vendas = [];
     for (var i=1;i<=nd;i++){
       var iso = month+"-"+pad(i);
-      var d = {iso:iso, entrou:0, taxaDeb:0, taxaCred:0, saidas:0, movimento:false};
+      var d = {iso:iso, entrou:0, taxaDeb:0, taxaCred:0, saidas:0, dinheiro:0, movimento:false};
       function somar(r, novo){
         var pb = paymentBreakdown(r);
         Object.keys(tot.porPag).forEach(function(k){ tot.porPag[k] += pb[k]; });
         d.entrou += pb["Dinheiro"]+pb["Pix"]+pb["Débito"]+pb["Crédito"];
+        d.dinheiro += pb["Dinheiro"];
+        var vv = computeValor(r); if (vv>0) vendas.push({iso:iso, novo:novo, r:r, v:vv, pb:pb});
         var tx = taxaCartaoSplit(r, novo);
         d.taxaDeb += tx.deb; d.taxaCred += tx.cred;
       }
@@ -5324,7 +5327,234 @@ window.__voReady.then(function(){
       tot.entrou += d.entrou; tot.taxaDeb += d.taxaDeb; tot.taxaCred += d.taxaCred; tot.saidas += d.saidas;
       dias.push(d);
     }
-    return {tot:tot, dias:dias, saidas:saidasLista};
+    return {tot:tot, dias:dias, saidas:saidasLista, vendas:vendas};
+  }
+  // ---- extras da área administrativa: ticket, comparativos, margem, gráficos, rankings, alertas, pendências, projeção ----
+  function adminNorm(t){ return String(t||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase(); }
+  var ADMIN_CATS = [
+    ["Despesas fixas", /alug|luz|energia|agua|internet|telefone|salario|folha|imposto|contador|mensalidade|seguro|boleto/],
+    ["Manutenção", /manut|conserto|reparo|reform|ferrament|compressor/],
+    ["Compras de insumos", /compra|insumo|material|pneu|peca|cola|remendo|chumbo|bico|valvula|estoque|limpeza|produto|embalag/],
+    ["Alimentação", /almoco|lanche|cafe|marmita|comida|refeic|mercado|padaria/],
+    ["Combustível / transporte", /combust|gasolina|diesel|uber|frete|entrega|motoboy|transporte|estaciona/]
+  ];
+  function saidaCategoria(motivo){
+    var t = adminNorm(motivo);
+    for (var i=0;i<ADMIN_CATS.length;i++) if (ADMIN_CATS[i][1].test(t)) return ADMIN_CATS[i][0];
+    return "Outros";
+  }
+  function adminSec(titulo, corpo, nota){
+    return '<div class="card"><h3>'+titulo+'</h3>'+corpo+(nota ? '<div style="font-size:11.5px;color:var(--text-dim);margin-top:10px;">'+nota+'</div>' : '')+'</div>';
+  }
+  function adminVazio(t){ return '<div style="font-size:13px;color:var(--text-dim);">'+t+'</div>'; }
+  function adminLinha(esq, dir, sub){
+    return '<div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--border-soft);font-size:13.5px;">'+
+      '<span style="min-width:0;">'+esq+(sub ? '<div style="font-size:11.5px;color:var(--text-dim);">'+sub+'</div>' : '')+'</span><span style="white-space:nowrap;text-align:right;">'+dir+'</span></div>';
+  }
+  function adminBarra(pct, cor){
+    return '<div style="height:6px;border-radius:3px;background:var(--panel-alt);margin:3px 0 2px;"><div style="height:6px;border-radius:3px;width:'+Math.max(0,Math.min(100,pct)).toFixed(1)+'%;background:'+cor+';"></div></div>';
+  }
+  function adminClientesRecorrentes(month){
+    var mapa = {}, totalVendas = 0;
+    for (var k=5;k>=0;k--){
+      var m = addMonths(month, -k), nd = daysInMonth(m);
+      var novosMes = loadNovosMonth(m).filter(function(n){ return !isBlankNovo(n); });
+      for (var i=1;i<=nd;i++){
+        var iso = m+"-"+pad(i);
+        var lista = rowsOfDay(iso).concat(novosMes.filter(function(n){ return n.date===iso; }));
+        lista.forEach(function(r){
+          var v = computeValor(r); if (!(v>0)) return;
+          var nome = ((r.clienteId && customerNameById(r.clienteId)) || r.cliente || "").trim();
+          if (!nome) return;
+          var key = adminNorm(nome);
+          var c = mapa[key] || (mapa[key] = {nome:nome, dias:{}, total:0});
+          c.dias[iso] = 1; c.total += v;
+        });
+      }
+    }
+    var todos = Object.keys(mapa).map(function(k){ var c = mapa[k]; c.visitas = Object.keys(c.dias).length; return c; });
+    var rec = todos.filter(function(c){ return c.visitas>=2; }).sort(function(a,b){ return b.visitas-a.visitas || b.total-a.total; });
+    return {identificados:todos.length, recorrentes:rec.length, top:rec.slice(0,8)};
+  }
+  function adminExtrasHtml(month, D, mv){
+    var T = D.tot, V = D.vendas, out = "";
+    var nVendas = V.length, totalVendas = V.reduce(function(a,x){ return a+x.v; }, 0);
+    var taxas = T.taxaDeb + T.taxaCred;
+    var cores = {"Dinheiro":"var(--green)","Pix":"var(--teal)","Débito":"var(--yellow)","Crédito":"#8b7cf6"};
+
+    // projeção de receita (média diária dos dias úteis com venda)
+    var proj = null, mesAtual = today.slice(0,7);
+    if (month===mesAtual){
+      var diaHoje = parseInt(today.slice(8,10),10);
+      var diasComVenda = D.dias.filter(function(d){ return d.entrou>0.004 && d.iso<=today; }).length;
+      var media = diasComVenda ? T.entrou/diasComVenda : 0;
+      var restantes = countBusinessDays(month, diaHoje+1);
+      proj = {media:media, restantes:restantes, total:T.entrou + media*restantes};
+    }
+
+    // resumo
+    var ticket = nVendas ? totalVendas/nVendas : 0;
+    var cardMini = function(t, v, sub, cor){
+      return '<div class="card" style="flex:1 1 200px;min-width:180px;"><div style="font-size:12px;color:var(--text-dim);">'+t+'</div>'+
+        '<div style="font-size:22px;font-weight:600;margin-top:4px;'+(cor?'color:'+cor+';':'')+'">'+v+'</div>'+
+        (sub ? '<div style="font-size:11.5px;color:var(--text-dim);margin-top:4px;">'+sub+'</div>' : '')+'</div>';
+    };
+    var brutoCartao = T.porPag["Débito"] + T.porPag["Crédito"];
+    out += '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;">'+
+      cardMini("🎟 Ticket médio", mv(ticket), "Valor médio por venda")+
+      cardMini("🧮 Nº de transações", String(nVendas), "Vendas lançadas no mês")+
+      cardMini("📉 Taxa efetiva das maquininhas", brutoCartao>0 ? (taxas/brutoCartao*100).toFixed(2).replace(".",",")+"%" : "—",
+        "Descontado "+mv(taxas)+" de "+mv(brutoCartao)+" no cartão")+
+      cardMini("📈 Projeção do mês", proj ? mv(proj.total) : (month<mesAtual ? mv(T.entrou) : "—"),
+        proj ? "Média de "+mv(proj.media)+"/dia × "+proj.restantes+" dia(s) útil(eis) restante(s)" : (month<mesAtual ? "Mês encerrado (valor realizado)" : "Mês ainda não começou"))+
+    '</div>';
+
+    var blocos = [];
+
+    // comparativo
+    var ant = adminDadosMes(addMonths(month,-1)), anoAnt = adminDadosMes(addMonths(month,-12));
+    var res = function(x){ return x.tot.entrou - x.tot.taxaDeb - x.tot.taxaCred - x.tot.saidas; };
+    var cmpLinha = function(nome, cur, a, b, fmt){
+      fmt = fmt || mv;
+      return adminLinha(nome+'<div style="font-size:11.5px;color:var(--text-dim);">'+fmt(cur)+'</div>',
+        '<span title="vs mês anterior ('+fmt(a)+')">'+deltaBadge(cur,a)+'</span> <span style="font-size:11px;color:var(--text-dim);">mês ant.</span><br>'+
+        '<span title="vs mesmo mês do ano passado ('+fmt(b)+')">'+deltaBadge(cur,b)+'</span> <span style="font-size:11px;color:var(--text-dim);">ano ant.</span>');
+    };
+    blocos.push(adminSec("🔁 Comparativo mensal e anual",
+      cmpLinha("Entrou", T.entrou, ant.tot.entrou, anoAnt.tot.entrou)+
+      cmpLinha("Nº de vendas", nVendas, ant.vendas.length, anoAnt.vendas.length, String)+
+      cmpLinha("Saídas", T.saidas, ant.tot.saidas, anoAnt.tot.saidas)+
+      cmpLinha("Resultado", res(D), res(ant), res(anoAnt)),
+      "Comparado com "+escHtml(monthLabel(addMonths(month,-1)))+" e "+escHtml(monthLabel(addMonths(month,-12)))+"."));
+
+    // percentual por forma de pagamento
+    var totPag = T.porPag["Dinheiro"]+T.porPag["Pix"]+T.porPag["Débito"]+T.porPag["Crédito"];
+    var pagBarra = "", pagLista = "";
+    ["Dinheiro","Pix","Débito","Crédito"].forEach(function(k){
+      var p = totPag>0 ? T.porPag[k]/totPag*100 : 0;
+      pagBarra += '<div title="'+k+': '+p.toFixed(1)+'%" style="width:'+p.toFixed(2)+'%;background:'+cores[k]+';"></div>';
+      pagLista += adminLinha('<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:'+cores[k]+';margin-right:6px;"></span>'+k, '<b>'+p.toFixed(1).replace(".",",")+'%</b> <span style="color:var(--text-dim);">'+mv(T.porPag[k])+'</span>');
+    });
+    blocos.push(adminSec("🥧 Participação por forma de pagamento",
+      (totPag>0 ? '<div style="display:flex;height:16px;border-radius:8px;overflow:hidden;background:var(--panel-alt);margin-bottom:8px;">'+pagBarra+'</div>'+pagLista : adminVazio("Sem entradas neste mês."))));
+
+    // taxas efetivas
+    var efetiva = function(tx, br){ return br>0 ? (tx/br*100).toFixed(2).replace(".",",")+"%" : "—"; };
+    blocos.push(adminSec("🧾 Taxas efetivas das maquininhas",
+      adminLinha("Débito", efetiva(T.taxaDeb, T.porPag["Débito"]), "-"+mv(T.taxaDeb)+" de "+mv(T.porPag["Débito"]))+
+      adminLinha("Crédito", efetiva(T.taxaCred, T.porPag["Crédito"]), "-"+mv(T.taxaCred)+" de "+mv(T.porPag["Crédito"]))+
+      adminLinha("<b>Total no cartão</b>", "<b>"+efetiva(taxas, brutoCartao)+"</b>", "-"+mv(taxas)+" de "+mv(brutoCartao))+
+      adminLinha("Sobre tudo que entrou", efetiva(taxas, T.entrou), "Taxas ÷ entrada bruta total"),
+      "Considera só as vendas em que a maquininha foi escolhida e o desconto está ligado em 💳 Taxas."));
+
+    // margem de lucro (pneus novos com custo informado)
+    var recC = 0, lucC = 0, nC = 0, nSemC = 0, txC = 0;
+    V.forEach(function(x){
+      if (!x.novo) return;
+      if (novoTemCusto(x.r)){ recC += novoReceitaPneus(x.r); lucC += novoLucro(x.r); txC += taxaCartao(x.r, true); nC++; }
+      else if (parseNum(x.r.valorPneus)>0) nSemC++;
+    });
+    blocos.push(adminSec("💹 Margem de lucro estimada",
+      nC ? adminLinha("Lucro dos pneus novos", '<b style="color:var(--green);">'+mv(lucC)+'</b>', nC+" venda(s) com custo informado")+
+           adminLinha("Margem", '<b>'+(recC>0 ? (lucC/recC*100).toFixed(1).replace(".",",")+"%" : "—")+'</b>', "Lucro ÷ valor dos pneus")+
+           adminLinha("Lucro líquido (após taxas)", '<b>'+mv(lucC-txC)+'</b>', "Taxas dessas vendas: -"+mv(txC))
+         : adminVazio("Nenhum pneu novo com custo informado neste mês."),
+      nSemC>0 ? nSemC+" venda(s) de pneus novos sem custo informado ficaram de fora. Seminovos e serviços não têm custo cadastrado." : "Seminovos e serviços não têm custo cadastrado, então ficam fora do cálculo."));
+
+    // dias com maior movimento
+    var top = D.dias.filter(function(d){ return d.entrou>0.004; }).slice().sort(function(a,b){ return b.entrou-a.entrou; }).slice(0,5);
+    var maxDia = top.length ? top[0].entrou : 0;
+    blocos.push(adminSec("🏆 Dias com maior movimento",
+      top.length ? top.map(function(d,i){
+        return '<div style="padding:5px 0;border-bottom:1px solid var(--border-soft);font-size:13.5px;"><div style="display:flex;justify-content:space-between;"><span>'+(i+1)+'º · '+escHtml(fmtDateBR(d.iso))+' <span style="color:var(--text-dim);font-size:11.5px;text-transform:capitalize;">'+escHtml(fromISO(d.iso).toLocaleDateString("pt-BR",{weekday:"short"}))+'</span></span><b>'+mv(d.entrou)+'</b></div>'+adminBarra(maxDia>0?d.entrou/maxDia*100:0,"var(--green)")+'</div>';
+      }).join("") : adminVazio("Sem vendas neste mês.")));
+
+    // horários de pico
+    var horas = []; for (var h=0; h<24; h++) horas.push({h:h, n:0, t:0});
+    var semHora = 0;
+    V.forEach(function(x){
+      var dt = x.r.criadoEm ? new Date(x.r.criadoEm) : null;
+      if (!dt || isNaN(dt.getTime())){ semHora++; return; }
+      horas[dt.getHours()].n++; horas[dt.getHours()].t += x.v;
+    });
+    var hs = horas.filter(function(x){ return x.n>0; });
+    var maxH = hs.reduce(function(a,x){ return Math.max(a,x.n); }, 0);
+    var pico = hs.slice().sort(function(a,b){ return b.n-a.n || b.t-a.t; })[0];
+    blocos.push(adminSec("⏰ Horários de pico",
+      hs.length ? '<div style="display:flex;align-items:flex-end;gap:3px;height:90px;">'+hs.map(function(x){
+          return '<div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;" title="'+pad(x.h)+'h: '+x.n+' venda(s) · '+mv(x.t)+'"><div style="width:100%;border-radius:3px 3px 0 0;background:'+(pico && x.h===pico.h?'var(--yellow)':'var(--teal)')+';height:'+Math.max(6,x.n/maxH*100).toFixed(0)+'%;"></div><span style="font-size:9.5px;color:var(--text-dim);margin-top:2px;">'+pad(x.h)+'</span></div>';
+        }).join("")+'</div><div style="font-size:13px;margin-top:8px;">Pico: <b>'+pad(pico.h)+'h</b> ('+pico.n+' venda(s), '+mv(pico.t)+')</div>'
+        : adminVazio("Sem dados de horário neste mês."),
+      "Usa a hora em que a venda foi lançada no sistema."+(semHora>0 ? " "+semHora+" venda(s) antiga(s) sem hora ficaram de fora." : "")));
+
+    // alertas de caixa baixo
+    var alertas = D.dias.filter(function(d){ return d.saidas>0.004 && (d.saidas>d.entrou+0.004 || d.saidas>d.dinheiro+0.004); });
+    blocos.push(adminSec("🚨 Alertas de caixa",
+      alertas.length ? alertas.map(function(d){
+        var grave = d.saidas>d.entrou+0.004;
+        return adminLinha('<span style="color:'+(grave?'var(--red)':'var(--yellow)')+';">'+(grave?'⛔':'⚠')+'</span> '+escHtml(fmtDateBR(d.iso)),
+          'Saiu <b style="color:var(--red);">'+mv(d.saidas)+'</b>', grave ? "Saídas maiores que tudo que entrou ("+mv(d.entrou)+")" : "Saídas maiores que o dinheiro que entrou ("+mv(d.dinheiro)+")");
+      }).join("") : '<div style="font-size:13.5px;color:var(--green);">✓ Nenhum dia com saídas acima das entradas.</div>',
+      "⛔ saídas > entradas do dia · ⚠ saídas > dinheiro recebido no dia (a saída costuma sair da gaveta)."));
+
+    // quem lançou as entradas (vendedor)
+    var porV = {};
+    V.forEach(function(x){
+      var n = (x.r.vendedor && x.r.vendedor!=="Nenhum") ? x.r.vendedor : "Sem vendedor";
+      var o = porV[n] || (porV[n] = {n:0, t:0}); o.n++; o.t += x.v;
+    });
+    var vl = Object.keys(porV).map(function(k){ return {nome:k, n:porV[k].n, t:porV[k].t}; }).sort(function(a,b){ return b.t-a.t; });
+    blocos.push(adminSec("🧑‍💼 Quem lançou as vendas",
+      vl.length ? vl.map(function(x){ return adminLinha(escHtml(x.nome), '<b>'+mv(x.t)+'</b>', x.n+" venda(s) · ticket "+mv(x.n?x.t/x.n:0)); }).join("") : adminVazio("Sem vendas neste mês."),
+      "Pelo campo Vendedor de cada venda."));
+
+    // motivos das saídas
+    var cats = {};
+    D.saidas.forEach(function(x){ var c = saidaCategoria(x.motivo); var o = cats[c] || (cats[c] = {n:0, t:0}); o.n++; o.t += x.valor; });
+    var cl = Object.keys(cats).map(function(k){ return {nome:k, n:cats[k].n, t:cats[k].t}; }).sort(function(a,b){ return b.t-a.t; });
+    blocos.push(adminSec("🗂 Motivos das saídas",
+      cl.length ? cl.map(function(c){
+        return '<div style="padding:5px 0;border-bottom:1px solid var(--border-soft);font-size:13.5px;"><div style="display:flex;justify-content:space-between;"><span>'+escHtml(c.nome)+' <span style="color:var(--text-dim);font-size:11.5px;">('+c.n+')</span></span><b style="color:var(--red);">-'+mv(c.t)+'</b></div>'+adminBarra(T.saidas>0?c.t/T.saidas*100:0,"var(--red)")+'</div>';
+      }).join("") : adminVazio("Nenhuma saída neste mês."),
+      "Categorias escolhidas pelas palavras do motivo (ex.: aluguel, manutenção, compra, almoço)."));
+
+    // pendências
+    var pend = V.filter(function(x){ return x.r.pago!=="✅"; }).sort(function(a,b){ return b.v-a.v; });
+    var pendTot = pend.reduce(function(a,x){ return a+x.v; }, 0);
+    var naoConc = V.filter(function(x){ var pg = x.pb["Dinheiro"]+x.pb["Pix"]+x.pb["Débito"]+x.pb["Crédito"]; return x.v-pg>0.01; });
+    var naoConcTot = naoConc.reduce(function(a,x){ var pg = x.pb["Dinheiro"]+x.pb["Pix"]+x.pb["Débito"]+x.pb["Crédito"]; return a+(x.v-pg); }, 0);
+    var rotulo = function(x){ var c = ((x.r.clienteId && customerNameById(x.r.clienteId)) || x.r.cliente || "").trim(); return escHtml(fmtDateBR(x.iso))+" · "+escHtml(c || x.r.carro || "venda")+(x.novo?" (novos)":""); };
+    blocos.push(adminSec("⏳ Pendências",
+      adminLinha("A receber (não marcadas como pagas)", '<b style="color:var(--yellow);">'+mv(pendTot)+'</b>', pend.length+" venda(s)")+
+      adminLinha("Sem forma de pagamento / não conciliado", '<b style="color:var(--yellow);">'+mv(naoConcTot)+'</b>', naoConc.length+" venda(s)")+
+      (pend.length ? '<div style="font-size:12px;color:var(--text-dim);margin:10px 0 2px;">Maiores valores a receber</div>'+pend.slice(0,6).map(function(x){ return adminLinha(rotulo(x), mv(x.v)); }).join("") : '')));
+
+    // top produtos / serviços
+    var med = {};
+    V.forEach(function(x){
+      var q = parseNum(x.r.quantidade), vp = parseNum(x.r.valorPneus), nome = (x.r.medida||"").trim();
+      if (!nome || !(q>0 || vp>0)) return;
+      var o = med[nome] || (med[nome] = {q:0, t:0}); o.q += q; o.t += vp;
+    });
+    var ml = Object.keys(med).map(function(k){ return {nome:k, q:med[k].q, t:med[k].t}; }).sort(function(a,b){ return b.t-a.t; }).slice(0,5);
+    var sv = servicosTotais(V.map(function(x){ return x.r; }));
+    var svl = [["Alinhamento",sv.alinhamento],["Bicos",sv.valorBicos],["Cambagem",sv.valorCambagem],["Balanceamento",sv.valorBalanceamento],["Rodas",sv.valorRodas],["Peças",sv.valorPecas],["Mão de obra",sv.maoDeObra],["Outros serviços",sv.outros]]
+      .filter(function(p){ return p[1]>0; }).sort(function(a,b){ return b[1]-a[1]; }).slice(0,5);
+    blocos.push(adminSec("🛞 Top produtos e serviços",
+      (ml.length ? '<div style="font-size:12px;color:var(--text-dim);margin-bottom:2px;">Medidas de pneu que mais faturam</div>'+ml.map(function(m){ return adminLinha(escHtml(m.nome), '<b>'+mv(m.t)+'</b>', m.q+" un."); }).join("") : adminVazio("Nenhum pneu com medida neste mês."))+
+      (svl.length ? '<div style="font-size:12px;color:var(--text-dim);margin:10px 0 2px;">Serviços e peças</div>'+svl.map(function(p){ return adminLinha(p[0], '<b>'+mv(p[1])+'</b>'); }).join("") : "")));
+
+    // clientes recorrentes
+    var cr = adminClientesRecorrentes(month);
+    blocos.push(adminSec("🤝 Clientes recorrentes",
+      cr.identificados ? adminLinha("Clientes identificados", String(cr.identificados))+
+        adminLinha("Voltaram 2 vezes ou mais", '<b>'+cr.recorrentes+'</b>', (cr.identificados ? (cr.recorrentes/cr.identificados*100).toFixed(0) : 0)+"% dos identificados")+
+        (cr.top.length ? '<div style="font-size:12px;color:var(--text-dim);margin:10px 0 2px;">Mais fiéis</div>'+cr.top.map(function(c){ return adminLinha(escHtml(c.nome), '<b>'+c.visitas+' visitas</b>', mv(c.total)+" no total"); }).join("") : "")
+        : adminVazio("Nenhuma venda com cliente informado."),
+      "Considera os últimos 6 meses até o mês aberto; conta dias diferentes de compra por cliente."));
+
+    out += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin-bottom:14px;align-items:start;">'+blocos.join("")+'</div>';
+    return out;
   }
   function adminDadosDia(iso){
     var r = {porPag:{"Dinheiro":0,"Pix":0,"Débito":0,"Crédito":0}, entrou:0, taxaDeb:0, taxaCred:0, saidas:0};
@@ -5385,8 +5615,9 @@ window.__voReady.then(function(){
     if (!linhas) linhas = '<tr><td '+td+' colspan="5"><span style="color:var(--text-dim);">Nenhum movimento neste mês.</span></td></tr>';
     var saidasHtml = D.saidas.length ? D.saidas.map(function(x){
       return '<tr><td '+td+'>'+escHtml(fmtDateBR(x.iso))+'</td><td style="padding:8px 10px;border-bottom:1px solid var(--border-soft);">'+escHtml(x.motivo||"—")+'</td>'+
+        '<td '+td+'>'+escHtml(saidaCategoria(x.motivo))+'</td>'+
         '<td '+td+'>'+escHtml(x.por||"—")+'</td><td '+tdr+'><span style="color:var(--red);">-'+mv(x.valor)+'</span></td></tr>';
-    }).join("") : '<tr><td '+td+' colspan="4"><span style="color:var(--text-dim);">Nenhuma saída registrada neste mês.</span></td></tr>';
+    }).join("") : '<tr><td '+td+' colspan="5"><span style="color:var(--text-dim);">Nenhuma saída registrada neste mês.</span></td></tr>';
     root.innerHTML =
       clientesTopbarHtml("Administrativo", "MASTER")+
       '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 14px;">'+
@@ -5432,6 +5663,7 @@ window.__voReady.then(function(){
         '</div>'+
       '</div>'+
       '</div>'+
+      adminExtrasHtml(month, D, mv)+
       '<div class="card" style="margin-bottom:14px;">'+
         '<h3>Dia a dia</h3>'+
         '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13.5px;">'+
@@ -5441,7 +5673,7 @@ window.__voReady.then(function(){
       '<div class="card" style="margin-bottom:14px;">'+
         '<h3>Saídas do caixa no mês</h3>'+
         '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13.5px;">'+
-          '<thead><tr><th '+th+'>Dia</th><th '+th+'>Motivo</th><th '+th+'>Quem registrou</th><th '+thr+'>Valor</th></tr></thead>'+
+          '<thead><tr><th '+th+'>Dia</th><th '+th+'>Motivo</th><th '+th+'>Categoria</th><th '+th+'>Quem registrou</th><th '+thr+'>Valor</th></tr></thead>'+
           '<tbody>'+saidasHtml+'</tbody></table></div>'+
       '</div>';
     root.querySelectorAll("[data-act]").forEach(function(node){
