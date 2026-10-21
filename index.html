@@ -982,7 +982,7 @@ window.__voReady.then(function(){
 
   var cloudStatus = "off"; // off | connecting | on | error
   var sb = null;
-  var pendingEchoKeys = {}; // conta quantas confirmações de "eco" da própria alteração ainda esperamos por chave
+  var pendingEchoKeys = {}; // por chave: horários (ms) das gravações nossas cujo "eco" em tempo real ainda esperamos
   if (window.supabase && SUPABASE_URL.indexOf("COLE_AQUI")===-1 && SUPABASE_ANON_KEY.indexOf("COLE_AQUI")===-1){
     try{ sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); cloudStatus = "connecting"; }
     catch(e){ sb = null; }
@@ -1022,16 +1022,17 @@ window.__voReady.then(function(){
   // envia uma chave (já salva localmente) para a tabela kv_store no Supabase
   function cloudPush(key, value){
     if (!sb) return;
+    // marca o "eco" ANTES de enviar: o aviso em tempo real pode chegar antes da resposta do servidor e,
+    // sem a marca, o sistema achava que a alteração veio de OUTRO aparelho e redesenhava a tela
+    // (era isso que apagava o que a pessoa estava digitando)
+    (pendingEchoKeys[key] = pendingEchoKeys[key] || []).push(Date.now());
+    function desmarcar(){ var a = pendingEchoKeys[key]; if (a && a.length) a.pop(); }
     sb.from("kv_store").upsert({key:key, value:value, updated_at:new Date().toISOString()})
       .then(function(res){
-        if (res && res.error){ cloudStatus = "error"; console.error("Erro ao sincronizar", key, res.error); }
-        else {
-          // esta alteração vai voltar pra nós mesmos pelo canal em tempo real daqui a pouco;
-          // marcamos que esperamos esse "eco" pra não tratá-lo como mudança de outro aparelho
-          pendingEchoKeys[key] = (pendingEchoKeys[key]||0) + 1;
-          if (cloudStatus!=="on"){ cloudStatus = "on"; refreshSyncBadge(); }
-        }
-      });
+        if (res && res.error){ desmarcar(); cloudStatus = "error"; console.error("Erro ao sincronizar", key, res.error); }
+        else if (cloudStatus!=="on"){ cloudStatus = "on"; refreshSyncBadge(); }
+      })
+      .catch(function(err){ desmarcar(); cloudStatus = "error"; console.error("Erro ao sincronizar", key, err); });
   }
 
   // baixa tudo da nuvem e grava no localStorage (usado ao abrir o app)
@@ -1087,13 +1088,18 @@ window.__voReady.then(function(){
         var row = payload.new;
         if (!row || !row.key) return;
         if (row.key.indexOf(K_ARQ)===0 || row.key.indexOf(K_BKP)===0 || row.key.indexOf(K_FOTOMES)===0) return; // arquivo morto, backups e fotos: só nuvem
-        try{ localStorage.setItem(row.key, JSON.stringify(row.value)); }catch(e){}
-        if (pendingEchoKeys[row.key] > 0){
-          // é só o eco da nossa própria digitação/salvamento — os dados já estão certos localmente,
-          // então não precisamos redesenhar a tela (isso é o que tirava o foco de quem estava digitando)
-          pendingEchoKeys[row.key]--;
-          return;
+        var ecos = pendingEchoKeys[row.key];
+        if (ecos && ecos.length){
+          var limiteEco = Date.now() - 30000;
+          while (ecos.length && ecos[0] < limiteEco) ecos.shift(); // marca antiga demais: o eco nunca chegou
+          if (ecos.length){
+            // é só o eco da nossa própria digitação/salvamento: o que temos aqui já é o mais novo
+            // (não regrava o navegador com uma versão que pode estar uma digitação atrás) e não redesenha a tela
+            ecos.shift();
+            return;
+          }
         }
+        try{ localStorage.setItem(row.key, JSON.stringify(row.value)); }catch(e){}
         onRemoteChange(row.key);
       })
       .subscribe(function(status){
@@ -1373,6 +1379,37 @@ window.__voReady.then(function(){
       }
     }
     saveCustomers(list);
+  }
+  // ---------- data de nascimento e aniversariantes do dia ----------
+  function fmtNasc(iso){
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso||""));
+    return m ? m[3]+"/"+m[2]+"/"+m[1] : "";
+  }
+  // "dd/mm/aaaa" -> "aaaa-mm-dd"; devolve "" se vazio e null se a data for inválida
+  function parseNasc(txt){
+    var d = String(txt||"").replace(/\D/g,"");
+    if (!d) return "";
+    if (d.length!==8) return null;
+    var dia = parseInt(d.slice(0,2),10), mes = parseInt(d.slice(2,4),10), ano = parseInt(d.slice(4),10);
+    var dt = new Date(ano, mes-1, dia);
+    if (dt.getFullYear()!==ano || dt.getMonth()!==mes-1 || dt.getDate()!==dia) return null;
+    if (ano<1900 || dt.getTime()>Date.now()) return null;
+    return ano+"-"+pad(mes)+"-"+pad(dia);
+  }
+  // clientes que fazem aniversário hoje (quem nasceu em 29/02 comemora em 28/02 nos anos não bissextos)
+  function aniversariantesHoje(){
+    var hoje = new Date(), mes = hoje.getMonth()+1, dia = hoje.getDate(), ano = hoje.getFullYear();
+    var bissexto = (ano%4===0 && ano%100!==0) || ano%400===0;
+    var out = [];
+    loadCustomers().forEach(function(c){
+      var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String((c && c.nascimento) || ""));
+      if (!m) return;
+      var cm = parseInt(m[2],10), cd = parseInt(m[3],10);
+      if (cm===2 && cd===29 && !bissexto) cd = 28;
+      if (cm===mes && cd===dia) out.push({c:c, idade: ano-parseInt(m[1],10)});
+    });
+    out.sort(function(a,b){ return String(a.c.nome||"").localeCompare(String(b.c.nome||""), "pt-BR"); });
+    return out;
   }
   function deleteCustomer(id){
     saveCustomers(loadCustomers().filter(function(c){ return c.id!==id; }));
@@ -3700,6 +3737,38 @@ window.__voReady.then(function(){
     el.querySelector("[data-rsclose]").onclick = function(){ try{ localStorage.setItem("vf_reserv_banner", today); }catch(e){} el.remove(); };
   }
 
+  // aviso fixo na tela: aparece em qualquer tela no dia do aniversário de cliente (dispensável por hoje)
+  function aniversarioBanner(){
+    var el = document.getElementById("anivBanner"), lista = [], hoje = toISO(new Date());
+    try{
+      if (!sb || state.userId) lista = can("clientes") ? aniversariantesHoje() : []; // antes do login não mostra
+    }catch(e){}
+    var assinatura = hoje+"|"+lista.map(function(a){ return a.c.id; }).join(",");
+    var dispensado = false;
+    try{ dispensado = localStorage.getItem("vf_aniv_banner")===assinatura; }catch(e){}
+    if (!lista.length || dispensado){ if (el) el.remove(); return; }
+    if (el && el.getAttribute("data-sig")===assinatura) return; // já está na tela, igual
+    if (!el){ el = document.createElement("div"); el.id = "anivBanner"; document.body.appendChild(el); }
+    el.setAttribute("data-sig", assinatura);
+    el.style.cssText = "position:fixed;right:16px;bottom:72px;z-index:960;width:min(340px,calc(100vw - 32px));background:var(--panel);border:1px solid var(--yellow);border-left:4px solid var(--yellow);border-radius:8px;padding:12px 14px;box-shadow:0 6px 24px rgba(0,0,0,.35);font-size:13px;display:flex;gap:10px;align-items:flex-start;";
+    var itens = lista.slice(0,5).map(function(a){
+      var tel = String(a.c.telefone||"").replace(/\D/g,"");
+      var wa = tel.length>=10 ? '<a href="https://wa.me/'+(tel.length<=11?"55":"")+tel+'" target="_blank" rel="noopener" style="color:var(--green);margin-left:8px;white-space:nowrap;">WhatsApp</a>' : "";
+      var idade = (a.idade>0 && a.idade<120) ? ' · '+a.idade+' anos' : '';
+      return '<div style="margin-top:6px;"><span data-anivopen="'+escAttr(a.c.id)+'" style="cursor:pointer;font-weight:600;">'+escHtml(a.c.nome||"(sem nome)")+'</span>'+
+        '<span style="color:var(--text-dim);">'+idade+(a.c.telefone?' · '+escHtml(a.c.telefone):'')+'</span>'+wa+'</div>';
+    }).join("");
+    var mais = lista.length>5 ? '<div style="margin-top:6px;color:var(--text-dim);">+ '+(lista.length-5)+' aniversariante(s)</div>' : '';
+    el.innerHTML = '<div style="flex:1;min-width:0;"><b>🎂 '+(lista.length===1?'Aniversário de cliente hoje!':lista.length+' clientes fazem aniversário hoje!')+'</b>'+itens+mais+'</div>'+
+      '<button class="icon-btn" data-anivclose="1" title="Dispensar por hoje">✕</button>';
+    el.querySelectorAll("[data-anivopen]").forEach(function(b){
+      b.onclick = function(){ state.modal = null; state.clientesDetailId = b.getAttribute("data-anivopen"); state.view = "clientes"; render(); };
+    });
+    el.querySelector("[data-anivclose]").onclick = function(){ try{ localStorage.setItem("vf_aniv_banner", assinatura); }catch(e){} el.remove(); };
+  }
+  setTimeout(aniversarioBanner, 4000);
+  setInterval(aniversarioBanner, 60000); // vira o dia com o sistema aberto: o aviso aparece sozinho
+
   // ======================= SAÍDAS DO CAIXA (dinheiro que saiu pra comprar algo pra loja) =======================
   var K_SAIDAS = "vo_saidas:"; // uma lista por dia: [{id, valor, motivo, por, em}]
   function loadSaidas(d){ var l = lsGetJSON(K_SAIDAS+d, []); return Array.isArray(l) ? l : []; }
@@ -4227,7 +4296,7 @@ window.__voReady.then(function(){
       try{ mudou = lojaParaSemVendedor(); }catch(e){}
       ultimaVarreduraLoja = today;
     }
-    if ((mudou || virou) && state.view==="dashboard" && !state.modal){
+    if ((mudou || virou) && state.view==="dashboard" && !state.modal && !usuarioDigitando()){
       state.monthSummaryCache = {}; state.monthPartsCache = {};
       render();
     }
@@ -4459,6 +4528,7 @@ window.__voReady.then(function(){
     osReconciliarNovos(); // serviços de O.S. dos pneus novos que o montador lançou entram na linha certa
     osFecharVencidas(); osSincronizarPago();
     setTimeout(reservadosBanner, 0);
+    setTimeout(aniversarioBanner, 0);
     var restrito = !!sb && !can("vendas"); // sem painel de vendas: só vê as telas liberadas (ex.: montador → O.S.)
     root.classList.toggle("wide", (state.view==="table" || (state.view==="novos" && state.novosTab==="vendas")) && !restrito);
     if (restrito){
@@ -4811,7 +4881,7 @@ window.__voReady.then(function(){
       if (!customer){ local.selectedId=null; drawList(); return; }
       var notas = loadNotas().filter(function(n){return n.customerId===customer.id;})
         .sort(function(a,b){ return b.createdAt - a.createdAt; });
-      var sub = [customerDocLabel(customer), customer.telefone, customer.email].filter(Boolean).join(" · ");
+      var sub = [customerDocLabel(customer), customer.telefone, (customer.nascimento ? "🎂 "+fmtNasc(customer.nascimento) : ""), customer.email].filter(Boolean).join(" · ");
       var notasHtml = notas.length
         ? notas.map(function(n){
             return '<div class="arow">'+
@@ -7636,7 +7706,7 @@ window.__voReady.then(function(){
         delete state.monthSummaryCache[state.date.slice(0,7)];
         delete state.monthPartsCache[state.date.slice(0,7)];
         // se um serviço da O.S. chegou enquanto a tabela estava salvando, devolve ele pra tabela
-        try{ var antes = JSON.stringify(state.rows); osConferirQtds(state.date); if (JSON.stringify(state.rows)!==antes) render(); }catch(e){}
+        try{ var antes = JSON.stringify(state.rows); osConferirQtds(state.date); if (JSON.stringify(state.rows)!==antes){ if (usuarioDigitando()) adiarRender(function(){ render(); }); else render(); } }catch(e){}
       }).catch(function(err){
         state.saving = false;
         var flag = document.getElementById("saveFlag");
@@ -8141,7 +8211,7 @@ window.__voReady.then(function(){
   setInterval(function(){
     try{
       osFecharVencidas();
-      if (state.view==="os" && !state.modal && osAssinatura()!==osUltimaAssinatura) render();
+      if (state.view==="os" && !state.modal && !usuarioDigitando() && osAssinatura()!==osUltimaAssinatura) render();
     }catch(e){}
   }, 30000);
 
@@ -8530,6 +8600,7 @@ window.__voReady.then(function(){
           '<div style="font-size:16px;font-weight:bold;margin-bottom:8px;">'+escHtml(customer.nome||"—")+'</div>'+
           linha("Documento", docLabel)+
           linha("Telefone", customer.telefone)+
+          linha("Nascimento", fmtNasc(customer.nascimento))+
           linha("E-mail", customer.email)+
           linha("Endereço", customer.endereco)+
           '<div style="padding-top:8px;font-size:12px;color:var(--text-faint);">'+
@@ -8679,21 +8750,24 @@ window.__voReady.then(function(){
     var div = document.createElement("div");
     div.className = "overlay";
     var err = state.modal.error || "";
+    // rascunho: o que já foi digitado sobrevive a qualquer redesenho (troca CPF/CNPJ, erro de validação, atualização da tela)
+    var dr = state.modal.draft || (state.modal.draft = {});
+    function dv(k, orig){ return dr[k]!==undefined ? dr[k] : orig; }
     div.innerHTML =
       '<div class="modal wide">'+
         '<h3>'+(customer ? "Editar cliente" : "Cadastrar cliente")+'</h3>'+
         '<div class="field-group">'+
-          '<label>Nome</label><input type="text" id="cfNome" placeholder="Nome completo" value="'+escAttr(customer?customer.nome:(state.modal.prefillNome||""))+'">'+
+          '<label>Nome</label><input type="text" id="cfNome" placeholder="Nome completo" value="'+escAttr(dv("nome", customer?customer.nome:(state.modal.prefillNome||"")))+'">'+
           '<label>Tipo de documento</label>'+
           '<div style="display:flex;gap:8px;margin-bottom:10px;">'+
             '<button type="button" class="btn small'+(tipoAtual==="cpf"?" primary":" ghost")+'" id="cfTipoCpf" style="flex:1;">Pessoa física (CPF)</button>'+
             '<button type="button" class="btn small'+(tipoAtual==="cnpj"?" primary":" ghost")+'" id="cfTipoCnpj" style="flex:1;">Pessoa jurídica (CNPJ)</button>'+
           '</div>'+
           '<label id="cfDocLabel">'+(tipoAtual==="cnpj"?"CNPJ":"CPF")+'</label>'+
-          '<input type="text" inputmode="numeric" autocomplete="off" id="cfDocumento" placeholder="'+(tipoAtual==="cnpj"?"00.000.000/0000-00":"000.000.000-00")+'" value="'+escAttr(formatarDocumento(tipoAtual, docInfo.documento||""))+'">'+
-          '<label>E-mail</label><input type="email" id="cfEmail" placeholder="cliente@exemplo.com" value="'+escAttr(customer?customer.email:"")+'">'+
-          '<label>Telefone</label><input type="text" inputmode="tel" autocomplete="off" id="cfTelefone" placeholder="(47) 99999-9999" value="'+escAttr(customer?formatarTelefone(customer.telefone):"")+'">'+
-          '<label>Endereço</label><input type="text" id="cfEndereco" placeholder="Rua, número, bairro, cidade" value="'+escAttr(customer?customer.endereco:"")+'">'+
+          '<input type="text" inputmode="numeric" autocomplete="off" id="cfDocumento" placeholder="'+(tipoAtual==="cnpj"?"00.000.000/0000-00":"000.000.000-00")+'" value="'+escAttr(formatarDocumento(tipoAtual, dv("documento", docInfo.documento||"")))+'">'+
+          '<label>Data de nascimento</label><input type="text" inputmode="numeric" autocomplete="off" maxlength="10" id="cfNascimento" placeholder="dd/mm/aaaa" value="'+escAttr(dv("nascimento", customer && customer.nascimento ? fmtNasc(customer.nascimento) : ""))+'">'+
+          '<label>Telefone</label><input type="text" inputmode="tel" autocomplete="off" id="cfTelefone" placeholder="(47) 99999-9999" value="'+escAttr(dv("telefone", customer?formatarTelefone(customer.telefone):""))+'">'+
+          '<label>Endereço</label><input type="text" id="cfEndereco" placeholder="Rua, número, bairro, cidade" value="'+escAttr(dv("endereco", customer?customer.endereco:""))+'">'+
         '</div>'+
         '<div class="err">'+escHtml(err)+'</div>'+
         '<div class="modal-actions">'+
@@ -8702,9 +8776,24 @@ window.__voReady.then(function(){
         '</div>'+
       '</div>';
     document.body.appendChild(div);
-    document.getElementById("cfNome").focus();
+    // volta o cursor para o campo que estava em uso (no primeiro desenho, vai para o Nome)
+    var feCf = document.getElementById(state.modal.focusId || "cfNome") || document.getElementById("cfNome");
+    feCf.focus(); try{ feCf.setSelectionRange(feCf.value.length, feCf.value.length); }catch(e){}
     aplicarMascaraInput(document.getElementById("cfDocumento"), tipoAtual==="cnpj" ? mascaraCnpj : mascaraCpf);
     aplicarMascaraInput(document.getElementById("cfTelefone"), function(d){ return mascaraTelefone(d, false); }, formatarTelefone);
+    // máscara da data de nascimento: dd/mm/aaaa
+    var cfNasc = document.getElementById("cfNascimento");
+    cfNasc.addEventListener("input", function(){
+      var d = cfNasc.value.replace(/\D/g,"").slice(0,8);
+      var o = d.length>4 ? d.slice(0,2)+"/"+d.slice(2,4)+"/"+d.slice(4) : (d.length>2 ? d.slice(0,2)+"/"+d.slice(2) : d);
+      if (cfNasc.value!==o) cfNasc.value = o;
+    });
+    // guarda cada campo conforme é digitado
+    [["nome","cfNome"],["documento","cfDocumento"],["nascimento","cfNascimento"],["telefone","cfTelefone"],["endereco","cfEndereco"]].forEach(function(p){
+      var el = document.getElementById(p[1]);
+      el.addEventListener("input", function(){ dr[p[0]] = el.value; });
+      el.addEventListener("focus", function(){ state.modal.focusId = p[1]; });
+    });
 
     function setTipo(novoTipo){
       state.modal.tipoDocumento = novoTipo;
@@ -8732,11 +8821,17 @@ window.__voReady.then(function(){
         renderModal();
         return;
       }
+      var nascISO = parseNasc(document.getElementById("cfNascimento").value);
+      if (nascISO===null){
+        state.modal.error = "Data de nascimento inválida. Use o formato dd/mm/aaaa.";
+        renderModal();
+        return;
+      }
       var dados = {
         nome: nome,
         tipoDocumento: tipoAtual,
         documento: formatarDocumento(tipoAtual, document.getElementById("cfDocumento").value),
-        email: document.getElementById("cfEmail").value.trim(),
+        nascimento: nascISO,
         telefone: formatarTelefone(document.getElementById("cfTelefone").value),
         endereco: document.getElementById("cfEndereco").value.trim()
       };
@@ -9700,7 +9795,7 @@ window.__voReady.then(function(){
     if (!customer){ state.clientesDetailId = null; return renderClientes(); }
     var notas = loadNotas().filter(function(n){return n.customerId===customer.id;})
       .sort(function(a,b){ return b.createdAt - a.createdAt; });
-    var sub = [customerDocLabel(customer), customer.telefone, customer.email].filter(Boolean).join(" · ");
+    var sub = [customerDocLabel(customer), customer.telefone, (customer.nascimento ? "🎂 "+fmtNasc(customer.nascimento) : ""), customer.email].filter(Boolean).join(" · ");
     var notasHtml = notas.length
       ? notas.map(function(n){
           return '<div class="arow">'+
@@ -11844,6 +11939,36 @@ window.__voReady.then(function(){
     });
   }
 
+  // ---------- não redesenha a tela enquanto alguém está digitando ----------
+  // Alterações vindas de outros aparelhos redesenhavam a tela inteira e apagavam o campo em preenchimento.
+  // Agora, se há um campo de texto em uso (ou um formulário aberto), o redesenho espera a pessoa terminar.
+  var renderAdiado = null;
+  var ultimaAtividadeCampo = 0;
+  ["focusin","input","keydown"].forEach(function(ev){
+    document.addEventListener(ev, function(){ ultimaAtividadeCampo = Date.now(); }, true);
+  });
+  function usuarioDigitando(){
+    var ae = document.activeElement;
+    if (!ae || ae===document.body) return false;
+    var tag = ae.tagName, ativo = false;
+    if (tag==="TEXTAREA" || tag==="SELECT" || ae.isContentEditable) ativo = true;
+    else if (tag==="INPUT"){
+      var t = (ae.type||"text").toLowerCase();
+      ativo = ["button","submit","checkbox","radio","range","file","color","reset","image"].indexOf(t)===-1;
+    }
+    // cursor esquecido num campo por muito tempo não trava a atualização da tela
+    return ativo && (Date.now() - ultimaAtividadeCampo) < 45000;
+  }
+  function adiarRender(fn){ renderAdiado = fn; }
+  function tentarRenderAdiado(){
+    if (!renderAdiado) return;
+    if (state.modal || usuarioDigitando()) return; // ainda ocupado: tenta de novo ao sair do campo
+    var f = renderAdiado; renderAdiado = null;
+    try{ f(); }catch(e){ console.error(e); }
+  }
+  document.addEventListener("focusout", function(){ if (renderAdiado) setTimeout(tentarRenderAdiado, 400); }, true);
+  setInterval(tentarRenderAdiado, 2000);
+
   // ---------- reage a mudanças feitas em outro aparelho ----------
   function handleRemoteChange(key){
     if (key===K_PERMS) aplicarPermissoes();
@@ -11866,6 +11991,14 @@ window.__voReady.then(function(){
       // se a linha alterada é do dia aberto na tela e não há edição pendente,
       // recarrega para não perder digitação em andamento
       if (state.view==="table" && state.date===date && !state.saving){
+        if (state.modal || usuarioDigitando()){
+          // tem alguém digitando: não troca as linhas nem redesenha agora; faz isso quando a pessoa sair do campo
+          adiarRender(function(){
+            if (state.view==="table" && state.date===date && !state.saving) getRows(date).then(function(rows){ state.rows = rows; render(); });
+            else render();
+          });
+          return;
+        }
         getRows(date).then(function(rows){ state.rows = rows; render(); });
         return;
       }
@@ -11874,6 +12007,7 @@ window.__voReady.then(function(){
       delete state.monthSummaryCache[m];
       delete state.monthPartsCache[m];
     }
+    if (state.modal || usuarioDigitando()){ adiarRender(function(){ render(); }); return; }
     render();
   }
 
