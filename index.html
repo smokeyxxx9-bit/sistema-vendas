@@ -970,6 +970,7 @@ window.__voReady.then(function(){
   var K_BKP = "bkp:";                 // backups automáticos na nuvem (só nuvem; ficam fora do navegador)
   var K_FOTOMES = "fotomes:";         // fotos do registro mensal (só nuvem)
   var K_REGMES = "vo_regmes:";        // registro mensal de pneus: uma chave por mês (vo_regmes:AAAA-MM)
+  var K_BKP_CONTA = "vo_backup_conta"; // conta escolhida pelo master para fazer o backup automático na nuvem (sincroniza entre aparelhos)
 
   // ---------- sincronização em nuvem (Supabase) ----------
   // Preencha as duas linhas abaixo com os dados do SEU projeto Supabase
@@ -2460,7 +2461,7 @@ window.__voReady.then(function(){
     var data = {};
     for (var i=0;i<localStorage.length;i++){
       var k = localStorage.key(i);
-      if (k && k.indexOf("vo_")===0 && k!==K_AUTOBACKUP) data[k] = localStorage.getItem(k);
+      if (k && k.indexOf("vo_")===0 && k!==K_AUTOBACKUP && k!==K_BKP_CONTA) data[k] = localStorage.getItem(k);
     }
     return data;
   }
@@ -2523,7 +2524,14 @@ window.__voReady.then(function(){
   var K_BKP_SIG = "bkpnuvem_sig"; // (sem "vo_": não entra no backup e não sobe para a nuvem)
   var BKP_INTERVALO = 30*60*1000, BKP_MAX = 10;
   var bkpPronto = false, bkpEmAndamento = false;
-  function bkpPodeRodar(){ return !!sb && !!state.userId && bkpPronto && (state.role==="master" || can("vendas")); }
+  // conta escolhida pelo master (userId vazio = automático: qualquer conta com acesso às vendas faz, como antes)
+  function bkpContaEscolhida(){ var c = lsGetJSON(K_BKP_CONTA, null); return (c && c.userId) ? c : null; }
+  function bkpPodeRodar(){
+    if (!sb || !state.userId || !bkpPronto) return false;
+    if (!(state.role==="master" || can("vendas"))) return false;
+    var c = bkpContaEscolhida();
+    return !c || c.userId===state.userId; // com conta escolhida, só ela faz o backup automático
+  }
   function bkpChave(ts){ return K_BKP + String(ts).padStart(13,"0"); }
   function hashTexto(t){ var h = 5381; for (var i=0;i<t.length;i++){ h = ((h<<5)+h+t.charCodeAt(i))|0; } return (h>>>0).toString(36); }
   // compacta o backup (gzip + base64) para o envio ser leve; sem suporte do navegador, vai em texto puro
@@ -2544,11 +2552,11 @@ window.__voReady.then(function(){
     return new Response(stream).text();
   }
   function listarBackupsNuvem(){
-    return sb.from("kv_store").select("key,ts:value->>ts,motivo:value->>motivo,bytes:value->>bytes,chaves:value->>chaves")
+    return sb.from("kv_store").select("key,ts:value->>ts,motivo:value->>motivo,por:value->>por,bytes:value->>bytes,chaves:value->>chaves")
       .like("key", K_BKP+"%").order("key",{ascending:true}).then(function(res){
         if (!res || res.error) throw new Error((res && res.error && res.error.message) || "Falha ao listar os backups da nuvem.");
         return (res.data||[]).map(function(r){
-          return {key:r.key, ts:parseInt(r.ts,10)||0, motivo:r.motivo||"", bytes:parseInt(r.bytes,10)||0, chaves:parseInt(r.chaves,10)||0};
+          return {key:r.key, ts:parseInt(r.ts,10)||0, motivo:r.motivo||"", por:r.por||"", bytes:parseInt(r.bytes,10)||0, chaves:parseInt(r.chaves,10)||0};
         });
       });
   }
@@ -2583,7 +2591,7 @@ window.__voReady.then(function(){
       // sem nenhuma alteração desde o último backup: não gasta uma das 10 vagas com uma cópia igual
       if (!manual && sig===sigAnt && lista.length) return {pulou:"semmudanca"};
       return gzipB64(txt).then(function(z){
-        var valor = {ts:agora, motivo:manual ? "Manual" : "Automático (30 min)", chaves:chaves, bytes:txt.length, enc:z.enc, d:z.d};
+        var valor = {ts:agora, motivo:manual ? "Manual" : "Automático (30 min)", por:state.userEmail||"", chaves:chaves, bytes:txt.length, enc:z.enc, d:z.d};
         return sb.from("kv_store").upsert({key:bkpChave(agora), value:valor, updated_at:new Date().toISOString()}).then(function(res){
           if (res && res.error) throw new Error(res.error.message || "A nuvem recusou o backup.");
           try{ localStorage.setItem(K_BKP_SIG, sig); }catch(e){}
@@ -2908,7 +2916,8 @@ window.__voReady.then(function(){
         '<button class="btn ghost small" id="ferSnapNow" style="margin-bottom:10px;">Fazer backup agora</button>'+
         '<div id="ferSnaps"></div>'+
         '<h4 style="margin:18px 0 6px;font-size:17px;">Backups na nuvem (Supabase)</h4>'+
-        '<p>Automático a cada 30 minutos (só se algo mudou). Guarda os 10 mais recentes: ao entrar o 11º, o mais antigo é apagado. Restaurar também atualiza as telas.</p>'+
+        '<p>Automático a cada 30 minutos (só se algo mudou), feito pela conta escolhida abaixo. Guarda os 10 mais recentes: ao entrar o 11º, o mais antigo é apagado. Restaurar também atualiza as telas.</p>'+
+        '<div id="ferConta" style="margin:0 0 14px;"></div>'+
         '<button class="btn ghost small" id="ferNuvemNow" style="margin-bottom:10px;">☁ Fazer backup na nuvem agora</button>'+
         '<div id="ferNuvem"></div>'+
         '<h4 style="margin:18px 0 6px;font-size:17px;">Migrar Mão de obra → Serviço</h4>'+
@@ -2948,7 +2957,7 @@ window.__voReady.then(function(){
         box.innerHTML = '<p style="font-size:13px;color:var(--text-dim);">'+lista.length+' de '+BKP_MAX+' backups guardados.</p>'+
           '<div style="border:1px solid var(--border-soft);border-radius:4px;max-height:260px;overflow-y:auto;">'+lista.map(function(m){
           return '<div style="display:flex;gap:10px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--border-soft);flex-wrap:wrap;">'+
-            '<div style="flex:1 1 220px;min-width:0;"><b>'+escHtml(new Date(m.ts).toLocaleString("pt-BR"))+'</b><div style="font-size:13px;color:var(--text-dim);">'+escHtml(m.motivo)+' · '+m.chaves+' registros · '+Math.max(1,Math.round(m.bytes/1024))+' KB</div></div>'+
+            '<div style="flex:1 1 220px;min-width:0;"><b>'+escHtml(new Date(m.ts).toLocaleString("pt-BR"))+'</b><div style="font-size:13px;color:var(--text-dim);">'+escHtml(m.motivo)+(m.por?' · '+escHtml(m.por):'')+' · '+m.chaves+' registros · '+Math.max(1,Math.round(m.bytes/1024))+' KB</div></div>'+
             '<button class="btn ghost small ferNRest" data-key="'+escAttr(m.key)+'">Restaurar</button></div>';
         }).join("")+'</div>';
         div.querySelectorAll(".ferNRest").forEach(function(b){ b.addEventListener("click", function(){
@@ -2957,6 +2966,46 @@ window.__voReady.then(function(){
             .catch(function(e){ alert("Não foi possível restaurar: "+(e&&e.message?e.message:e)); });
         }); });
       }).catch(function(e){ box.innerHTML = '<p>Não foi possível ler os backups da nuvem: '+escHtml(e&&e.message?e.message:e)+'</p>'; });
+    }
+    // o master escolhe qual conta faz o backup automático (a cada 30 min, com o sistema aberto nela)
+    function desenharConta(){
+      var box = q("#ferConta");
+      if (!sb){ box.innerHTML = ""; return; }
+      box.innerHTML = '<p style="font-size:13px;color:var(--text-dim);">Carregando contas…</p>';
+      Promise.all([sb.from("perfis").select("user_id,email,papel"), listarBackupsNuvem()]).then(function(r){
+        var res = r[0], lista = r[1];
+        if (!res || res.error) throw new Error((res && res.error && res.error.message) || "erro ao ler a tabela perfis");
+        var permsAll = loadPerms();
+        var elegiveis = (res.data||[]).filter(function(u){
+          return permsEfetivas(cargoEfetivo(u), permsAll[u.user_id]).indexOf("vendas")>-1;
+        }).sort(function(a,b){ return String(a.email||"").localeCompare(String(b.email||"")); });
+        var atual = bkpContaEscolhida();
+        var existe = !!atual && elegiveis.some(function(u){ return u.user_id===atual.userId; });
+        var ultAuto = null;
+        lista.forEach(function(b){ if (/^Autom/.test(b.motivo)) ultAuto = b; });
+        var aviso = "";
+        if (atual && !existe) aviso = '<p style="font-size:12.5px;color:var(--red);margin:6px 0 0;">A conta escolhida ('+escHtml(atual.email||atual.userId)+') não existe mais ou perdeu o acesso às vendas. Nenhum backup automático será feito até você escolher outra.</p>';
+        else if (atual && ultAuto && Date.now()-ultAuto.ts > 3*BKP_INTERVALO) aviso = '<p style="font-size:12.5px;color:var(--yellow);margin:6px 0 0;">O último backup automático foi há mais de 1h30. Lembre: a conta escolhida precisa estar com o sistema aberto para fazer o backup.</p>';
+        box.innerHTML =
+          '<label style="display:block;font-size:12.5px;color:var(--text-dim);margin-bottom:4px;">Conta responsável pelo backup automático</label>'+
+          '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">'+
+            '<select id="ferContaSel" style="background:var(--panel-alt);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:8px;font-size:13px;min-width:230px;max-width:100%;">'+
+              '<option value="">Automático — qualquer conta com acesso às vendas</option>'+
+              elegiveis.map(function(u){ return '<option value="'+escAttr(u.user_id)+'"'+(atual && atual.userId===u.user_id?' selected':'')+'>'+escHtml(u.email||u.user_id)+' ('+papelLabel(cargoEfetivo(u))+')</option>'; }).join("")+
+            '</select>'+
+            '<button class="btn primary small" id="ferContaSalvar">Salvar</button>'+
+          '</div>'+
+          '<p style="font-size:12.5px;color:var(--text-dim);margin:6px 0 0;">'+
+            (ultAuto ? 'Último backup automático: '+escHtml(new Date(ultAuto.ts).toLocaleString("pt-BR"))+(ultAuto.por?' · '+escHtml(ultAuto.por):'') : 'Ainda não há backup automático.')+
+          '</p>'+aviso;
+        q("#ferContaSalvar").addEventListener("click", function(){
+          var sel = q("#ferContaSel"), id = sel.value;
+          var u = elegiveis.filter(function(x){ return x.user_id===id; })[0];
+          lsSetJSON(K_BKP_CONTA, {userId:id||"", email:u?(u.email||""):"", por:state.userEmail||"", em:Date.now()});
+          alert(id ? "Backup automático agora será feito pela conta "+(u&&u.email||"escolhida")+"." : "Backup automático voltou ao modo automático (qualquer conta com acesso às vendas).");
+          desenharConta();
+        });
+      }).catch(function(e){ box.innerHTML = '<p style="font-size:13px;">Não foi possível carregar as contas: '+escHtml(e&&e.message?e.message:e)+'</p>'; });
     }
     function desenharMig(){
       var c = contarMaoDeObra();
@@ -2986,7 +3035,7 @@ window.__voReady.then(function(){
     });
     q("#ferVoltar").addEventListener("click", function(){ state.modal = null; render(); });
     div.addEventListener("click", function(e){ if (e.target===div){ state.modal = null; render(); } });
-    desenharRel(); desenharSnaps(); desenharNuvem(); desenharMig();
+    desenharRel(); desenharSnaps(); desenharNuvem(); desenharConta(); desenharMig();
   }
 
   // ======================= IMPORTAR TABELAS ANTIGAS (HTML) — só master =======================
