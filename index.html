@@ -983,7 +983,6 @@ window.__voReady.then(function(){
 
   var cloudStatus = "off"; // off | connecting | on | error
   var sb = null;
-  var pendingEchoKeys = {}; // por chave: horários (ms) das gravações nossas cujo "eco" em tempo real ainda esperamos
   if (window.supabase && SUPABASE_URL.indexOf("COLE_AQUI")===-1 && SUPABASE_ANON_KEY.indexOf("COLE_AQUI")===-1){
     try{ sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); cloudStatus = "connecting"; }
     catch(e){ sb = null; }
@@ -1016,57 +1015,315 @@ window.__voReady.then(function(){
   function syncBadgeHtml(){
     if (!sb) return '<span id="syncBadge" class="sync-badge off" title="Configure o Supabase no início do arquivo para sincronizar entre aparelhos">○ somente local</span>';
     if (cloudStatus==="on") return '<span id="syncBadge" class="sync-badge on" title="Sincronizado com a nuvem">● nuvem conectada</span>';
-    if (cloudStatus==="error") return '<span id="syncBadge" class="sync-badge error" title="Falha ao conectar com a nuvem — dados continuam salvos localmente">⚠ erro de conexão</span>';
+    if (cloudStatus==="error") return '<span id="syncBadge" class="sync-badge error" title="Falha ao conectar com a nuvem — os dados continuam salvos neste aparelho e serão reenviados sozinhos">⚠ erro de conexão'+(filaTamanho()?' · '+filaTamanho()+' pendente(s)':'')+'</span>';
     return '<span id="syncBadge" class="sync-badge connecting" title="Conectando à nuvem...">○ conectando…</span>';
   }
 
-  // envia uma chave (já salva localmente) para a tabela kv_store no Supabase
-  function cloudPush(key, value){
-    if (!sb) return;
-    // marca o "eco" ANTES de enviar: o aviso em tempo real pode chegar antes da resposta do servidor e,
-    // sem a marca, o sistema achava que a alteração veio de OUTRO aparelho e redesenhava a tela
-    // (era isso que apagava o que a pessoa estava digitando)
-    (pendingEchoKeys[key] = pendingEchoKeys[key] || []).push(Date.now());
-    function desmarcar(){ var a = pendingEchoKeys[key]; if (a && a.length) a.pop(); }
-    sb.from("kv_store").upsert({key:key, value:value, updated_at:new Date().toISOString()})
-      .then(function(res){
-        if (res && res.error){ desmarcar(); cloudStatus = "error"; console.error("Erro ao sincronizar", key, res.error); }
-        else if (cloudStatus!=="on"){ cloudStatus = "on"; refreshSyncBadge(); }
-      })
-      .catch(function(err){ desmarcar(); cloudStatus = "error"; console.error("Erro ao sincronizar", key, err); });
+  // =====================================================================================
+  // SINCRONIZAÇÃO COM A NUVEM — fila de envios pendentes + junção por id (sem sobrescrever o dia inteiro)
+  //  - Todo salvamento entra numa FILA gravada no aparelho (cloudq_pending). Se a internet falhar, a fila
+  //    continua lá (mesmo fechando o app) e é reenviada sozinha: ao reconectar, ao voltar do segundo plano
+  //    e com tentativas automáticas espaçadas.
+  //  - Listas com "id" em cada item (vendas do dia, clientes, estoque, notas, orçamentos, pneus novos…) são
+  //    JUNTADAS item a item com a versão da nuvem, em vez de uma sobrescrever a outra.
+  //  - O "eco" do nosso próprio envio é reconhecido pelo conteúdo, não por horário.
+  // =====================================================================================
+  var K_FILA = "cloudq_pending"; // sem "vo_": não entra nos backups nem sobe para a nuvem
+  var fila = {};                 // chave -> {n:contador de gravações, base:{id:hash}|null, v:valor (só se não estiver no localStorage), f:forçar}
+  try{ fila = JSON.parse(localStorage.getItem(K_FILA) || "{}") || {}; }catch(e){ fila = {}; }
+  var visto = {};                // chave -> updated_at da nuvem que já incorporamos
+  var ecos = {};                 // chave -> hashes dos valores que NÓS gravamos (para ignorar o próprio eco)
+  var emVoo = {};                // chave -> promessa do envio em andamento
+  var filaTimer = null, filaFalhas = 0, cursorNuvem = null, cloudPronto = false;
+  var remoteChangeCb = null;
+  var SEQ_KEYS = {}; SEQ_KEYS[K_VENDA_SEQ] = 1; SEQ_KEYS[K_ORC_SEQ] = 1;
+
+  function salvarFila(){ try{ localStorage.setItem(K_FILA, JSON.stringify(fila)); }catch(e){} }
+  function filaTamanho(){ return Object.keys(fila).length; }
+
+  // JSON com chaves em ordem fixa (o jsonb da nuvem reordena as chaves; sem isso o "mesmo" valor pareceria diferente)
+  function canon(v){
+    if (v===null || typeof v!=="object") return JSON.stringify(v);
+    if (Array.isArray(v)) return "["+v.map(canon).join(",")+"]";
+    return "{"+Object.keys(v).sort().filter(function(k){ return v[k]!==undefined; }).map(function(k){ return JSON.stringify(k)+":"+canon(v[k]); }).join(",")+"}";
+  }
+  function hash53(s){ // cyrb53
+    var h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (var i=0,ch;i<s.length;i++){ ch = s.charCodeAt(i); h1 = Math.imul(h1^ch, 2654435761); h2 = Math.imul(h2^ch, 1597334677); }
+    h1 = Math.imul(h1^(h1>>>16), 2246822507) ^ Math.imul(h2^(h2>>>13), 3266489909);
+    h2 = Math.imul(h2^(h2>>>16), 2246822507) ^ Math.imul(h1^(h1>>>13), 3266489909);
+    return (4294967296*(2097151&h2)+(h1>>>0)).toString(36);
+  }
+  function hashValor(v){ return hash53(canon(v)); }
+  // lista de objetos, cada um com id, sem ids repetidos => dá para juntar item a item
+  function listaMesclavel(v){
+    if (!Array.isArray(v)) return false;
+    var vistos = {};
+    for (var i=0;i<v.length;i++){
+      var x = v[i];
+      if (!x || typeof x!=="object" || Array.isArray(x) || x.id===undefined || x.id===null || x.id==="") return false;
+      var id = String(x.id);
+      if (vistos[id]) return false;
+      vistos[id] = 1;
+    }
+    return true;
+  }
+  function mapaHash(lista){
+    var m = {};
+    lista.forEach(function(x){ m[String(x.id)] = hashValor(x); });
+    return m;
+  }
+  // junção de 3 vias: base = o que a nuvem tinha da última vez que sincronizamos; local = este aparelho; remoto = nuvem agora
+  function mesclar3(base, local, remoto){
+    var rm = {}, usados = {}, out = [];
+    remoto.forEach(function(x){ rm[String(x.id)] = x; });
+    local.forEach(function(x){
+      var id = String(x.id), hL = hashValor(x);
+      usados[id] = 1;
+      var noR = rm.hasOwnProperty(id), noB = !!base && base.hasOwnProperty(id);
+      if (noR){
+        if (!base || !noB) out.push(x);                  // criada aqui (ou sem base): vale a daqui
+        else if (hL !== base[id]) out.push(x);           // editada aqui: vale a daqui
+        else if (hashValor(rm[id]) === hL) out.push(x);  // igual nos dois: mantém o objeto da tela
+        else out.push(rm[id]);                           // só outro aparelho mexeu: vale a da nuvem
+      } else if (noB){
+        if (hL !== base[id]) out.push(x);                // outro aparelho apagou, mas editei aqui: mantém
+        // senão: foi apagada em outro aparelho e não mexi: some também
+      } else out.push(x);                                // criada aqui
+    });
+    remoto.forEach(function(x){
+      var id = String(x.id);
+      if (usados[id]) return;
+      var noB = !!base && base.hasOwnProperty(id);
+      if (!noB) out.push(x);                             // criada em outro aparelho
+      else if (hashValor(x) !== base[id]) out.push(x);   // apaguei aqui, mas outro aparelho editou: mantém
+      // senão: apaguei aqui: continua apagada
+    });
+    return out;
+  }
+  function parseSeguro(raw){ if (raw===null || raw===undefined) return undefined; try{ return JSON.parse(raw); }catch(e){ return undefined; } }
+
+  // listas que o usuário pode estar editando na tela, ainda não gravadas no navegador
+  function memoriaDe(key){
+    try{
+      if (key.indexOf(K_ROWS)===0 && state.saving && key===K_ROWS+state.date && Array.isArray(state.rows))
+        return {get:function(){ return state.rows; }, set:function(v){ state.rows = v; }};
+      if (key.indexOf(K_NOVOS)===0 && novosPend && novosKey(novosPend.month)===key)
+        return {get:function(){ return novosPend.list; }, set:function(v){
+          novosPend.list = v;
+          var dd = state.novosRowsDate;
+          if (state.novosRows && dd && dd.slice(0,7)===novosPend.month) state.novosRows = v.filter(function(n){ return n.date===dd; });
+        }};
+    }catch(e){}
+    return null;
   }
 
-  // baixa tudo da nuvem e grava no localStorage (usado ao abrir o app)
-  // cb recebe true se a nuvem já tinha dados, false se estava vazia
-  function cloudPullAll(cb){
-    if (!sb) return cb(false);
-    // O Supabase devolve no máximo 1000 linhas por consulta: sem paginar, o que passa disso (vendas de
-    // vários dias/meses) simplesmente não é baixado e "some" da tela. Por isso baixamos em páginas.
-    var PAGINA = 500, todas = [];
-    function falhou(err){
-      cloudStatus = "error"; console.error("Erro ao baixar dados da nuvem", err);
-      // true de propósito: com a nuvem falhando NÃO devemos subir os dados locais por cima dela
-      cb(true);
+  // registra que a chave tem algo a enviar (chamado ANTES de gravar no navegador, para guardar a base)
+  function filaMarcar(key){
+    if (!sb || fila[key]) return;
+    var base = null;
+    var antigo = parseSeguro(localStorage.getItem(key));
+    if (antigo===undefined) base = {};
+    else if (listaMesclavel(antigo)) base = mapaHash(antigo);
+    fila[key] = {n:0, base:base};
+  }
+
+  // incorpora a versão da nuvem (rv) a este aparelho SEM perder o que está pendente aqui.
+  // devolve true se o conteúdo local mudou (a tela precisa ser atualizada)
+  function aplicarRemoto(key, rv, updatedAt){
+    if (updatedAt) visto[key] = updatedAt;
+    var ent = fila[key], mem = memoriaDe(key), rawLocal = localStorage.getItem(key);
+    var localAntes = parseSeguro(rawLocal);
+    if (!ent && !mem){
+      if (localAntes!==undefined && canon(localAntes)===canon(rv)) return false;
+      try{ localStorage.setItem(key, JSON.stringify(rv)); }catch(e){}
+      return true;
     }
-    function pagina(de){
-      sb.from("kv_store").select("key,value").not("key","like",K_BKP+"%").not("key","like",K_FOTOMES+"%").not("key","like",K_ARQ+"%").order("key",{ascending:true}).range(de, de+PAGINA-1).then(function(res){
-        if (!res || res.error || !res.data){ return falhou(res && res.error); }
-        todas = todas.concat(res.data);
-        if (res.data.length === PAGINA) return pagina(de+PAGINA);
-        todas.forEach(function(row){
-          if (row.key.indexOf(K_ARQ)===0) return; // arquivo morto fica só na nuvem (não ocupa espaço do navegador)
-          try{ localStorage.setItem(row.key, JSON.stringify(row.value)); }catch(e){}
+    var local = mem ? mem.get() : localAntes;
+    if (!(listaMesclavel(rv) && listaMesclavel(local))) return false; // pendente e não dá para juntar: vale o daqui (vai ser enviado)
+    var base = ent ? ent.base : (localAntes!==undefined && listaMesclavel(localAntes) ? mapaHash(localAntes) : {});
+    var merged = mesclar3(base, local, rv);
+    var mudouLocal = canon(merged)!==canon(local);
+    if (mem) mem.set(merged);
+    try{ localStorage.setItem(key, JSON.stringify(merged)); }catch(e){}
+    if (canon(merged)!==canon(rv)){
+      fila[key] = {n:(ent?ent.n:0)+1, base:mapaHash(rv)}; salvarFila(); agendarFila(300);
+    } else if (ent){ delete fila[key]; salvarFila(); }
+    return mudouLocal;
+  }
+
+  function registrarEco(key, valor){
+    var a = ecos[key] = ecos[key] || [];
+    a.push(hashValor(valor));
+    if (a.length>40) a.shift();
+  }
+  function novoTs(anterior){
+    var t = new Date().toISOString();
+    return t===anterior ? new Date(Date.now()+1).toISOString() : t;
+  }
+  function casAtualizar(key, valor, ua){
+    registrarEco(key, valor);
+    return sb.from("kv_store").update({value:valor, updated_at:novoTs(ua)}).eq("key",key).eq("updated_at",ua).select("key,updated_at").then(function(res){
+      if (res && res.error) throw res.error;
+      var d = res && res.data;
+      return d && d.length ? {ok:true, ua:d[0].updated_at} : {ok:false};
+    });
+  }
+  function casInserir(key, valor){
+    registrarEco(key, valor);
+    return sb.from("kv_store").insert({key:key, value:valor, updated_at:new Date().toISOString()}).select("key,updated_at").then(function(res){
+      if (res && res.error){ if (res.error.code==="23505" || /duplicate/i.test(res.error.message||"")) return {ok:false}; throw res.error; }
+      var d = res && res.data;
+      return {ok:true, ua:(d && d[0] && d[0].updated_at) || null};
+    });
+  }
+  function upsertSimples(key, valor){
+    registrarEco(key, valor);
+    return sb.from("kv_store").upsert({key:key, value:valor, updated_at:new Date().toISOString()}).then(function(res){
+      if (res && res.error) throw res.error;
+      return {ok:true};
+    });
+  }
+
+  // envia UMA chave; resolve com o valor final gravado na nuvem (já juntado com o dos outros aparelhos)
+  function enviarUma(key, ent){
+    var local;
+    if (ent.v!==undefined) local = ent.v;
+    else { local = parseSeguro(localStorage.getItem(key)); if (local===undefined) return Promise.resolve({vazio:true}); }
+    if (!listaMesclavel(local)){
+      if (SEQ_KEYS[key] && typeof local==="number"){ // contadores: nunca voltam para trás
+        return sb.from("kv_store").select("value").eq("key",key).limit(1).then(function(res){
+          if (res && res.error) throw res.error;
+          var r = res.data && res.data[0] && res.data[0].value;
+          if (typeof r==="number" && r>local){ local = r; try{ localStorage.setItem(key, String(r)); }catch(e){} }
+          return upsertSimples(key, local).then(function(){ return {valor:local, lww:true}; });
         });
-        cloudStatus = "on";
-        cb(todas.length>0);
-      }).catch(falhou);
+      }
+      return upsertSimples(key, local).then(function(){ return {valor:local, lww:true}; });
+    }
+    if (ent.f) return upsertSimples(key, local).then(function(){ return {valor:local, lww:true}; });
+    var tent = 0;
+    function ciclo(){
+      tent++;
+      if (tent>6){ return upsertSimples(key, local).then(function(){ return {valor:local, lww:true}; }); }
+      if (tent===1 && visto[key]){ // ninguém mexeu desde a última vez que vimos: troca direto, sem baixar nada
+        return casAtualizar(key, local, visto[key]).then(function(r){ return r.ok ? {valor:local, ua:r.ua} : ciclo(); });
+      }
+      return sb.from("kv_store").select("value,updated_at").eq("key",key).limit(1).then(function(res){
+        if (res && res.error) throw res.error;
+        var rem = res.data && res.data[0];
+        if (!rem) return casInserir(key, local).then(function(r){ return r.ok ? {valor:local, ua:r.ua} : ciclo(); });
+        var merged = listaMesclavel(rem.value) ? mesclar3(ent.base, local, rem.value) : local;
+        return casAtualizar(key, merged, rem.updated_at).then(function(r){ return r.ok ? {valor:merged, ua:r.ua} : ciclo(); });
+      });
+    }
+    return ciclo();
+  }
+
+  function enviarChave(key){
+    if (!sb) return Promise.resolve(false);
+    var ent = fila[key];
+    if (!ent) return Promise.resolve(true);
+    if (emVoo[key]) return emVoo[key];
+    var nIni = ent.n;
+    var p = enviarUma(key, ent).then(function(r){
+      emVoo[key] = null;
+      var cur = fila[key];
+      if (r && r.vazio){ delete fila[key]; salvarFila(); return true; }
+      if (cur && cur.n===nIni){ delete fila[key]; salvarFila(); }   // nada novo durante o envio: está limpo
+      if (r && r.ua) visto[key] = r.ua;
+      // traz para cá o que os outros aparelhos tinham (e preserva o que foi digitado durante o envio)
+      if (!r.lww && aplicarRemoto(key, r.valor, r.ua) && remoteChangeCb) remoteChangeCb(key);
+      if (fila[key]) agendarFila(200); // gravou de novo enquanto enviava
+      return true;
+    }, function(err){
+      emVoo[key] = null;
+      console.error("Erro ao sincronizar", key, err);
+      return false;
+    });
+    emVoo[key] = p;
+    return p;
+  }
+
+  // envia a fila inteira (4 por vez); falhas ficam na fila e são tentadas de novo com espera crescente
+  function flushFila(){
+    if (!sb) return Promise.resolve();
+    var chaves = Object.keys(fila);
+    if (!chaves.length){ filaFalhas = 0; if (cloudStatus==="error" && cloudPronto){ cloudStatus = "on"; } refreshSyncBadge(); return Promise.resolve(); }
+    var falhou = false, idx = 0;
+    function worker(){
+      if (idx>=chaves.length) return Promise.resolve();
+      var k = chaves[idx++];
+      return enviarChave(k).then(function(ok){ if (!ok) falhou = true; }).then(worker);
+    }
+    return Promise.all([worker(), worker(), worker(), worker()]).then(function(){
+      if (falhou){
+        filaFalhas++; cloudStatus = "error";
+        agendarFila(Math.min(60000, 2000*Math.pow(2, filaFalhas-1)));
+      } else {
+        filaFalhas = 0;
+        if (cloudStatus!=="on") cloudStatus = "on";
+        if (filaTamanho()) agendarFila(200);
+      }
+      refreshSyncBadge();
+    });
+  }
+  function agendarFila(ms){
+    clearTimeout(filaTimer);
+    filaTimer = setTimeout(function(){ flushFila(); }, ms===undefined ? 150 : ms);
+  }
+
+  // marca uma chave para ir à nuvem (já salva no navegador antes de chamar)
+  function cloudPush(key, value, forcar){
+    if (!sb) return;
+    var ent = fila[key] || (fila[key] = {n:0, base:null});
+    ent.n++;
+    if (forcar) ent.f = true;
+    if (key.indexOf("vo_")!==0 || localStorage.getItem(key)===null) ent.v = value; else delete ent.v;
+    salvarFila();
+    refreshSyncBadge();
+    agendarFila(150);
+  }
+
+  // baixa da nuvem e incorpora ao aparelho. desde=null: tudo; senão só o que mudou desde essa data.
+  // cb(erro, {total, mudou:[chaves]})
+  function puxar(desde, cb){
+    var PAGINA = 500, total = 0, mudou = [], maxUa = cursorNuvem;
+    function pagina(de){
+      var q = sb.from("kv_store").select("key,value,updated_at").not("key","like",K_BKP+"%").not("key","like",K_FOTOMES+"%").not("key","like",K_ARQ+"%");
+      if (desde) q = q.gte("updated_at", desde);
+      q.order("key",{ascending:true}).range(de, de+PAGINA-1).then(function(res){
+        if (!res || res.error || !res.data) return cb((res && res.error) || new Error("sem dados"));
+        res.data.forEach(function(row){
+          total++;
+          if (row.updated_at && (!maxUa || new Date(row.updated_at)>new Date(maxUa))) maxUa = row.updated_at;
+          try{ if (aplicarRemoto(row.key, row.value, row.updated_at)) mudou.push(row.key); }catch(e){ console.error("aplicarRemoto", row.key, e); }
+        });
+        if (res.data.length===PAGINA) return pagina(de+PAGINA);
+        cursorNuvem = maxUa;
+        cb(null, {total:total, mudou:mudou});
+      }).catch(function(e){ cb(e); });
     }
     pagina(0);
   }
 
-  // envia TUDO que já está salvo neste navegador pra nuvem de uma vez
-  // (usado na primeira ativação, e também pelo botão manual "Enviar pra nuvem")
-  function pushAllLocalToCloud(){
+  // baixa tudo da nuvem (usado ao abrir o app); cb recebe true se a nuvem já tinha dados
+  // O que estiver pendente neste aparelho é JUNTADO, nunca substituído.
+  function cloudPullAll(cb){
+    if (!sb) return cb(false);
+    puxar(null, function(err, r){
+      if (err){
+        cloudStatus = "error"; console.error("Erro ao baixar dados da nuvem", err);
+        return cb(true); // true de propósito: com a nuvem falhando NÃO subimos os dados locais por cima dela
+      }
+      cloudStatus = "on";
+      cb(r.total>0);
+    });
+  }
+
+  // envia TUDO que já está salvo neste navegador pra nuvem
+  // forcar=true: nuvem vazia (primeira ativação), grava direto; senão junta com o que já existe lá
+  function pushAllLocalToCloud(forcar){
     if (!sb) return 0;
     var n = 0;
     for (var i=0;i<localStorage.length;i++){
@@ -1074,37 +1331,79 @@ window.__voReady.then(function(){
       if (!k || k.indexOf("vo_")!==0 || k===K_AUTOBACKUP) continue;
       try{
         var val = JSON.parse(localStorage.getItem(k));
-        cloudPush(k, val);
+        cloudPush(k, val, forcar===true);
         n++;
       }catch(e){ /* ignora chave que não seja JSON válido */ }
     }
     return n;
   }
 
+  // sincroniza agora: envia pendências e baixa o que mudou (ao voltar do segundo plano, ao reconectar, a cada 90 s)
+  var sincEmAndamento = false, ultimoSync = 0, ultimoCompleto = Date.now();
+  function cloudSyncNow(forcar){
+    if (!sb || !cloudPronto || sincEmAndamento) return;
+    var agora = Date.now();
+    if (!forcar && agora-ultimoSync < 8000) return;
+    sincEmAndamento = true; ultimoSync = agora;
+    var completo = (agora-ultimoCompleto > 30*60000) || !cursorNuvem;
+    var desde = completo ? null : new Date(new Date(cursorNuvem).getTime()-5*60000).toISOString();
+    flushFila().then(function(){
+      puxar(desde, function(err, r){
+        sincEmAndamento = false;
+        if (err){ console.error("Sincronização", err); cloudStatus = "error"; refreshSyncBadge(); return; }
+        if (completo) ultimoCompleto = Date.now();
+        if (!filaTamanho()){ cloudStatus = "on"; }
+        refreshSyncBadge();
+        if (remoteChangeCb) r.mudou.forEach(function(k){ try{ remoteChangeCb(k); }catch(e){ console.error(e); } });
+      });
+    }).catch(function(e){ sincEmAndamento = false; console.error(e); });
+  }
+  document.addEventListener("visibilitychange", function(){
+    if (document.visibilityState==="visible") cloudSyncNow(true);
+    else { try{ flushSaveNow(); }catch(e){} agendarFila(0); }
+  });
+  window.addEventListener("pageshow", function(){ cloudSyncNow(true); });
+  window.addEventListener("pagehide", function(){ try{ flushSaveNow(); }catch(e){} agendarFila(0); });
+  window.addEventListener("online", function(){ filaFalhas = 0; cloudSyncNow(true); });
+  window.addEventListener("focus", function(){ cloudSyncNow(false); });
+  setInterval(function(){ if (document.visibilityState==="visible" && navigator.onLine!==false) cloudSyncNow(false); }, 90000);
+
   // escuta mudanças feitas em OUTROS aparelhos e atualiza a tela na hora
+  var primeiraInscricao = true;
   function initCloudSync(onRemoteChange){
     if (!sb) return;
+    remoteChangeCb = onRemoteChange;
+    cloudPronto = true;
+    ultimoCompleto = Date.now();
+    agendarFila(0); // pendências guardadas de antes (ex.: vendas feitas sem internet)
     sb.channel("kv_store_changes")
       .on("postgres_changes", {event:"*", schema:"public", table:"kv_store"}, function(payload){
         var row = payload.new;
         if (!row || !row.key) return;
         if (row.key.indexOf(K_ARQ)===0 || row.key.indexOf(K_BKP)===0 || row.key.indexOf(K_FOTOMES)===0) return; // arquivo morto, backups e fotos: só nuvem
-        var ecos = pendingEchoKeys[row.key];
-        if (ecos && ecos.length){
-          var limiteEco = Date.now() - 30000;
-          while (ecos.length && ecos[0] < limiteEco) ecos.shift(); // marca antiga demais: o eco nunca chegou
-          if (ecos.length){
-            // é só o eco da nossa própria digitação/salvamento: o que temos aqui já é o mais novo
-            // (não regrava o navegador com uma versão que pode estar uma digitação atrás) e não redesenha a tela
-            ecos.shift();
-            return;
-          }
+        function tratar(valor){
+          // é o eco de algo que NÓS gravamos? reconhece pelo conteúdo (não por horário)
+          var e = ecos[row.key];
+          if (e && e.indexOf(hashValor(valor))>-1){ if (row.updated_at) visto[row.key] = row.updated_at; return; }
+          if (aplicarRemoto(row.key, valor, row.updated_at)) onRemoteChange(row.key);
         }
-        try{ localStorage.setItem(row.key, JSON.stringify(row.value)); }catch(e){}
-        onRemoteChange(row.key);
+        if (row.value===undefined){ // conteúdo grande demais para o aviso em tempo real: baixa a chave
+          sb.from("kv_store").select("value,updated_at").eq("key",row.key).limit(1).then(function(res){
+            var r = res && res.data && res.data[0];
+            if (r){ row.updated_at = r.updated_at; tratar(r.value); }
+          });
+          return;
+        }
+        tratar(row.value);
       })
       .subscribe(function(status){
-        if (status==="SUBSCRIBED"){ cloudStatus = "on"; refreshSyncBadge(); }
+        if (status==="SUBSCRIBED"){
+          cloudStatus = filaTamanho() ? cloudStatus : "on"; refreshSyncBadge();
+          if (!primeiraInscricao) cloudSyncNow(true); // reconectou: recupera o que passou enquanto estava fora
+          primeiraInscricao = false;
+        } else if (status==="CHANNEL_ERROR" || status==="TIMED_OUT" || status==="CLOSED"){
+          cloudStatus = "error"; refreshSyncBadge();
+        }
       });
   }
 
@@ -1164,6 +1463,7 @@ window.__voReady.then(function(){
     try{
       try{ auditarVendas(key, obj); }catch(e){ /* a auditoria nunca pode impedir de salvar */ }
       var txt = JSON.stringify(obj);
+      try{ filaMarcar(key); }catch(e){ /* guarda a base da junção antes de gravar */ }
       try{ localStorage.setItem(key, txt); }
       catch(e){
         var ok = false;
@@ -2519,10 +2819,10 @@ window.__voReady.then(function(){
     });
   }
 
-  // ======================= BACKUP NA NUVEM (Supabase): a cada 30 min, guarda os 10 mais recentes =======================
+  // ======================= BACKUP NA NUVEM (Supabase): a cada 30 min (10 mais recentes) + 1 por dia (30 dias) =======================
   // Cada backup é uma linha da tabela kv_store com chave "bkp:<hora>". Quando entra o 11º, o mais antigo é apagado.
   var K_BKP_SIG = "bkpnuvem_sig"; // (sem "vo_": não entra no backup e não sobe para a nuvem)
-  var BKP_INTERVALO = 30*60*1000, BKP_MAX = 10;
+  var BKP_INTERVALO = 30*60*1000, BKP_MAX = 10, BKP_DIAS = 30;
   var bkpPronto = false, bkpEmAndamento = false;
   // conta escolhida pelo master (userId vazio = automático: qualquer conta com acesso às vendas faz, como antes)
   function bkpContaEscolhida(){ var c = lsGetJSON(K_BKP_CONTA, null); return (c && c.userId) ? c : null; }
@@ -2552,50 +2852,74 @@ window.__voReady.then(function(){
     return new Response(stream).text();
   }
   function listarBackupsNuvem(){
-    return sb.from("kv_store").select("key,ts:value->>ts,motivo:value->>motivo,por:value->>por,bytes:value->>bytes,chaves:value->>chaves")
+    return sb.from("kv_store").select("key,ts:value->>ts,motivo:value->>motivo,por:value->>por,bytes:value->>bytes,chaves:value->>chaves,tipo:value->>tipo,dia:value->>dia")
       .like("key", K_BKP+"%").order("key",{ascending:true}).then(function(res){
         if (!res || res.error) throw new Error((res && res.error && res.error.message) || "Falha ao listar os backups da nuvem.");
         return (res.data||[]).map(function(r){
-          return {key:r.key, ts:parseInt(r.ts,10)||0, motivo:r.motivo||"", por:r.por||"", bytes:parseInt(r.bytes,10)||0, chaves:parseInt(r.chaves,10)||0};
-        });
+          return {key:r.key, ts:parseInt(r.ts,10)||0, motivo:r.motivo||"", por:r.por||"", bytes:parseInt(r.bytes,10)||0, chaves:parseInt(r.chaves,10)||0, tipo:r.tipo||"", dia:r.dia||""};
+        }).sort(function(a,b){ return a.ts-b.ts; }); // do mais antigo para o mais novo (os diários têm chave própria)
       });
   }
-  // mantém só os BKP_MAX mais recentes: o que passar disso (o mais antigo) é apagado
+  function bkpNormais(lista){ return lista.filter(function(b){ return b.tipo!=="dia"; }); }
+  function bkpDiarios(lista){ return lista.filter(function(b){ return b.tipo==="dia"; }); }
+  // mantém só os BKP_MAX backups de 30 min mais recentes e os BKP_DIAS diários mais recentes: o excedente (o mais antigo) é apagado
   function podarBackupsNuvem(){
     return listarBackupsNuvem().then(function(lista){
-      var excesso = lista.length - BKP_MAX;
-      if (excesso<=0) return 0;
-      var apagar = lista.slice(0, excesso).map(function(b){ return b.key; });
+      var apagar = [];
+      var n = bkpNormais(lista), d = bkpDiarios(lista);
+      if (n.length>BKP_MAX) apagar = apagar.concat(n.slice(0, n.length-BKP_MAX).map(function(b){ return b.key; }));
+      if (d.length>BKP_DIAS) apagar = apagar.concat(d.slice(0, d.length-BKP_DIAS).map(function(b){ return b.key; }));
+      if (!apagar.length) return 0;
       return sb.from("kv_store").delete().in("key", apagar).select("key").then(function(res){
         if (res && res.error) throw new Error("Backup guardado, mas não consegui apagar o mais antigo: "+res.error.message);
-        var n = (res && res.data) ? res.data.length : 0;
-        if (n < apagar.length) throw new Error("Backup guardado, mas o Supabase não deixou apagar o mais antigo (falta permissão de DELETE na tabela kv_store).");
-        return n;
+        var c = (res && res.data) ? res.data.length : 0;
+        if (c < apagar.length) throw new Error("Backup guardado, mas o Supabase não deixou apagar o mais antigo (falta permissão de DELETE na tabela kv_store).");
+        return c;
       });
     });
   }
   // manual=true ignora as travas "já fez há pouco" e "nada mudou"
+  // Além do backup de 30 min, guarda 1 backup por dia (o primeiro do dia, com o estado de ontem à noite), por 30 dias.
   function backupNuvemAgora(manual){
     if (!sb || !state.userId) return Promise.reject(new Error("Entre na sua conta para guardar backups na nuvem."));
     if (bkpEmAndamento) return Promise.resolve({pulou:"andamento"});
     bkpEmAndamento = true;
-    var agora = Date.now(), txt = "", sig = "";
+    var agora = Date.now(), txt = "", sig = "", hoje = toISO(new Date());
     return listarBackupsNuvem().then(function(lista){
-      var ult = lista.length ? lista[lista.length-1].ts : 0;
+      var normais = bkpNormais(lista), diarios = bkpDiarios(lista);
+      var ult = normais.length ? normais[normais.length-1].ts : 0;
+      var precisaDiario = !diarios.some(function(b){ return b.dia===hoje; });
       // outro aparelho aberto pode ter acabado de fazer: não duplica
-      if (!manual && agora-ult < BKP_INTERVALO-60000) return {pulou:"recente"};
+      var recente = !manual && agora-ult < BKP_INTERVALO-60000;
+      if (recente && !precisaDiario) return {pulou:"recente"};
       var data = dadosParaSnapshot(), chaves = Object.keys(data).length;
       if (!chaves) return {pulou:"vazio"};
       txt = JSON.stringify(data); sig = txt.length+":"+hashTexto(txt);
       var sigAnt = ""; try{ sigAnt = localStorage.getItem(K_BKP_SIG) || ""; }catch(e){}
       // sem nenhuma alteração desde o último backup: não gasta uma das 10 vagas com uma cópia igual
-      if (!manual && sig===sigAnt && lista.length) return {pulou:"semmudanca"};
+      var semMudanca = !manual && sig===sigAnt && normais.length>0;
+      var fazNormal = !recente && !semMudanca;
+      if (!fazNormal && !precisaDiario) return {pulou:"semmudanca"};
       return gzipB64(txt).then(function(z){
-        var valor = {ts:agora, motivo:manual ? "Manual" : "Automático (30 min)", por:state.userEmail||"", chaves:chaves, bytes:txt.length, enc:z.enc, d:z.d};
-        return sb.from("kv_store").upsert({key:bkpChave(agora), value:valor, updated_at:new Date().toISOString()}).then(function(res){
-          if (res && res.error) throw new Error(res.error.message || "A nuvem recusou o backup.");
-          try{ localStorage.setItem(K_BKP_SIG, sig); }catch(e){}
-          state.bkpUltimo = agora; state.bkpErro = "";
+        var base = {por:state.userEmail||"", chaves:chaves, bytes:txt.length, enc:z.enc, d:z.d};
+        var passos = Promise.resolve();
+        if (fazNormal) passos = passos.then(function(){
+          var valor = Object.assign({ts:agora, motivo:manual ? "Manual" : "Automático (30 min)"}, base);
+          return sb.from("kv_store").upsert({key:bkpChave(agora), value:valor, updated_at:new Date().toISOString()}).then(function(res){
+            if (res && res.error) throw new Error(res.error.message || "A nuvem recusou o backup.");
+            try{ localStorage.setItem(K_BKP_SIG, sig); }catch(e){}
+            state.bkpUltimo = agora; state.bkpErro = "";
+          });
+        });
+        if (precisaDiario) passos = passos.then(function(){
+          var valor = Object.assign({ts:agora, tipo:"dia", dia:hoje, motivo:"Diário ("+hoje.split("-").reverse().join("/")+")"}, base);
+          // chave própria do dia: se outro aparelho já criou o de hoje, não regrava
+          return sb.from("kv_store").upsert({key:K_BKP+"dia:"+hoje, value:valor, updated_at:new Date().toISOString()}, {onConflict:"key", ignoreDuplicates:true}).then(function(res){
+            if (res && res.error) throw new Error(res.error.message || "A nuvem recusou o backup diário.");
+            state.bkpUltimo = agora; state.bkpErro = "";
+          });
+        });
+        return passos.then(function(){
           return podarBackupsNuvem().then(function(apagados){ return {ok:true, ts:agora, apagados:apagados}; });
         });
       });
@@ -2916,7 +3240,7 @@ window.__voReady.then(function(){
         '<button class="btn ghost small" id="ferSnapNow" style="margin-bottom:10px;">Fazer backup agora</button>'+
         '<div id="ferSnaps"></div>'+
         '<h4 style="margin:18px 0 6px;font-size:17px;">Backups na nuvem (Supabase)</h4>'+
-        '<p>Automático a cada 30 minutos (só se algo mudou), feito pela conta escolhida abaixo. Guarda os 10 mais recentes: ao entrar o 11º, o mais antigo é apagado. Restaurar também atualiza as telas.</p>'+
+        '<p>Automático a cada 30 minutos (só se algo mudou), feito pela conta escolhida abaixo. Guarda os 10 mais recentes (ao entrar o 11º, o mais antigo é apagado) e, além deles, 1 backup por dia (o primeiro do dia) pelos últimos 30 dias. Restaurar também atualiza as telas.</p>'+
         '<div id="ferConta" style="margin:0 0 14px;"></div>'+
         '<button class="btn ghost small" id="ferNuvemNow" style="margin-bottom:10px;">☁ Fazer backup na nuvem agora</button>'+
         '<div id="ferNuvem"></div>'+
@@ -2954,7 +3278,7 @@ window.__voReady.then(function(){
       listarBackupsNuvem().then(function(lista){
         lista = lista.slice().reverse();
         if (!lista.length){ box.innerHTML = '<p>Ainda não há backups na nuvem. O primeiro é feito sozinho em instantes, ou clique em "Fazer backup na nuvem agora".</p>'; return; }
-        box.innerHTML = '<p style="font-size:13px;color:var(--text-dim);">'+lista.length+' de '+BKP_MAX+' backups guardados.</p>'+
+        box.innerHTML = '<p style="font-size:13px;color:var(--text-dim);">'+bkpNormais(lista).length+' de '+BKP_MAX+' backups de 30 min e '+bkpDiarios(lista).length+' de '+BKP_DIAS+' diários guardados.</p>'+
           '<div style="border:1px solid var(--border-soft);border-radius:4px;max-height:260px;overflow-y:auto;">'+lista.map(function(m){
           return '<div style="display:flex;gap:10px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--border-soft);flex-wrap:wrap;">'+
             '<div style="flex:1 1 220px;min-width:0;"><b>'+escHtml(new Date(m.ts).toLocaleString("pt-BR"))+'</b><div style="font-size:13px;color:var(--text-dim);">'+escHtml(m.motivo)+(m.por?' · '+escHtml(m.por):'')+' · '+m.chaves+' registros · '+Math.max(1,Math.round(m.bytes/1024))+' KB</div></div>'+
@@ -3028,7 +3352,7 @@ window.__voReady.then(function(){
     q("#ferNuvemNow").addEventListener("click", function(){
       var bt = q("#ferNuvemNow"); bt.disabled = true;
       backupNuvemAgora(true).then(function(r){
-        if (r && r.ok) alert("Backup guardado na nuvem."+(r.apagados ? " O mais antigo foi apagado para manter "+BKP_MAX+"." : ""));
+        if (r && r.ok) alert("Backup guardado na nuvem."+(r.apagados ? " O mais antigo foi apagado para manter o limite." : ""));
         else alert("Já existe um backup em andamento. Tente de novo em instantes.");
       }).catch(function(e){ alert("Não foi possível guardar o backup na nuvem: "+(e&&e.message?e.message:e)); })
         .then(function(){ bt.disabled = false; desenharNuvem(); });
@@ -7769,6 +8093,14 @@ window.__voReady.then(function(){
     }, 550);
   }
 
+  // grava já o que ainda está esperando o atraso de 550 ms (usado quando o app vai para o segundo plano)
+  function flushSaveNow(){
+    if (!state.saving) return;
+    clearTimeout(saveTimer);
+    try{ saveRows(state.date, state.rows); }catch(e){}
+    state.saving = false;
+  }
+
   // ---------- auth modal ----------
   function renderModal(){
     var ex = document.querySelector(".overlay");
@@ -12140,7 +12472,7 @@ window.__voReady.then(function(){
         (can("vendas") ? migrarBalanceamentoAuto : function(d){ d(); })(function(){
           if (typeof afterPull === "function") afterPull(); // ex: registrar o login já com os dados mais recentes em mãos
           render();
-          if (!hadRemoteData) pushAllLocalToCloud(); // primeira ativação: sobe o histórico local pra nuvem
+          if (!hadRemoteData) pushAllLocalToCloud(true); // primeira ativação: sobe o histórico local pra nuvem
           initCloudSync(handleRemoteChange);
           bkpPronto = true; // dados já baixados da nuvem: backups automáticos liberados
           avisarPendenciasNoBoot();
