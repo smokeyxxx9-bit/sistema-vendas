@@ -13,7 +13,9 @@ protocol.registerSchemesAsPrivileged([
   { scheme: "app", privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }
 ]);
 
-const WEB = path.join(__dirname, "web");
+// aceita os arquivos dentro da pasta "web" OU soltos na raiz do projeto
+const WEB = fs.existsSync(path.join(__dirname, "web", "index.html")) ? path.join(__dirname, "web") : __dirname;
+const ICONE = ["build/icon.ico", "icon.ico"].map(x => path.join(__dirname, x)).find(x => fs.existsSync(x));
 const MIME = {
   ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
   ".json": "application/json", ".webmanifest": "application/manifest+json", ".png": "image/png",
@@ -41,8 +43,10 @@ function criar() {
     try {
       let p = decodeURIComponent(new URL(req.url).pathname);
       if (p === "/" || p === "") p = "/index.html";
-      const f = path.normalize(path.join(WEB, p));
+      let f = path.normalize(path.join(WEB, p));
       if (!f.startsWith(WEB)) return new Response("negado", { status: 403 });
+      // /icons/xxx.png não existe se os ícones estiverem soltos na raiz: tenta lá
+      if (!fs.existsSync(f) && p.startsWith("/icons/")) f = path.join(WEB, path.basename(p));
       const data = await fs.promises.readFile(f);
       return new Response(data, { headers: { "content-type": MIME[path.extname(f).toLowerCase()] || "application/octet-stream" } });
     } catch (e) {
@@ -54,7 +58,7 @@ function criar() {
     width: 1366, height: 820, minWidth: 900, minHeight: 600,
     backgroundColor: "#0d1117",
     title: "Painel de Vendas — Oficina",
-    icon: path.join(__dirname, "build", "icon.ico"),
+    icon: ICONE,
     webPreferences: { contextIsolation: true, nodeIntegration: false, spellcheck: false }
   });
   Menu.setApplicationMenu(null);
