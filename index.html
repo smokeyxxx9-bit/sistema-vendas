@@ -3,6 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0d1117">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Oficina">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<style>
+/* iPhone: campos com fonte menor que 16px fazem o Safari dar zoom ao tocar; isto evita */
+@supports (-webkit-touch-callout:none){ input,select,textarea{ font-size:16px !important; } }
+</style>
 <title>Painel de Vendas — Oficina</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230d1117'/%3E%3Ccircle cx='32' cy='32' r='21' fill='none' stroke='%23f5b301' stroke-width='6'/%3E%3Ccircle cx='32' cy='32' r='8' fill='none' stroke='%23f5b301' stroke-width='4'/%3E%3Cpath d='M32 11v13M32 40v13M11 32h13M40 32h13' stroke='%23f5b301' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -12807,6 +12818,12 @@ window.__voReady.then(function(){
   document.body.appendChild(themeBtn);
 })();
 });
+</script>
+<script>
+/* instalável (iPhone/Android/PC pelo navegador): só registra quando aberto por http(s) */
+if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)){
+  window.addEventListener("load", function(){ navigator.serviceWorker.register("sw.js").catch(function(){}); });
+}
 </script>
 </body>
 </html>
