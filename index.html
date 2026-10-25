@@ -18,7 +18,40 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230d1117'/%3E%3Ccircle cx='32' cy='32' r='21' fill='none' stroke='%23f5b301' stroke-width='6'/%3E%3Ccircle cx='32' cy='32' r='8' fill='none' stroke='%23f5b301' stroke-width='4'/%3E%3Cpath d='M32 11v13M32 40v13M11 32h13M40 32h13' stroke='%23f5b301' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+/* Carrega a biblioteca do Supabase com plano B: tenta 3 endereços e, se a internet ainda não voltou
+   (ex.: PC acabou de ligar), usa a cópia guardada neste aparelho. Assim o sistema nunca abre "sem nuvem". */
+window.__sbLib = new Promise(function(resolve){
+  var URLS = ["https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js",
+              "https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js",
+              "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"];
+  var CK = "sblib_cache_v1", CT = "sblib_cache_ts", feito = false;
+  function fim(){ if (!feito){ feito = true; resolve(!!window.supabase); } }
+  function guardar(url){
+    try{
+      var ts = parseInt(localStorage.getItem(CT)||"0",10) || 0;
+      if (localStorage.getItem(CK) && Date.now()-ts < 7*86400000) return;
+      fetch(url).then(function(r){ return r.text(); }).then(function(t){
+        if (t && t.length>20000){ localStorage.setItem(CK, t); localStorage.setItem(CT, String(Date.now())); }
+      }).catch(function(){});
+    }catch(e){}
+  }
+  function doCache(){
+    try{ var t = localStorage.getItem(CK); if (t) (0,eval)(t); }catch(e){ console.error("cópia do supabase", e); }
+    fim();
+  }
+  function tenta(i){
+    if (window.supabase) return fim();
+    if (i>=URLS.length) return doCache();
+    var sc = document.createElement("script"), url = URLS[i], ok = false;
+    var t = setTimeout(function(){ if (!ok){ ok = true; tenta(i+1); } }, 7000);
+    sc.onload = function(){ if (ok) return; ok = true; clearTimeout(t); if (window.supabase){ guardar(url); fim(); } else tenta(i+1); };
+    sc.onerror = function(){ if (ok) return; ok = true; clearTimeout(t); tenta(i+1); };
+    sc.src = url; document.head.appendChild(sc);
+  }
+  tenta(0);
+});
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
@@ -846,7 +879,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
 window.__voReady = new Promise(function(resolve){
   var done = false; function fim(){ if(!done){ done = true; resolve(); } }
   try{
-    var real = window.localStorage, DB = "vo_store", ST = "kv";
+    var real = window.localStorage, DB = "vo_store", ST = "kv"; window.__voRealLS = real;
     var req = indexedDB.open(DB, 1);
     req.onupgradeneeded = function(){ req.result.createObjectStore(ST); };
     req.onerror = req.onblocked = fim;
@@ -868,7 +901,7 @@ window.__voReady = new Promise(function(resolve){
             mem["__vo_migrado"] = "1"; novos["__vo_migrado"] = "1";
           }
           function grava(k, v){
-            try{ var t = db.transaction(ST, "readwrite"); if (v===null) t.objectStore(ST).delete(k); else t.objectStore(ST).put(v, k); }
+            try{ var t; try{ t = db.transaction(ST, "readwrite", {durability:"strict"}); }catch(e0){ t = db.transaction(ST, "readwrite"); } if (v===null) t.objectStore(ST).delete(k); else t.objectStore(ST).put(v, k); }
             catch(e){ console.error("IndexedDB", e); }
           }
           for (var kk in novos) grava(kk, novos[kk]);
@@ -892,7 +925,8 @@ window.__voReady = new Promise(function(resolve){
 });
 </script>
 <script>
-window.__voReady.then(function(){
+window.__appReady = Promise.all([window.__voReady, window.__sbLib]);
+window.__appReady.then(function(){
 (function(){
   "use strict";
 
@@ -994,8 +1028,41 @@ window.__voReady.then(function(){
 
   var cloudStatus = "off"; // off | connecting | on | error
   var sb = null;
+  // ---- sessão do login: guardada no IndexedDB E numa cópia no localStorage real do navegador,
+  //      para continuar logado ao fechar o navegador, reiniciar o PC ou se um dos dois for limpo
+  var authStorage = {
+    getItem:function(k){
+      var v = null;
+      try{ v = localStorage.getItem(k); }catch(e){}
+      if (v===null && window.__voRealLS){ try{ v = window.__voRealLS.getItem(k); }catch(e){} }
+      return v;
+    },
+    setItem:function(k,v){
+      try{ localStorage.setItem(k,v); }catch(e){}
+      try{ if (window.__voRealLS && window.__voRealLS!==localStorage) window.__voRealLS.setItem(k,v); }catch(e){}
+    },
+    removeItem:function(k){
+      try{ localStorage.removeItem(k); }catch(e){}
+      try{ if (window.__voRealLS && window.__voRealLS!==localStorage) window.__voRealLS.removeItem(k); }catch(e){}
+    }
+  };
+  // ao fechar/esconder a página, envios pequenos usam "keepalive" para terminar mesmo com a aba fechando
+  var paginaSaindo = false, saindoPorMim = false;
+  function fetchSeguro(url, opts){
+    try{
+      if (paginaSaindo && opts && opts.method && opts.method!=="GET" && opts.method!=="HEAD" && typeof opts.body==="string" && opts.body.length<30000)
+        opts = Object.assign({}, opts, {keepalive:true});
+    }catch(e){}
+    return fetch(url, opts);
+  }
   if (window.supabase && SUPABASE_URL.indexOf("COLE_AQUI")===-1 && SUPABASE_ANON_KEY.indexOf("COLE_AQUI")===-1){
-    try{ sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); cloudStatus = "connecting"; }
+    try{
+      sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        auth:{ persistSession:true, autoRefreshToken:true, detectSessionInUrl:false, storage:authStorage },
+        global:{ fetch:fetchSeguro }
+      });
+      cloudStatus = "connecting";
+    }
     catch(e){ sb = null; }
   }
   // cliente auxiliar, sem sessão persistida — usado só para CRIAR novos logins (auth.signUp)
@@ -1025,7 +1092,8 @@ window.__voReady.then(function(){
 
   function syncBadgeHtml(){
     if (!sb) return '<span id="syncBadge" class="sync-badge off" title="Configure o Supabase no início do arquivo para sincronizar entre aparelhos">○ somente local</span>';
-    if (cloudStatus==="on") return '<span id="syncBadge" class="sync-badge on" title="Sincronizado com a nuvem">● nuvem conectada</span>';
+    if (cloudStatus==="on" && filaTamanho()) return '<span id="syncBadge" class="sync-badge connecting" title="Enviando para a nuvem. Já está salvo neste aparelho.">↻ enviando '+filaTamanho()+'…</span>';
+    if (cloudStatus==="on") return '<span id="syncBadge" class="sync-badge on" title="Tudo sincronizado com a nuvem">● nuvem conectada</span>';
     if (cloudStatus==="error") return '<span id="syncBadge" class="sync-badge error" title="Falha ao conectar com a nuvem — os dados continuam salvos neste aparelho e serão reenviados sozinhos">⚠ erro de conexão'+(filaTamanho()?' · '+filaTamanho()+' pendente(s)':'')+'</span>';
     return '<span id="syncBadge" class="sync-badge connecting" title="Conectando à nuvem...">○ conectando…</span>';
   }
@@ -1370,23 +1438,26 @@ window.__voReady.then(function(){
     }).catch(function(e){ sincEmAndamento = false; console.error(e); });
   }
   document.addEventListener("visibilitychange", function(){
-    if (document.visibilityState==="visible") cloudSyncNow(true);
-    else { try{ flushSaveNow(); }catch(e){} agendarFila(0); }
+    if (document.visibilityState==="visible"){ paginaSaindo = false; cloudSyncNow(true); }
+    else { paginaSaindo = true; try{ flushSaveNow(); }catch(e){} agendarFila(0); }
   });
-  window.addEventListener("pageshow", function(){ cloudSyncNow(true); });
-  window.addEventListener("pagehide", function(){ try{ flushSaveNow(); }catch(e){} agendarFila(0); });
+  window.addEventListener("pageshow", function(){ paginaSaindo = false; cloudSyncNow(true); });
+  window.addEventListener("pagehide", function(){ paginaSaindo = true; try{ flushSaveNow(); }catch(e){} agendarFila(0); });
+  window.addEventListener("beforeunload", function(){ paginaSaindo = true; try{ flushSaveNow(); }catch(e){} agendarFila(0); });
   window.addEventListener("online", function(){ filaFalhas = 0; cloudSyncNow(true); });
   window.addEventListener("focus", function(){ cloudSyncNow(false); });
   setInterval(function(){ if (document.visibilityState==="visible" && navigator.onLine!==false) cloudSyncNow(false); }, 90000);
 
   // escuta mudanças feitas em OUTROS aparelhos e atualiza a tela na hora
-  var primeiraInscricao = true;
+  var primeiraInscricao = true, canalAtivo = false;
   function initCloudSync(onRemoteChange){
     if (!sb) return;
     remoteChangeCb = onRemoteChange;
     cloudPronto = true;
     ultimoCompleto = Date.now();
     agendarFila(0); // pendências guardadas de antes (ex.: vendas feitas sem internet)
+    if (canalAtivo) return; // já está escutando (ex.: entrou de novo depois de a sessão expirar)
+    canalAtivo = true;
     sb.channel("kv_store_changes")
       .on("postgres_changes", {event:"*", schema:"public", table:"kv_store"}, function(payload){
         var row = payload.new;
@@ -7022,7 +7093,7 @@ window.__voReady.then(function(){
     else if (act==="nextmonth"){ state.dashMonth = addMonths(state.dashMonth,1); render(); }
     else if (act==="opentoday"){ openDate(today); }
     else if (act==="login"){ state.modal = {type:"auth", error:""}; render(); }
-    else if (act==="logout"){ state.authed=false; sessionStorage.removeItem("vf_auth"); render(); }
+    else if (act==="logout"){ state.authed=false; sessionStorage.removeItem("vf_auth"); try{ localStorage.removeItem(EDICAO_ATE); }catch(e){} render(); }
     else if (act==="evodia"){ state.evoMode="day"; try{ localStorage.setItem("vo_evo_mode","day"); }catch(e){} render(); }
     else if (act==="evoano"){ state.evoMode="year"; try{ localStorage.setItem("vo_evo_mode","year"); }catch(e){} render(); }
     else if (act==="cmpday"){ state.cmpMode="day"; render(); }
@@ -7049,7 +7120,9 @@ window.__voReady.then(function(){
     else if (act==="openos"){ if (can("os")){ state.view="os"; render(); } }
     else if (act==="openperfil"){ state.modal = {type:"perfil", error:""}; render(); }
     else if (act==="accountlogout"){
-      if (sb) sb.auth.signOut().then(function(){ location.reload(); });
+      saindoPorMim = true;
+      try{ localStorage.removeItem(PERFIL_CACHE); localStorage.removeItem(EDICAO_ATE); sessionStorage.removeItem("vf_auth"); }catch(e){}
+      if (sb) sb.auth.signOut().then(function(){ location.reload(); }, function(){ location.reload(); });
     }
     else if (act==="togglehide"){
       state.hideValues = !state.hideValues;
@@ -8108,10 +8181,10 @@ window.__voReady.then(function(){
         }
         alert("Não foi possível salvar as alterações. " + (err && err.message ? err.message : "Verifique o espaço de armazenamento do navegador."));
       });
-    }, 550);
+    }, 250);
   }
 
-  // grava já o que ainda está esperando o atraso de 550 ms (usado quando o app vai para o segundo plano)
+  // grava já o que ainda está esperando o atraso de 250 ms (usado quando o app vai para o segundo plano)
   function flushSaveNow(){
     if (!state.saving) return;
     clearTimeout(saveTimer);
@@ -8954,6 +9027,7 @@ window.__voReady.then(function(){
         pwErros = 0;
         state.authed = true;
         sessionStorage.setItem("vf_auth","1");
+        try{ if (state.role==="master") localStorage.setItem(EDICAO_ATE, String(Date.now()+30*86400000)); }catch(e){}
         state.modal = null;
         render();
       } else {
@@ -11888,7 +11962,7 @@ window.__voReady.then(function(){
         flag.classList.add("show");
         setTimeout(function(){ flag.classList.remove("show"); }, 1400);
       }
-    }, 550);
+    }, 250);
   }
   window.addEventListener("beforeunload", flushNovos);
   window.addEventListener("pagehide", flushNovos);
@@ -12473,22 +12547,56 @@ window.__voReady.then(function(){
   }
 
   // ---------- papel do usuário: "vendedor" (painel de vendas), "estoquista" (só estoque) ou "master" (tudo + histórico + usuários) ----------
+  var PERFIL_CACHE = "perfil_cache";      // sem "vo_": fica só neste aparelho (nunca vai para a nuvem nem para backups)
+  var EDICAO_ATE = "perfil_edicao_ate";   // modo edição lembrado (só master), por 30 dias
+  function lerPerfilCache(){ try{ return JSON.parse(localStorage.getItem(PERFIL_CACHE)||"null"); }catch(e){ return null; } }
+  function gravarPerfilCache(){
+    try{ localStorage.setItem(PERFIL_CACHE, JSON.stringify({id:state.userId, email:state.userEmail, nome:state.userNome, role:state.baseRole||state.role})); }catch(e){}
+  }
+  function aplicarPerfilCache(userId){
+    var c = lerPerfilCache();
+    if (!c || !c.role || (userId && c.id && c.id!==userId)) return false;
+    state.userId = c.id; state.userEmail = c.email||""; state.userNome = c.nome||""; state.role = c.role; state.baseRole = c.role;
+    return true;
+  }
+  // o modo edição (dias anteriores) fica liberado por 30 dias neste aparelho, mas só para o master
+  function restaurarEdicao(){
+    try{
+      if (state.role!=="master" || state.authed) return;
+      if ((parseInt(localStorage.getItem(EDICAO_ATE)||"0",10)||0) > Date.now()){ state.authed = true; sessionStorage.setItem("vf_auth","1"); }
+    }catch(e){}
+  }
   function loadRole(cb){
     if (!sb){ state.role = "vendedor"; return cb(); }
-    sb.auth.getUser().then(function(res){
-      var user = res && res.data && res.data.user;
-      if (!user){ state.role = "vendedor"; return cb(); }
+    // getSession lê o login guardado (renova se precisar); não depende de a internet já ter voltado
+    sb.auth.getSession().then(function(res){
+      var user = res && res.data && res.data.session && res.data.session.user;
+      if (!user){
+        // sem internet ao abrir: usa o perfil guardado, em vez de virar "vendedor" por engano
+        if (aplicarPerfilCache()){ restaurarEdicao(); return cb(); }
+        state.role = "vendedor"; return cb();
+      }
       state.userEmail = emailExibicao(user);
       state.userId = user.id;
       state.userNome = (user.user_metadata && user.user_metadata.nome) || (function(){ try{ return localStorage.getItem("perfil_nome")||""; }catch(e){ return ""; } })();
+      function usarCache(){
+        if (aplicarPerfilCache(user.id)){ restaurarEdicao(); return cb(); }
+        state.role = "vendedor"; state.baseRole = state.role; cb();
+      }
       sb.from("perfis").select("papel").eq("user_id", user.id).limit(1).then(function(r){
-        var row = r && r.data && r.data[0];
+        if (!r || r.error || !r.data) return usarCache(); // falha de rede/servidor: não rebaixa o papel
+        var row = r.data[0];
         var papel = row && row.papel;
         state.role = (papel === "estoquista" || papel === "master") ? papel : "vendedor";
         state.baseRole = state.role;
+        gravarPerfilCache();
+        restaurarEdicao();
         cb();
-      }).catch(function(){ state.role = "vendedor"; cb(); });
-    }).catch(function(){ state.role = "vendedor"; cb(); });
+      }).catch(usarCache);
+    }).catch(function(){
+      if (aplicarPerfilCache()){ restaurarEdicao(); return cb(); }
+      state.role = "vendedor"; cb();
+    });
   }
 
   function bootApp(afterPull){
@@ -12525,13 +12633,79 @@ window.__voReady.then(function(){
     if (baixo>0) window.uiToast("📉 "+baixo+" medida(s) abaixo do estoque mínimo.", "err", 8000);
   }
 
-  function checkAuthAndBoot(){
-    if (!sb){ bootApp(); return; } // sem Supabase configurado, não há como validar login sem expor a senha — segue liberado
+  // há um login guardado (com refresh_token) neste aparelho?
+  function temSessaoGuardada(){
+    function varre(st){
+      try{
+        for (var i=0;i<st.length;i++){
+          var k = st.key(i);
+          if (k && /^sb-.*-auth-token$/.test(k)){ var v = JSON.parse(st.getItem(k)||"null"); if (v && v.refresh_token) return true; }
+        }
+      }catch(e){}
+      return false;
+    }
+    return varre(localStorage) || (window.__voRealLS ? varre(window.__voRealLS) : false);
+  }
+
+  function renderSemNuvem(){
+    root.classList.remove("wide");
+    root.innerHTML =
+      '<div class="login-screen"><div class="login-card">'+
+        '<div class="brand"><span class="mark"></span><h1>Painel de Vendas</h1></div>'+
+        '<p class="hint">Não consegui conectar ao servidor. Verifique a internet; vou tentar de novo sozinho.</p>'+
+        '<button class="btn primary" id="semNuvemBtn">Tentar agora</button>'+
+      '</div></div>';
+    document.getElementById("semNuvemBtn").addEventListener("click", function(){ location.reload(); });
+    window.addEventListener("online", function(){ location.reload(); });
+    setTimeout(function(){ location.reload(); }, 15000);
+  }
+
+  // abriu "sem sessão" por falta de internet: fica de olho e, quando a internet volta, renova o login e envia a fila
+  var vigiaSessao = false;
+  function vigiarSessao(){
+    if (vigiaSessao || !sb) return;
+    vigiaSessao = true;
+    function tentar(){
+      sb.auth.getSession().then(function(res){
+        var session = res && res.data && res.data.session;
+        if (session){ state.offlineBoot = false; try{ cloudSyncNow(true); }catch(e){} agendarFila(0); return; }
+        if (!temSessaoGuardada()){ renderLoginScreen("Sua sessão expirou. Entre novamente."); return; }
+        setTimeout(tentar, 15000);
+      }).catch(function(){ setTimeout(tentar, 15000); });
+    }
+    window.addEventListener("online", function(){ if (state.offlineBoot) tentar(); });
+    setTimeout(tentar, 5000);
+  }
+
+  var observaLogin = false;
+  function observarLogin(){
+    if (observaLogin || !sb) return;
+    observaLogin = true;
+    try{
+      sb.auth.onAuthStateChange(function(ev){
+        // sessão derrubada pelo servidor (ou por outra aba): volta para o login, sem perder nada (fila e dados ficam guardados)
+        if (ev==="SIGNED_OUT" && !saindoPorMim && state.userId){ setTimeout(function(){ renderLoginScreen("Sua sessão expirou. Entre novamente."); }, 0); }
+      });
+    }catch(e){}
+  }
+
+  function checkAuthAndBoot(tent){
+    tent = typeof tent==="number" ? tent : 0;
+    if (!sb){ renderSemNuvem(); return; } // sem a biblioteca do Supabase não há como validar login nem guardar a fila: não abre "solto"
+    observarLogin();
+    function semSessao(){
+      if (temSessaoGuardada()){
+        // existe login guardado, só não deu para renovar agora (ex.: PC acabou de ligar e a internet ainda não subiu)
+        if (tent < 4){ setTimeout(function(){ checkAuthAndBoot(tent+1); }, 1500*(tent+1)); return; }
+        if (lerPerfilCache()){ state.offlineBoot = true; bootApp(); vigiarSessao(); return; }
+      }
+      renderLoginScreen();
+    }
     sb.auth.getSession().then(function(res){
       var session = res && res.data && res.data.session;
       if (session) bootApp();
-      else renderLoginScreen();
-    });
+      else semSessao();
+    }).catch(semSessao);
   }
 
   // ---------- pontes para o script de melhorias no rodapé (atalhos de teclado, tema) ----------
@@ -12729,7 +12903,7 @@ body{font-size:16px}
 @media (max-width:640px){.os-lista{grid-template-columns:1fr;}.os-resumo .btn{width:100%;margin-left:0;min-height:46px;}}
 </style>
 <script>
-window.__voReady.then(function(){
+window.__appReady.then(function(){
 (function(){
   var wrap = document.createElement("div");
   wrap.className = "ui-toast-wrap";
