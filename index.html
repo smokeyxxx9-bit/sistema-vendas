@@ -175,7 +175,7 @@
   .month-nav button.hide-vals-btn{
     width:auto;height:auto;margin-left:4px;padding:5px 10px;font-size:12px;line-height:1.2;
   }
-  .month-nav .label{font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--text-dim);text-transform:capitalize;}
+  .month-nav .label{font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--text-dim);}
   .month-nav .label.cal-open{cursor:pointer;padding:7px 12px;border:1px solid var(--border);border-radius:4px;background:var(--panel-alt);color:var(--text);user-select:none;}
   .month-nav .label.cal-open:hover{border-color:var(--yellow);color:var(--yellow);}
   .month-nav .label.cal-open::after{content:" ▾";font-size:10px;}
@@ -183,7 +183,7 @@
   .cal-back{position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.35);}
   .cal-box{position:absolute;width:312px;max-width:calc(100vw - 16px);background:var(--panel);border:1px solid var(--border);border-top:3px solid var(--yellow);border-radius:6px;padding:14px 14px 12px;box-shadow:0 14px 44px rgba(0,0,0,.5);color:var(--text);}
   .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
-  .cal-head b{font-family:'IBM Plex Mono',monospace;font-size:13px;text-transform:capitalize;letter-spacing:.02em;}
+  .cal-head b{font-family:'IBM Plex Mono',monospace;font-size:13px;letter-spacing:.02em;}
   .cal-head .cal-navs{display:flex;gap:6px;}
   .cal-head button{width:30px;height:30px;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);border-radius:4px;cursor:pointer;font-size:11px;}
   .cal-head button:hover{border-color:var(--yellow);color:var(--yellow);}
@@ -268,7 +268,7 @@
   .yesterday-total{font-size:26px;color:var(--text);margin-bottom:2px;}
   .yesterday-meta{font-size:12.5px;color:var(--text-faint);margin-bottom:14px;}
   .today-card{display:flex;flex-direction:column;justify-content:space-between;}
-  .today-card .date-big{font-size:26px;color:var(--text);text-transform:capitalize;margin-bottom:2px;}
+  .today-card .date-big{font-size:26px;color:var(--text);margin-bottom:2px;}
   .today-card .date-sub{font-size:12.5px;color:var(--text-faint);margin-bottom:16px;}
 
   /* ---- archive ---- */
@@ -296,7 +296,7 @@
     width:26px;height:26px;border-radius:3px;
   }
   .day-nav button:hover{border-color:var(--yellow);color:var(--yellow);}
-  .tbl-head h2{font-size:19px;text-transform:capitalize;}
+  .tbl-head h2{font-size:19px;}
   .save-flag{font-size:11.5px;color:var(--green);opacity:0;transition:opacity .3s;font-family:'IBM Plex Mono',monospace;}
   .save-flag.show{opacity:1;}
 
@@ -355,7 +355,7 @@
   .dd-nav{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
   .dd-nav button.nav{background:transparent;border:1px solid var(--border);color:var(--text-dim);width:26px;height:26px;border-radius:3px;font-size:14px;line-height:1;}
   .dd-nav button.nav:hover{border-color:var(--yellow);color:var(--yellow);}
-  .dd-nav .dd-date{font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--text);text-transform:capitalize;}
+  .dd-nav .dd-date{font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--text);}
   .dd-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:18px;}
   @media(max-width:820px){.dd-grid{grid-template-columns:1fr;}}
   .dd-card{border:1px solid var(--border-soft);border-radius:6px;background:var(--panel);padding:16px 18px;}
@@ -748,7 +748,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid rgba(255,196,0,.22)!im
   .nota-mes-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:16px 0 8px;padding:9px 12px;
     background:var(--panel);border:1px solid var(--border-soft);border-left:3px solid var(--yellow);border-radius:8px;cursor:pointer;user-select:none;}
   .nota-mes-head:first-child{margin-top:0;}
-  .nota-mes-head .nm-nome{font-weight:600;font-size:14px;text-transform:capitalize;}
+  .nota-mes-head .nm-nome{font-weight:600;font-size:14px;}
   .nota-mes-head .nm-info{font-size:12px;color:var(--text-dim);font-family:'IBM Plex Mono',monospace;text-align:right;}
   .est-kp-toggle{margin:10px 0 0;}
   .est-keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0 4px;}
@@ -3886,7 +3886,7 @@ window.__voReady.then(function(){
       '.sm-hint{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:12.5px;color:var(--text-dim);}'+
       '.sm-chip{display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:600;background:var(--panel-alt);border:1px solid var(--border-soft);color:var(--text);}'+
       '.sm-nav{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 16px;}'+
-      '.sm-nav b{min-width:160px;text-align:center;text-transform:capitalize;font-size:16px;}'+
+      '.sm-nav b{min-width:160px;text-align:center;font-size:16px;}'+
       '.sm-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:16px;}'+
       '.sm-stat{border:1px solid var(--border-soft);border-radius:6px;background:var(--panel);padding:16px 18px;border-top:3px solid var(--border);}'+
       '.sm-stat.total{border-top-color:var(--red);}'+
@@ -5036,7 +5036,7 @@ window.__voReady.then(function(){
       var nvS = novosStats(loadNovosMonth(state.dashMonth));
       var yMonthKey = yesterday.slice(0,7);
       var yLucro = ((yMonthKey===state.dashMonth) ? nvS : novosStats(loadNovosMonth(yMonthKey))).aporteDia[yesterday] || 0;
-      var nvIncludeHtml = nvS.aporte!==0 ? '<div class="sub" style="margin-top:2px;">inclui '+(state.hideValues?'••••':fmtCurrency(nvS.aporte))+' de pneus novos (lucro + serviços)</div>' : '';
+      var nvIncludeHtml = nvS.aporte!==0 ? '<div class="sub" style="margin-top:2px;">inclui '+(state.hideValues?'••••':fmtCurrency(nvS.aporte))+' de pneus novos (lucro dos pneus já sem custo e taxa + serviços sem taxa)</div>' : '';
       for (var i=1;i<=nd;i++){
         var iso = state.dashMonth+"-"+pad(i);
         var v = ((monthSummary[iso] && monthSummary[iso].total) || 0) + (nvS.aporteDia[iso]||0);
@@ -5538,6 +5538,13 @@ window.__voReady.then(function(){
       if (!vend[v]) vend[v] = {nome:v, count:0, total:0};
       vend[v].count += 1; vend[v].total += computeValor(r);
     });
+    novosRows.forEach(function(n){
+      var l = novoLucro(n) + novoServicos(n); // lucro líquido dos pneus (sem custo e com taxa) + serviços/peças (sem taxa)
+      if (!l) return;
+      var v = vendedorEfetivo(n.vendedor);
+      if (!vend[v]) vend[v] = {nome:v, count:0, total:0};
+      vend[v].count += 1; vend[v].total += l; vend[v].nvLucro = (vend[v].nvLucro||0) + l;
+    });
     var vendList = Object.keys(vend).map(function(k){ return vend[k]; }).sort(function(a,b){ return b.total-a.total; });
 
     // formas de pagamento
@@ -5611,7 +5618,7 @@ window.__voReady.then(function(){
       }
     }
     var nvServPeriodo = nvAportePeriodo - nvLucroPeriodo;
-    var nvNote = nvAportePeriodo!==0 ? '<div class="dd-note" style="margin:0 0 12px;">💰 Pneus novos '+periodo+': <b style="color:'+(nvAportePeriodo>=0?'var(--green)':'var(--red)')+';">'+hv(nvAportePeriodo)+'</b> (lucro dos pneus '+hv(nvLucroPeriodo)+' + serviços/peças '+hv(nvServPeriodo)+') — já somado na meta do mês.</div>' : '';
+    var nvNote = nvAportePeriodo!==0 ? '<div class="dd-note" style="margin:0 0 12px;">💰 Pneus novos '+periodo+': <b style="color:'+(nvAportePeriodo>=0?'var(--green)':'var(--red)')+';">'+hv(nvAportePeriodo)+'</b> (lucro líquido dos pneus '+hv(nvLucroPeriodo)+' + serviços/peças '+hv(nvServPeriodo)+', sem taxa de maquininha) — já somado na meta do mês.</div>' : '';
 
     function barRows(list, keyLabel, colorCls, withRank){
       if (!list.length) return '<div class="dd-empty">Nada lançado neste '+(isYear?'ano':(isMonth?'mês':'dia'))+'.</div>';
@@ -5730,7 +5737,7 @@ window.__voReady.then(function(){
       '<div class="dd-grid">'+
         '<div class="dd-card"><div class="dd-card-head"><h3>Comparativo</h3></div>'+cmpHtml+'</div>'+
         '<div class="dd-card"><h3>Faturamento por vendedor</h3>'+
-          barRows(A.vendedores, function(x){ return hq(x.count)+' venda(s) · ticket '+hv(x.count?x.total/x.count:0); }, "y", true)+'</div>'+
+          barRows(A.vendedores, function(x){ return hq(x.count)+' venda(s) · ticket '+hv(x.count?x.total/x.count:0)+(x.nvLucro ? ' · inclui '+hv(x.nvLucro)+' de pneus novos (lucro + serviços)' : ''); }, "y", true)+'</div>'+
         '<div class="dd-card"><h3>Formas de pagamento</h3>'+barRows(A.pagamentos, null, "g", false)+'</div>'+
         '<div class="dd-card"><h3>Produtos e serviços mais vendidos</h3>'+
           barRows(A.produtos, function(x){ return x.qtd ? hq(x.qtd)+' un.' : ''; }, "", true)+'</div>'+
@@ -6206,7 +6213,7 @@ window.__voReady.then(function(){
     var recC = 0, lucC = 0, nC = 0, nSemC = 0, txC = 0;
     V.forEach(function(x){
       if (!x.novo) return;
-      if (novoTemCusto(x.r)){ recC += novoReceitaPneus(x.r); lucC += novoLucro(x.r); txC += taxaCartao(x.r, true); nC++; }
+      if (novoTemCusto(x.r)){ recC += novoReceitaPneus(x.r); lucC += novoLucroBruto(x.r); txC += taxaCartao(x.r, true); nC++; }
       else if (parseNum(x.r.valorPneus)>0) nSemC++;
     });
     blocos.push(adminSec("💹 Margem de lucro estimada",
@@ -6377,7 +6384,7 @@ window.__voReady.then(function(){
       clientesTopbarHtml("Administrativo", "MASTER")+
       '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 14px;">'+
         '<button class="btn ghost small" data-act="adminprev" aria-label="Mês anterior">←</button>'+
-        '<b style="min-width:150px;text-align:center;text-transform:capitalize;">'+escHtml(monthLabel(month))+'</b>'+
+        '<b class="cap-first" style="min-width:150px;text-align:center;">'+escHtml(monthLabel(month))+'</b>'+
         '<button class="btn ghost small" data-act="adminnext" aria-label="Próximo mês">→</button>'+
         (month!==today.slice(0,7) ? '<button class="btn ghost small" data-act="adminhoje">Mês atual</button>' : '')+
       '</div>'+
@@ -6404,7 +6411,7 @@ window.__voReady.then(function(){
           '<input type="date" id="adminDiaInp" value="'+escAttr(dia)+'" style="background:var(--panel-alt);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:6px 8px;" aria-label="Escolher o dia no calendário">'+
           '<button class="btn ghost small" data-act="admindianext" aria-label="Próximo dia">→</button>'+
           (dia!==today ? '<button class="btn ghost small" data-act="admindiahoje">Hoje</button>' : '')+
-          '<span style="font-size:12.5px;color:var(--text-dim);text-transform:capitalize;">'+escHtml(weekdayLabel(dia))+'</span>'+
+          '<span class="cap-first" style="font-size:12.5px;color:var(--text-dim);">'+escHtml(weekdayLabel(dia))+'</span>'+
         '</div>'+
         '<div style="display:flex;gap:24px;flex-wrap:wrap;">'+
           ["Dinheiro","Pix","Débito","Crédito"].map(function(k){
@@ -9724,7 +9731,7 @@ window.__voReady.then(function(){
     document.getElementById("orcSalvar").addEventListener("click", function(){
       var rec = salvarOrcamentoAtual();
       if (!rec) return;
-      toast("Orçamento #"+rec.num+" salvo em Orçamentos.");
+      (window.uiToast||window.alert)("Orçamento #"+rec.num+" salvo em Orçamentos.", "ok");
       renderOrcamento();
     });
 
@@ -9947,7 +9954,7 @@ window.__voReady.then(function(){
       }
       var nomeCli = String((cli && cli.nome) || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 30);
       baixarBlobComo("Orcamento-"+o.num+(nomeCli ? "-"+nomeCli : "")+".pdf", blob);
-      toast("PDF do orçamento #"+o.num+" baixado.");
+      (window.uiToast||window.alert)("PDF do orçamento #"+o.num+" baixado.", "ok");
     });
   }
 
@@ -11896,7 +11903,16 @@ window.__voReady.then(function(){
     descontosList(n).forEach(function(d){ if (!d.origem || d.origem==="valorPneus") descPneus += d.valor; });
     return parseNum(n.valorPneus) - descPneus;
   }
-  function novoLucro(n){ return novoTemCusto(n) ? novoReceitaPneus(n) - parseNum(n.custoPneus) : 0; }
+  function novoLucroBruto(n){ return novoTemCusto(n) ? novoReceitaPneus(n) - parseNum(n.custoPneus) : 0; }
+  // taxa da maquininha que recai sobre os pneus (a taxa da venda inteira, na proporção do valor dos pneus)
+  function novoTaxaPneus(n){
+    var tot = computeValor(n);
+    if (!(tot>0)) return 0;
+    var share = Math.min(1, Math.max(0, novoReceitaPneus(n)) / tot);
+    return Math.round(taxaCartao(n, true) * share * 100) / 100;
+  }
+  // LUCRO LÍQUIDO dos pneus novos = valor dos pneus − descontos − custo de compra − taxa da maquininha
+  function novoLucro(n){ return novoTemCusto(n) ? novoLucroBruto(n) - novoTaxaPneus(n) : 0; }
   // serviços/peças da venda nova (alinhamento, bicos, cambagem, balanceamento, rodas, outros, peças, mão de obra),
   // já descontados os descontos que não saíram do pneu. Esse valor soma inteiro no Dashboard principal.
   function novoServicos(n){
@@ -12542,6 +12558,10 @@ window.__voReady.then(function(){
 })();
 });
 </script>
+<style id="cap-primeira-letra">
+.month-nav .label,.cal-head b,.today-card .date-big,.tbl-head h2,.dd-nav .dd-date,.nota-mes-head .nm-nome,.sm-nav b,.cap-first{display:inline-block;}
+.month-nav .label::first-letter,.cal-head b::first-letter,.today-card .date-big::first-letter,.tbl-head h2::first-letter,.dd-nav .dd-date::first-letter,.nota-mes-head .nm-nome::first-letter,.sm-nav b::first-letter,.cap-first::first-letter{text-transform:uppercase;}
+</style>
 <style id="oficina-legibilidade">
 /* ===== letras maiores e caixas (engrenagens) maiores ===== */
 html{font-size:17px}
@@ -12778,7 +12798,13 @@ window.__voReady.then(function(){
       var ov = document.querySelectorAll(".modal-overlay, .overlay");
       var last = ov[ov.length-1];
       if (last){
-        var cancel = last.querySelector('[data-close], .btn.ghost, .modal-actions .btn:not(.primary)');
+        var cancel = last.querySelector('[data-close]');
+        if (!cancel){
+          var bts = last.querySelectorAll('button');
+          for (var bi=0; bi<bts.length; bi++){
+            if (/^(cancelar|voltar|fechar|sair|×|✕|x)$/i.test((bts[bi].textContent||"").trim())){ cancel = bts[bi]; break; }
+          }
+        }
         if (cancel) cancel.click(); else last.remove();
       }
       return;
