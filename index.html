@@ -10,6 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="manifest" href="manifest.webmanifest">
+<script src="config.js"></script>
 <style>
 /* iPhone: campos com fonte menor que 16px fazem o Safari dar zoom ao tocar; isto evita */
 @supports (-webkit-touch-callout:none){ input,select,textarea{ font-size:16px !important; } }
@@ -170,6 +171,10 @@ window.__sbLib = new Promise(function(resolve){
   .sync-badge.on{color:var(--green);border-color:var(--green);}
   .sync-badge.connecting{color:var(--yellow);border-color:var(--yellow);}
   .sync-badge.error{color:var(--red);border-color:var(--red);}
+  .sync-badge.prog{display:inline-flex;align-items:center;gap:8px;}
+  .sync-bar{display:inline-block;width:110px;height:7px;border-radius:4px;background:var(--border-soft);overflow:hidden;vertical-align:middle;}
+  .sync-bar i{display:block;height:100%;width:0;background:var(--yellow);border-radius:4px;transition:width .25s ease;}
+  .sync-badge.error .sync-bar i{background:var(--red);}
   .auth-zone{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end;}
   .pill{
     font-size:12.5px;padding:6px 12px;border:1px solid var(--border);border-radius:3px;
@@ -1023,8 +1028,19 @@ window.__appReady.then(function(){
   // a sincronização automática entre computadores/celulares. Deixando
   // como está, o sistema continua funcionando 100% normalmente, só que
   // sem sincronizar — cada aparelho fica com seus próprios dados.
-  var SUPABASE_URL = "https://vvkpkqmhboaridolxylb.supabase.co";
-  var SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ2a3BrcW1oYm9hcmlkb2x4eWxiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0NzgwNTYsImV4cCI6MjEwNDA1NDA1Nn0.4T9KMXkoQlt2UkvBHg8BjNFP21pEKHyyurwkDd2XDXc";
+  var CFG_APP = window.APP_CONFIG || {};
+  // aceita o endereço do jeito que vier: tira espaços, barra no final, "/rest/v1" etc. e até o link do painel (supabase.com/dashboard/project/CODIGO)
+  function limparUrlSupabase(u){
+    u = String(u||"").replace(/[\s"']/g, "");
+    var d = /supabase\.com\/dashboard\/project\/([a-z0-9]+)/i.exec(u);
+    if (d) return "https://"+d[1]+".supabase.co";
+    var m = /^(https?:\/\/[^\/?#]+)/i.exec(u);
+    if (m) return m[1];
+    if (/^[a-z0-9]{15,25}$/i.test(u)) return "https://"+u+".supabase.co"; // só o código do projeto
+    return u || "COLE_AQUI";
+  }
+  var SUPABASE_URL = limparUrlSupabase(CFG_APP.SUPABASE_URL);
+  var SUPABASE_ANON_KEY = String(CFG_APP.SUPABASE_KEY || "COLE_AQUI").replace(/[\s"']/g, "");
 
   var cloudStatus = "off"; // off | connecting | on | error
   var sb = null;
@@ -1092,9 +1108,20 @@ window.__appReady.then(function(){
 
   function syncBadgeHtml(){
     if (!sb) return '<span id="syncBadge" class="sync-badge off" title="Configure o Supabase no início do arquivo para sincronizar entre aparelhos">○ somente local</span>';
-    if (cloudStatus==="on" && filaTamanho()) return '<span id="syncBadge" class="sync-badge connecting" title="Enviando para a nuvem. Já está salvo neste aparelho.">↻ enviando '+filaTamanho()+'…</span>';
+    if (cloudStatus==="on" && filaTamanho()){
+      var pg = progressoFila();
+      return '<span id="syncBadge" class="sync-badge connecting prog" title="Enviando para a nuvem: '+pg.feitos+' de '+pg.total+' enviados. Já está tudo salvo neste aparelho.">'+
+             '<span class="sync-bar"><i style="width:'+pg.pct+'%"></i></span>'+pg.pct+'% · '+pg.feitos+'/'+pg.total+'</span>';
+    }
     if (cloudStatus==="on") return '<span id="syncBadge" class="sync-badge on" title="Tudo sincronizado com a nuvem">● nuvem conectada</span>';
-    if (cloudStatus==="error") return '<span id="syncBadge" class="sync-badge error" title="Falha ao conectar com a nuvem — os dados continuam salvos neste aparelho e serão reenviados sozinhos">⚠ erro de conexão'+(filaTamanho()?' · '+filaTamanho()+' pendente(s)':'')+'</span>';
+    if (cloudStatus==="error"){
+      if (filaTamanho()){
+        var pe = progressoFila();
+        return '<span id="syncBadge" class="sync-badge error prog" title="Falha ao enviar para a nuvem — os dados continuam salvos neste aparelho e serão reenviados sozinhos">'+
+               '<span class="sync-bar"><i style="width:'+pe.pct+'%"></i></span>⚠ erro · '+pe.falta+' pendente(s)</span>';
+      }
+      return '<span id="syncBadge" class="sync-badge error" title="Falha ao conectar com a nuvem — os dados continuam salvos neste aparelho e serão reenviados sozinhos">⚠ erro de conexão</span>';
+    }
     return '<span id="syncBadge" class="sync-badge connecting" title="Conectando à nuvem...">○ conectando…</span>';
   }
 
@@ -1119,6 +1146,15 @@ window.__appReady.then(function(){
 
   function salvarFila(){ try{ localStorage.setItem(K_FILA, JSON.stringify(fila)); }catch(e){} }
   function filaTamanho(){ return Object.keys(fila).length; }
+  // progresso do envio: o "total" é o maior tamanho da fila desde a última vez que ela esvaziou
+  var filaTotalLote = 0;
+  function progressoFila(){
+    var falta = filaTamanho();
+    if (!falta){ filaTotalLote = 0; return {falta:0, total:0, feitos:0, pct:100}; }
+    if (falta > filaTotalLote) filaTotalLote = falta;
+    var feitos = filaTotalLote - falta;
+    return {falta:falta, total:filaTotalLote, feitos:feitos, pct:Math.max(0, Math.min(99, Math.floor(feitos*100/filaTotalLote)))};
+  }
 
   // JSON com chaves em ordem fixa (o jsonb da nuvem reordena as chaves; sem isso o "mesmo" valor pareceria diferente)
   function canon(v){
@@ -1333,7 +1369,7 @@ window.__appReady.then(function(){
     function worker(){
       if (idx>=chaves.length) return Promise.resolve();
       var k = chaves[idx++];
-      return enviarChave(k).then(function(ok){ if (!ok) falhou = true; }).then(worker);
+      return enviarChave(k).then(function(ok){ if (!ok) falhou = true; refreshSyncBadge(); }).then(worker);
     }
     return Promise.all([worker(), worker(), worker(), worker()]).then(function(){
       if (falhou){
@@ -2843,7 +2879,7 @@ window.__appReady.then(function(){
     var data = {};
     for (var i=0;i<localStorage.length;i++){
       var k = localStorage.key(i);
-      if (k && k.indexOf("vo_")===0 && k!==K_AUTOBACKUP && k!==K_BKP_CONTA) data[k] = localStorage.getItem(k);
+      if (kEntraNoBackup(k)) data[k] = localStorage.getItem(k);
     }
     return data;
   }
@@ -4777,20 +4813,61 @@ window.__appReady.then(function(){
 
 
   // ---------- backup / restauração ----------
+  // Tudo que o sistema guarda com prefixo "vo_" entra no backup (vendas, clientes, estoque, notas, orçamentos, O.S., reservas, saídas,
+  // fechamentos, permissões, históricos...). Só ficam de fora as cópias internas de backup.
+  function kEntraNoBackup(k){ return !!k && k.indexOf("vo_")===0 && k!==K_AUTOBACKUP && k!==K_BKP_CONTA; }
+  // lê da nuvem o que NÃO fica no navegador (arquivo morto "arq:" e fotos "fotomes:"), em páginas
+  function lerExtrasDaNuvem(prefixo, tam, progresso){
+    var out = {};
+    function pagina(de){
+      return sb.from("kv_store").select("key,value").like("key", prefixo+"%").order("key",{ascending:true}).range(de, de+tam-1).then(function(res){
+        if (!res || res.error) throw new Error((res && res.error && res.error.message) || "Falha ao ler a nuvem.");
+        var lin = res.data || [];
+        lin.forEach(function(r){ out[r.key] = JSON.stringify(r.value); });
+        if (progresso) progresso(Object.keys(out).length);
+        if (lin.length===tam) return pagina(de+tam);
+        return out;
+      });
+    }
+    return pagina(0);
+  }
+  var backupArquivoEmAndamento = false;
   function exportBackup(auto){
-    var data = {};
+    if (backupArquivoEmAndamento) return;
+    var data = {}, qLocal = 0;
     for (var i=0;i<localStorage.length;i++){
       var k = localStorage.key(i);
-      if (k && (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS || k===K_ORCAMENTOS || k.indexOf(K_NOVOS)===0 || k===K_NOVOS_META || k===K_TAXAS || k.indexOf(K_SAIDAS)===0 || kExtraBackup(k))) data[k] = localStorage.getItem(k);
+      if (kEntraNoBackup(k)){ data[k] = localStorage.getItem(k); qLocal++; }
     }
     var now = new Date();
     var stamp = today+"-"+pad(now.getHours())+"h"+pad(now.getMinutes());
-    var blob = new Blob([JSON.stringify(data,null,2)], {type:"application/json"});
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement("a");
-    a.href = url; a.download = "backup-vendas-"+stamp+(auto?"-auto":"")+".json";
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    function baixar(qNuvem, avisar){
+      var blob = new Blob([JSON.stringify(data,null,2)], {type:"application/json"});
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url; a.download = "backup-vendas-"+stamp+(auto?"-auto":"")+".json";
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      if (avisar) alert("Backup baixado: "+qLocal+" registro(s) do sistema (vendas, clientes, estoque, notas, orçamentos, O.S. etc.)"+(qNuvem ? " + "+qNuvem+" da nuvem (arquivo morto e fotos)." : "."));
+    }
+    // sem nuvem/conta: baixa só o que está neste navegador
+    if (!sb || !state.userId || auto){ baixar(0, !auto); return; }
+    backupArquivoEmAndamento = true;
+    var btn = document.querySelector('[data-act="exportbackup"]'), txtOrig = btn ? btn.textContent : "";
+    function ocupado(t){ if (btn){ btn.disabled = true; btn.textContent = t; } }
+    function livre(){ backupArquivoEmAndamento = false; if (btn){ btn.disabled = false; btn.textContent = txtOrig; } }
+    ocupado("Preparando…");
+    var extras = {};
+    lerExtrasDaNuvem("arq:", 200, function(n){ ocupado("Arquivo morto… "+n); })
+      .then(function(a){ Object.keys(a).forEach(function(k){ extras[k] = a[k]; }); return lerExtrasDaNuvem(K_FOTOMES, 20, function(n){ ocupado("Fotos… "+n); }); })
+      .then(function(f){ Object.keys(f).forEach(function(k){ extras[k] = f[k]; }); return {ok:true}; })
+      .catch(function(e){ return {ok:false, msg:(e && e.message) ? e.message : String(e)}; })
+      .then(function(r){
+        livre();
+        if (!r.ok && !confirm("Não consegui baixar da nuvem o arquivo morto e as fotos ("+r.msg+").\n\nBaixar mesmo assim, só com os dados deste navegador?")) return;
+        Object.keys(extras).forEach(function(k){ data[k] = extras[k]; });
+        baixar(Object.keys(extras).length, true);
+      });
   }
   function autoBackupToStorage(){
     // backup silencioso: salva uma cópia dos dados dentro do próprio navegador,
@@ -4811,17 +4888,39 @@ window.__appReady.then(function(){
       try{ data = JSON.parse(reader.result); }catch(e){ alert("Não foi possível ler esse arquivo de backup."); return; }
       function go(){
         try{
-          var n = 0;
+          var n = 0, falhas = 0, nuvem = [];
           Object.keys(data).forEach(function(k){
-            if (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS || k===K_ORCAMENTOS || k.indexOf(K_NOVOS)===0 || k===K_NOVOS_META || k===K_TAXAS || k.indexOf(K_SAIDAS)===0 || kExtraBackup(k)){
-              localStorage.setItem(k, data[k]); n++;
+            if (kEntraNoBackup(k)){
+              try{ localStorage.setItem(k, data[k]); n++; }catch(eq){ falhas++; return; }
               try{ cloudPush(k, JSON.parse(data[k])); }catch(e2){}
+            } else if (k.indexOf(K_ARQ)===0 || k.indexOf(K_FOTOMES)===0){
+              nuvem.push(k); // arquivo morto e fotos: vão direto para a nuvem, não para o navegador
             }
           });
           state.monthSummaryCache = {};
           state.monthPartsCache = {};
-          alert(n+" registro(s) importado(s) com sucesso.");
-          render();
+          var enviados = 0;
+          function enviar(i){
+            if (!sb || i>=nuvem.length) return Promise.resolve();
+            var agora = new Date().toISOString();
+            var linhas = nuvem.slice(i, i+10).map(function(k){
+              var v = null; try{ v = JSON.parse(data[k]); }catch(e3){}
+              return v===null ? null : {key:k, value:v, updated_at:agora};
+            }).filter(Boolean);
+            if (!linhas.length) return enviar(i+10);
+            return sb.from("kv_store").upsert(linhas).then(function(res){
+              if (res && res.error) throw new Error(res.error.message || "A nuvem recusou.");
+              enviados += linhas.length;
+              return enviar(i+10);
+            });
+          }
+          enviar(0).then(function(){
+            alert(n+" registro(s) importado(s) com sucesso."+(enviados ? "\n"+enviados+" da nuvem (arquivo morto/fotos) também foram restaurados." : "")+(falhas ? "\nAtenção: "+falhas+" registro(s) não coube(ram) no armazenamento do navegador." : ""));
+            render();
+          }).catch(function(e4){
+            alert(n+" registro(s) importado(s), mas não consegui enviar o arquivo morto/fotos para a nuvem: "+((e4 && e4.message) || e4));
+            render();
+          });
         }catch(e){
           alert("Não foi possível ler esse arquivo de backup.");
         }
@@ -6886,7 +6985,7 @@ window.__appReady.then(function(){
     var estoquista = state.role==="estoquista";
     var isMaster = state.role==="master";
     var backupBtns =
-      '<button class="btn ghost small" data-act="exportbackup" title="Baixa um arquivo com todos os dados salvos neste navegador">Backup</button>'+
+      '<button class="btn ghost small" data-act="exportbackup" title="Baixa um arquivo com TUDO: vendas, clientes, estoque, notas, orçamentos, O.S., reservas, saídas e, na nuvem, arquivo morto e fotos">Backup</button>'+
       '<label class="btn ghost small" for="importInput" style="margin:0;">Importar'+
         '<input type="file" id="importInput" accept="application/json" style="display:none;">'+
       '</label>'+
@@ -12587,6 +12686,7 @@ window.__appReady.then(function(){
         if (!r || r.error || !r.data) return usarCache(); // falha de rede/servidor: não rebaixa o papel
         var row = r.data[0];
         var papel = row && row.papel;
+        if (papel === "pendente"){ renderAguardandoLiberacao(); return; } // login criado, mas o dono ainda não liberou
         state.role = (papel === "estoquista" || papel === "master") ? papel : "vendedor";
         state.baseRole = state.role;
         gravarPerfilCache();
@@ -12647,6 +12747,28 @@ window.__appReady.then(function(){
     return varre(localStorage) || (window.__voRealLS ? varre(window.__voRealLS) : false);
   }
 
+  function renderAguardandoLiberacao(){
+    root.classList.remove("wide");
+    root.innerHTML =
+      '<div class="login-screen"><div class="login-card">'+
+        '<div class="brand"><span class="mark"></span><h1>Painel de Vendas</h1></div>'+
+        '<p class="hint"><b>Seu login foi criado, mas o acesso ainda não foi liberado.</b><br>Peça ao dono para definir o seu cargo (Vendedor, Montador…) na tela de Usuários.</p>'+
+        '<button class="btn primary" id="pendSair">Sair</button>'+
+      '</div></div>';
+    document.getElementById("pendSair").addEventListener("click", function(){
+      saindoPorMim = true;
+      try{ localStorage.removeItem(PERFIL_CACHE); localStorage.removeItem(EDICAO_ATE); }catch(e){}
+      sb.auth.signOut().then(function(){ location.reload(); }, function(){ location.reload(); });
+    });
+  }
+  function renderFaltaConfig(){
+    root.classList.remove("wide");
+    root.innerHTML =
+      '<div class="login-screen"><div class="login-card">'+
+        '<div class="brand"><span class="mark"></span><h1>Painel de Vendas</h1></div>'+
+        '<p class="hint"><b>Falta ligar o sistema ao seu Supabase.</b><br>Abra o arquivo <b>config.js</b> (no GitHub) e cole o endereço (Project URL) e a chave do seu projeto. Depois é só recarregar esta página.</p>'+
+      '</div></div>';
+  }
   function renderSemNuvem(){
     root.classList.remove("wide");
     root.innerHTML =
@@ -12691,6 +12813,7 @@ window.__appReady.then(function(){
 
   function checkAuthAndBoot(tent){
     tent = typeof tent==="number" ? tent : 0;
+    if (SUPABASE_URL.indexOf("COLE_AQUI")>-1 || SUPABASE_ANON_KEY.indexOf("COLE_AQUI")>-1){ renderFaltaConfig(); return; }
     if (!sb){ renderSemNuvem(); return; } // sem a biblioteca do Supabase não há como validar login nem guardar a fila: não abre "solto"
     observarLogin();
     function semSessao(){
