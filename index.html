@@ -8699,8 +8699,13 @@ window.__appReady.then(function(){
           if (recentes.length) mudou = true;
           return;
         }
+        // conferência só vale logo após o lançamento (o servidor pode ter somado só 1) e com a O.S. aberta;
+        // depois disso a tabela é de quem edita: apagar ou diminuir um valor não pode ser desfeito sozinho
+        if (o.status!=="aberta") return;
+        var servsConf = servsDia.filter(function(sv){ return sv.ts && (Date.now()-sv.ts) < 5*60*1000; });
+        if (!servsConf.length) return;
         var soma = {}, somaV = {};
-        servsDia.forEach(function(sv){
+        servsConf.forEach(function(sv){
           var f = OS_CAMPOS[sv.tipo];
           if (f.q) soma[f.q] = (soma[f.q]||0) + (parseInt(sv.qtd,10)||1);
           somaV[f.v] = (somaV[f.v]||0) + (Number(sv.valor)||0);
