@@ -1,0 +1,19 @@
+# Cópia externa do banco a cada hora (pg_dump). Precisa do segredo DATABASE_URL
+# (Supabase > Project Settings > Database > Connection string, modo "Session pooler").
+# O repositório precisa ser PRIVADO: o arquivo contém os dados da loja.
+name: backup-externo
+on:
+  schedule: [{ cron: '0 * * * *' }]
+  workflow_dispatch:
+permissions: { contents: read }
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Instala o cliente do Postgres
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: pg_dump
+        env: { DATABASE_URL: '${{ secrets.DATABASE_URL }}' }
+        run: pg_dump "$DATABASE_URL" --no-owner --schema=public -Fc -f backup.dump
+      - uses: actions/upload-artifact@v4
+        with: { name: backup-${{ github.run_id }}, path: backup.dump, retention-days: 14 }
