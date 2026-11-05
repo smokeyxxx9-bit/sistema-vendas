@@ -2,7 +2,7 @@
    - Só cuida dos arquivos do próprio site (nunca toca nas chamadas ao Supabase).
    - "Rede primeiro": sempre busca a versão nova; se estiver sem internet, abre a última guardada.
    Para forçar todo mundo a atualizar depois de uma mudança grande, troque o número da versão abaixo. */
-var VERSAO = "bigua-v1";
+var VERSAO = "bigua-v2";
 var BASICO = ["./", "index.html", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png"];
 
 self.addEventListener("install", function(e){
