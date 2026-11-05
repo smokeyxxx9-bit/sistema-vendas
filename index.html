@@ -1596,6 +1596,123 @@ window.__appReady.then(function(){
     }
     catch(e){ return false; }
   }
+  // =====================================================================================
+  // AJUSTES — tela onde o master edita nomes, nota, garantia, metas e equipe.
+  // Tudo fica guardado numa chave só ("vo_ajustes"), que sincroniza com a nuvem e entra nos backups.
+  // Se um campo não foi alterado, vale o texto/valor original do sistema (os "padrões" abaixo).
+  // =====================================================================================
+  var K_AJUSTES = "vo_ajustes";
+  var AJ_EMPRESA_PADRAO = JSON.parse(JSON.stringify(EMPRESA));
+  function ajustesPadrao(){
+    return {
+      nomeSistema: "Painel de Vendas",
+      tagSistema: "OFICINA · CONTROLE DIÁRIO",
+      rodape: "Painel de Vendas — Oficina",
+      empresa: JSON.parse(JSON.stringify(AJ_EMPRESA_PADRAO)),
+      metas: {meta1: 350000, meta2: 450000},
+      equipe: {vendedores: ["Bruno","Richard","Benedet","Jonas"], maoDeObra: ["Renan","João","Wesley"]},
+      garantia: {
+        diasLegais: 90,
+        novos: {
+          titulo: "TERMO DE GARANTIA - PNEUS NOVOS",
+          anos: 5,
+          cobertura: "**Cobertura:** A garantia para pneus novos é de **{anos} anos** a partir da data da compra ou até o desgaste total da banda de rodagem (atingir o indicador TWI/pneu alisar), o que ocorrer primeiro.",
+          alerta: "GARANTIA DE {anos} ANOS PARA PNEUS NOVOS.",
+          lei: "A lei nos obriga a dar garantia legal de {dias} dias corridos, mas por consideração ao nosso cliente e confiança dos nossos produtos fornecemos garantia de {anos} anos depois da data de compra."
+        },
+        seminovos: {
+          titulo: "TERMO DE GARANTIA - PNEUS SEMINOVOS",
+          anos: 3,
+          cobertura: "**Cobertura:** A garantia para pneus seminovos é de {anos} anos a partir da data da compra ou até o desgaste total da banda de rodagem (atingir o indicador TWI/pneu alisar), o que ocorrer primeiro.",
+          alerta: "VOCÊ COMPROU PNEU USADO, TENHA CONSCIÊNCIA.",
+          lei: "A lei nos obriga a dar garantia em relação a qualquer produto usado de {dias} dias corridos, mas por consideração ao nosso cliente e confiança dos nossos produtos fornecemos garantia de {anos} anos depois da data de compra."
+        },
+        exclusoesIntro: "**Exclusões da Garantia (Avarias Acidentais):** A garantia cobre exclusivamente defeitos de estrutura/fabricação e no conserto. ***GARANTIA NÃO É SEGURO***.\nNão possuem cobertura danos decorrentes de uso, acidentes ou fatores externos, tais como:",
+        exclusoesLista: [
+          "Pneus cortados, furados ou rasgados;",
+          "Bolhas ou deformações causadas por impacto em buracos, meio-fio ou obstáculos;",
+          "Danos causados por rodar sem pressão de ar, suspensão danificada ou falta de alinhamento."
+        ],
+        devolucao: "**Políticas de devolução:** quaisquer produtos comprados __PRESENCIALMENTE EM LOJA FÍSICA__ com a opção de escolha e análise por conta própria, não se aplica o direto de devolução por insatisfação. Conforme o código de direito do consumidor art.18 nossa empresa tem o dever de resolver o problema em até 30 dias corridos, após esse período, aí sim o cliente tem o seu direito de ter os valores ressarcidos integralmente."
+      }
+    };
+  }
+  function ajTxt(v, pad){ return (typeof v==="string" && v.trim()!=="") ? v : pad; }
+  function ajNomes(lista, proibidos){
+    var out = [], vistos = {};
+    (Array.isArray(lista) ? lista : []).forEach(function(n){
+      n = String(n==null ? "" : n).trim().replace(/\s+/g, " ");
+      var k = n.toLowerCase();
+      if (!n || vistos[k] || (proibidos && proibidos.indexOf(k)>-1)) return;
+      vistos[k] = 1; out.push(n);
+    });
+    return out;
+  }
+  function ajustesCfg(){
+    var pad = ajustesPadrao(), sv = lsGetJSON(K_AJUSTES, null);
+    if (!sv || typeof sv!=="object") return pad;
+    var cfg = pad;
+    cfg.nomeSistema = ajTxt(sv.nomeSistema, pad.nomeSistema);
+    cfg.tagSistema = (typeof sv.tagSistema==="string") ? sv.tagSistema : pad.tagSistema;
+    cfg.rodape = (typeof sv.rodape==="string") ? sv.rodape : pad.rodape;
+    if (sv.empresa && typeof sv.empresa==="object") Object.keys(pad.empresa).forEach(function(k){ if (typeof sv.empresa[k]==="string") cfg.empresa[k] = sv.empresa[k]; });
+    if (sv.metas){
+      var m1 = Number(sv.metas.meta1), m2 = Number(sv.metas.meta2);
+      if (m1>0) cfg.metas.meta1 = m1;
+      if (m2>0) cfg.metas.meta2 = m2;
+    }
+    if (sv.equipe){
+      if (Array.isArray(sv.equipe.vendedores)) cfg.equipe.vendedores = ajNomes(sv.equipe.vendedores, ["nenhum","loja"]);
+      if (Array.isArray(sv.equipe.maoDeObra)) cfg.equipe.maoDeObra = ajNomes(sv.equipe.maoDeObra);
+    }
+    var g = sv.garantia;
+    if (g && typeof g==="object"){
+      var dl = Number(g.diasLegais); if (dl>=0 && g.diasLegais!=="" && g.diasLegais!==null && g.diasLegais!==undefined) cfg.garantia.diasLegais = dl;
+      ["novos","seminovos"].forEach(function(t){
+        var o = g[t]; if (!o || typeof o!=="object") return;
+        var d = cfg.garantia[t];
+        d.titulo = ajTxt(o.titulo, d.titulo);
+        d.cobertura = (typeof o.cobertura==="string") ? o.cobertura : d.cobertura;
+        d.alerta = (typeof o.alerta==="string") ? o.alerta : d.alerta;
+        d.lei = (typeof o.lei==="string") ? o.lei : d.lei;
+        var a = Number(o.anos); if (a>0 && o.anos!=="" && o.anos!==null) d.anos = a;
+      });
+      cfg.garantia.exclusoesIntro = (typeof g.exclusoesIntro==="string") ? g.exclusoesIntro : cfg.garantia.exclusoesIntro;
+      if (Array.isArray(g.exclusoesLista)) cfg.garantia.exclusoesLista = g.exclusoesLista.map(function(x){ return String(x||"").trim(); }).filter(Boolean);
+      cfg.garantia.devolucao = (typeof g.devolucao==="string") ? g.devolucao : cfg.garantia.devolucao;
+    }
+    return cfg;
+  }
+  var AJ = ajustesPadrao();
+  function ajTrocarLista(destino, nova){ destino.length = 0; nova.forEach(function(x){ destino.push(x); }); }
+  function aplicarAjustes(){
+    try{
+      AJ = ajustesCfg();
+      Object.keys(AJ.empresa).forEach(function(k){ EMPRESA[k] = AJ.empresa[k]; });
+      GOAL_1 = AJ.metas.meta1; GOAL_2 = AJ.metas.meta2;
+      // as listas são trocadas "no lugar" para que as tabelas que já usam elas enxerguem a mudança
+      ajTrocarLista(VENDEDORES, ["Nenhum","Loja"].concat(AJ.equipe.vendedores));
+      ajTrocarLista(MAODEOBRA_PESSOAS, AJ.equipe.maoDeObra);
+    }catch(e){ console.error("ajustes", e); }
+  }
+  // "Meta 350 mil" — o nome da meta acompanha o valor definido em Ajustes
+  function metaLabel(v){
+    v = Number(v) || 0;
+    if (v >= 1000){
+      var n = v/1000;
+      return "Meta " + (n%1===0 ? String(n) : n.toLocaleString("pt-BR",{maximumFractionDigits:1})) + " mil";
+    }
+    return "Meta " + fmtCurrency(v);
+  }
+  // texto editável -> HTML seguro: **negrito**, __itálico__, linha nova, {anos} e {dias}
+  function ajTexto(s, vars){
+    var t = escHtml(s==null ? "" : String(s));
+    vars = vars || {};
+    t = t.replace(/\{(anos|dias)\}/g, function(m,k){ return vars[k]!==undefined ? escHtml(String(vars[k])) : m; });
+    return t.replace(/\*\*(\*?.+?\*?)\*\*/g, "<b>$1</b>").replace(/__(.+?)__/g, "<i>$1</i>").replace(/\r?\n/g, "<br>");
+  }
+  aplicarAjustes();
+
   function getRows(date){
     return Promise.resolve(lsGetJSON(K_ROWS+date, []));
   }
@@ -2455,9 +2572,12 @@ window.__appReady.then(function(){
       '<td class="r">'+fmtCurrency(it.total)+'</td>'+
     '</tr>';
   }
-  // caixa de garantia: seminovos = 3 anos; novos = 5 anos
+  // caixa de garantia: textos e prazos vêm da tela Ajustes (padrão: seminovos = 3 anos; novos = 5 anos)
   function garantiaBoxHtml(nota){
+    var G = AJ.garantia;
     var novos = nota.tipo==="novos";
+    var T = novos ? G.novos : G.seminovos;
+    var vars = {anos: T.anos, dias: G.diasLegais};
     var cobertura = "";
     if (nota.carros && nota.carros.length>1){
       var linhas = nota.carros.filter(function(c){ return c.medida; }).map(function(c){ return escHtml(carroTitulo(c)); });
@@ -2466,35 +2586,18 @@ window.__appReady.then(function(){
       cobertura = '<p style="text-align:center;font-size:12.5px;"><b>Pneu(s) coberto(s) por esta garantia:</b> '+(nota.quantidadePneus>0 ? nota.quantidadePneus+'x ' : '')+escHtml(nota.medida)+'</p>';
     }
     var exclusoes =
-      '<p><b>Exclusões da Garantia (Avarias Acidentais):</b> A garantia cobre exclusivamente defeitos de estrutura/fabricação e no conserto. <b>*GARANTIA NÃO É SEGURO*</b>.<br>Não possuem cobertura danos decorrentes de uso, acidentes ou fatores externos, tais como:</p>'+
-      '<ul>'+
-        '<li>Pneus cortados, furados ou rasgados;</li>'+
-        '<li>Bolhas ou deformações causadas por impacto em buracos, meio-fio ou obstáculos;</li>'+
-        '<li>Danos causados por rodar sem pressão de ar, suspensão danificada ou falta de alinhamento.</li>'+
-      '</ul>';
-    var devolucao =
-      '<p><b>Políticas de devolução:</b> quaisquer produtos comprados <i>PRESENCIALMENTE EM LOJA FÍSICA</i> com a opção de escolha e análise por conta própria, não se aplica o direto de devolução por insatisfação. Conforme o código de direito do consumidor art.18 nossa empresa tem o dever de resolver o problema em até 30 dias corridos, após esse período, aí sim o cliente tem o seu direito de ter os valores ressarcidos integralmente.</p>';
+      (G.exclusoesIntro ? '<p>'+ajTexto(G.exclusoesIntro, vars)+'</p>' : '')+
+      (G.exclusoesLista.length ? '<ul>'+G.exclusoesLista.map(function(x){ return '<li>'+ajTexto(x, vars)+'</li>'; }).join('')+'</ul>' : '');
+    var devolucao = G.devolucao ? '<p>'+ajTexto(G.devolucao, vars)+'</p>' : '';
     var obs = nota.detalhes ? '<p><b>Observações desta venda:</b> '+escHtml(nota.detalhes).replace(/\n/g,'<br>')+'</p>' : '';
-    var corpo;
-    if (novos){
-      corpo =
-        '<h3>TERMO DE GARANTIA - PNEUS NOVOS</h3>'+
-        cobertura+
-        '<p><b>Cobertura:</b> A garantia para pneus novos é de <b>5 anos</b> a partir da data da compra ou até o desgaste total da banda de rodagem (atingir o indicador TWI/pneu alisar), o que ocorrer primeiro.</p>'+
-        exclusoes+
-        '<p class="alerta">GARANTIA DE 5 ANOS PARA PNEUS NOVOS.</p>'+
-        '<p>A lei nos obriga a dar garantia legal de 90 dias corridos, mas por consideração ao nosso cliente e confiança dos nossos produtos fornecemos garantia de 5 anos depois da data de compra.</p>'+
-        devolucao+obs;
-    } else {
-      corpo =
-        '<h3>TERMO DE GARANTIA - PNEUS SEMINOVOS</h3>'+
-        cobertura+
-        '<p><b>Cobertura:</b> A garantia para pneus seminovos é de 3 anos a partir da data da compra ou até o desgaste total da banda de rodagem (atingir o indicador TWI/pneu alisar), o que ocorrer primeiro.</p>'+
-        exclusoes+
-        '<p class="alerta">VOCÊ COMPROU PNEU USADO, TENHA CONSCIÊNCIA.</p>'+
-        '<p>A lei nos obriga a dar garantia em relação a qualquer produto usado de 90 dias corridos, mas por consideração ao nosso cliente e confiança dos nossos produtos fornecemos garantia de 3 anos depois da data de compra.</p>'+
-        devolucao+obs;
-    }
+    var corpo =
+      '<h3>'+escHtml(T.titulo)+'</h3>'+
+      cobertura+
+      (T.cobertura ? '<p>'+ajTexto(T.cobertura, vars)+'</p>' : '')+
+      exclusoes+
+      (T.alerta ? '<p class="alerta">'+ajTexto(T.alerta, vars)+'</p>' : '')+
+      (T.lei ? '<p>'+ajTexto(T.lei, vars)+'</p>' : '')+
+      devolucao+obs;
     return '<div class="garantia-box">'+corpo+'<div class="assinatura">Assinatura do cliente:</div></div>';
   }
 
@@ -2589,7 +2692,7 @@ window.__appReady.then(function(){
 
         garantiaBoxHtml(nota)+
 
-        '<div class="footer">Painel de Vendas — Oficina</div>'+
+        '<div class="footer">'+escHtml(AJ.rodape)+'</div>'+
       '</body></html>';
   }
 
@@ -2656,7 +2759,7 @@ window.__appReady.then(function(){
           '<div><span>Unidades em estoque</span><span>'+totalUnidades+'</span></div>'+
           (estoquista ? '' : '<div class="grand"><span>Valor do estoque</span><span>'+fmtCurrency(totalValor)+'</span></div>')+
         '</div>'+
-        '<div class="footer">Painel de Vendas — Oficina</div>'+
+        '<div class="footer">'+escHtml(AJ.rodape)+'</div>'+
       '</body></html>';
   }
 
@@ -4875,7 +4978,7 @@ window.__appReady.then(function(){
     var data = {};
     for (var i=0;i<localStorage.length;i++){
       var k = localStorage.key(i);
-      if (k && (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS || k===K_ORCAMENTOS || k.indexOf(K_NOVOS)===0 || k===K_NOVOS_META || k===K_TAXAS || k.indexOf(K_SAIDAS)===0 || kExtraBackup(k))) data[k] = localStorage.getItem(k);
+      if (k && (k.indexOf(K_ROWS)===0 || k.indexOf(K_SUMMARY)===0 || k===K_CUSTOMERS || k===K_NOTAS || k===K_ORCAMENTOS || k.indexOf(K_NOVOS)===0 || k===K_NOVOS_META || k===K_TAXAS || k===K_AJUSTES || k.indexOf(K_SAIDAS)===0 || kExtraBackup(k))) data[k] = localStorage.getItem(k);
     }
     try{
       localStorage.setItem(K_AUTOBACKUP, JSON.stringify({ts:Date.now(), data:data}));
@@ -5315,7 +5418,7 @@ window.__appReady.then(function(){
 
       root.innerHTML =
         '<div class="topbar">'+
-          '<div class="brand"><span class="mark"></span><h1>Painel de Vendas</h1><span class="tag">OFICINA · CONTROLE DIÁRIO</span>'+syncBadgeHtml()+'</div>'+
+          '<div class="brand"><span class="mark"></span><h1>'+escHtml(AJ.nomeSistema)+'</h1><span class="tag">'+escHtml(AJ.tagSistema)+'</span>'+syncBadgeHtml()+'</div>'+
           authZoneHtml()+
         '</div>'+
         todayGoalBarHtml+
@@ -5332,11 +5435,11 @@ window.__appReady.then(function(){
             '<div class="sub">faturamento total do mês</div>'+nvIncludeHtml+
             '<div class="sub" style="margin-top:2px;">faturamento de '+yearKey+': <b style="color:var(--text);">'+(state.hideValues?'••••••':fmtCurrency(yearTotal))+'</b></div>'+
             '<div class="goal-row">'+
-              '<div class="goal-label"><span>Meta 350 mil</span><b>'+(state.hideValues?'••%':pct1.toFixed(0)+'%')+'</b></div>'+
+              '<div class="goal-label"><span>'+escHtml(metaLabel(GOAL_1))+'</span><b>'+(state.hideValues?'••%':pct1.toFixed(0)+'%')+'</b></div>'+
               '<div class="goal-track"><div class="goal-fill'+(pct1>=100?' reached':'')+'" style="width:'+(state.hideValues?0:pct1)+'%"></div></div>'+
             '</div>'+
             '<div class="goal-row">'+
-              '<div class="goal-label"><span>Meta 450 mil</span><b>'+(state.hideValues?'••%':pct2.toFixed(0)+'%')+'</b></div>'+
+              '<div class="goal-label"><span>'+escHtml(metaLabel(GOAL_2))+'</span><b>'+(state.hideValues?'••%':pct2.toFixed(0)+'%')+'</b></div>'+
               '<div class="goal-track"><div class="goal-fill'+(pct2>=100?' reached':'')+'" style="width:'+(state.hideValues?0:pct2)+'%"></div></div>'+
             '</div>'+
           '</div>'+
@@ -5356,8 +5459,8 @@ window.__appReady.then(function(){
 
         '<div class="daily-target-head">Quanto falta vender por dia para bater a meta <span style="color:var(--text-faint);">(sem contar domingos e feriados)</span></div>'+
         '<div class="daily-target">'+
-          dailyTargetCardHtml("Meta 350 mil", GOAL_1)+
-          dailyTargetCardHtml("Meta 450 mil", GOAL_2)+
+          dailyTargetCardHtml(metaLabel(GOAL_1), GOAL_1)+
+          dailyTargetCardHtml(metaLabel(GOAL_2), GOAL_2)+
         '</div>'+
         saidasDashHtml(selDay)+
 
@@ -7002,6 +7105,7 @@ window.__appReady.then(function(){
       (avisosCount>0 ? '<span class="nav-badge">'+avisosCount+'</span>' : '')+'</button>';
     var historicoBtn = isMaster ? '<button class="btn ghost small" data-act="openhistorico" title="Ver logins e movimentações de estoque">🕘 Histórico'+histBadgeHtml()+'</button>' : '';
     var usuariosBtn = isMaster ? '<button class="btn ghost small" data-act="openusuarios" title="Criar logins e alterar cargos">👤 Usuários</button>' : '';
+    if (isMaster) usuariosBtn += '<button class="btn ghost small" data-act="openajustes" title="Editar nome, nota, garantia, metas e equipe">⚙️ Ajustes</button>';
     if (isMaster) usuariosBtn += '<button class="btn ghost small" data-act="opentaxas" title="Maquininhas e juros de cada parcela do crédito">💳 Taxas</button>';
     if (isMaster) usuariosBtn += '<button class="btn ghost small" data-act="openferramentas" title="Relatório do mês por pessoa, backups automáticos e migração de dados">🛠 Ferramentas</button>';
     if (!can("estoque")) estoqueBtn = "";
@@ -7200,6 +7304,7 @@ window.__appReady.then(function(){
     else if (act==="cmpyear"){ state.cmpMode="year"; render(); }
     else if (act==="back"){ state.view="dashboard"; render(); }
     else if (act==="addrow"){ addRow(); }
+    else if (act==="openajustes"){ if (state.role==="master"){ state.modal = {type:"ajustes"}; render(); } }
     else if (act==="opentaxas"){ if (state.role==="master"){ state.modal = {type:"taxasCartao"}; render(); } }
     else if (act==="openferramentas"){ if (state.role==="master"){ state.modal = {type:"ferramentas"}; render(); } }
     else if (act==="opensaidas"){ if (podeSaidas()){ state.modal = {type:"saidas", date:tblDate()}; render(); } }
@@ -8305,6 +8410,7 @@ window.__appReady.then(function(){
     else if (state.modal.type==="multiPag") renderMultiPagModal();
     else if (state.modal.type==="credito") renderCreditoModal();
     else if (state.modal.type==="taxasCartao") renderTaxasModal();
+    else if (state.modal.type==="ajustes") renderAjustesModal();
     else if (state.modal.type==="globalSearch") renderGlobalSearchModal();
     else if (state.modal.type==="novoForm") renderNovoFormModal();
     else if (state.modal.type==="novosMeta") renderNovosMetaModal();
@@ -8893,7 +8999,7 @@ window.__appReady.then(function(){
   function renderSemAcesso(){
     root.classList.remove("wide");
     root.innerHTML =
-      '<div class="topbar"><div class="brand"><span class="mark"></span><h1>Painel de Vendas</h1></div>'+authZoneHtml()+'</div>'+
+      '<div class="topbar"><div class="brand"><span class="mark"></span><h1>'+escHtml(AJ.nomeSistema)+'</h1></div>'+authZoneHtml()+'</div>'+
       '<div class="card" style="padding:18px 16px;">Seu usuário ainda não tem nenhuma tela liberada. Peça para o master liberar o acesso.</div>';
     root.querySelectorAll("[data-act]").forEach(function(node){
       node.addEventListener("click", function(){ handleAction(node.getAttribute("data-act"), node); });
@@ -10021,7 +10127,7 @@ window.__appReady.then(function(){
           '<div>Assinatura do cliente</div>'+
           '<div>'+escHtml(EMPRESA.nome)+'</div>'+
         '</div>'+
-        '<div class="footer">Painel de Vendas — Oficina</div>'+
+        '<div class="footer">'+escHtml(AJ.rodape)+'</div>'+
       '</body></html>';
   }
 
@@ -11293,6 +11399,182 @@ window.__appReady.then(function(){
     });
   }
 
+  // ---------- modal: AJUSTES (só o master) ----------
+  function ajNumBR(v){ // aceita "350000", "350.000", "350.000,50", "350 000"
+    var t = String(v==null ? "" : v).replace(/R\$|\s/g, "");
+    if (!t) return 0;
+    if (t.indexOf(",")>-1) t = t.replace(/\./g, "").replace(",", ".");
+    else if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, "");
+    var n = parseFloat(t);
+    return isNaN(n) ? 0 : n;
+  }
+  function renderAjustesModal(){
+    if (state.role!=="master"){ state.modal = null; return; }
+    var cfg = ajustesCfg(), pad = ajustesPadrao();
+    var tab = state.modal.tab || "empresa";
+    var metaNovos = loadNovosMeta();
+    var inp = "background:var(--panel-alt);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:8px 10px;width:100%;box-sizing:border-box;margin:0;letter-spacing:normal;font-size:14px;font-family:inherit;";
+    var lab = "display:block;font-size:12px;color:var(--text-dim);margin:10px 0 4px;";
+    var box = "border:1px solid var(--border);border-radius:8px;padding:4px 12px 12px;margin-bottom:12px;";
+    var dica = "font-size:12px;color:var(--text-faint);margin:6px 0 0;line-height:1.5;";
+    function campo(id, rotulo, valor, extra){
+      return '<label style="'+lab+'" for="'+id+'">'+rotulo+'</label><input type="text" id="'+id+'" value="'+escAttr(valor)+'" style="'+inp+'"'+(extra||'')+'>';
+    }
+    function area(id, rotulo, valor, linhas){
+      return '<label style="'+lab+'" for="'+id+'">'+rotulo+'</label><textarea id="'+id+'" rows="'+(linhas||3)+'" style="'+inp+'resize:vertical;line-height:1.45;">'+escHtml(valor)+'</textarea>';
+    }
+    function blocoGarantia(t, titulo){
+      var g = cfg.garantia[t];
+      return '<div style="'+box+'"><div style="font-size:13px;font-weight:600;margin:10px 0 0;">'+titulo+'</div>'+
+        campo("ajG_"+t+"_titulo", "Título do termo", g.titulo)+
+        campo("ajG_"+t+"_anos", "Anos de garantia (use {anos} nos textos abaixo)", g.anos, ' inputmode="numeric"')+
+        area("ajG_"+t+"_cobertura", "Parágrafo de cobertura", g.cobertura, 3)+
+        area("ajG_"+t+"_alerta", "Frase de destaque (em negrito, centralizada)", g.alerta, 2)+
+        area("ajG_"+t+"_lei", "Parágrafo sobre a lei e a garantia da loja", g.lei, 3)+
+      '</div>';
+    }
+    var painelEmpresa =
+      '<div style="'+box+'"><div style="font-size:13px;font-weight:600;margin:10px 0 0;">Nome do sistema (aparece no topo das telas)</div>'+
+        campo("ajNomeSistema", "Nome", cfg.nomeSistema)+
+        campo("ajTagSistema", "Subtítulo (pequeno, ao lado do nome)", cfg.tagSistema)+
+      '</div>'+
+      '<div style="'+box+'"><div style="font-size:13px;font-weight:600;margin:10px 0 0;">Dados da empresa (cabeçalho da nota, do orçamento e dos relatórios)</div>'+
+        campo("ajEmpNome", "Nome da empresa", cfg.empresa.nome)+
+        campo("ajEmpTel", "Telefone", cfg.empresa.telefone)+
+        campo("ajEmpEmail", "E-mail", cfg.empresa.email)+
+        campo("ajEmpCnpj", "CNPJ", cfg.empresa.cnpj)+
+        campo("ajEmpEnd", "Endereço", cfg.empresa.endereco)+
+        campo("ajEmpCidade", "Cidade", cfg.empresa.cidade)+
+        campo("ajRodape", "Texto do rodapé da nota e do orçamento", cfg.rodape)+
+      '</div>';
+    var painelGarantia =
+      '<p style="'+dica+'margin-bottom:10px;">Estes textos saem no termo de garantia impresso na nota. Escreva <b>**assim**</b> para negrito e <b>__assim__</b> para itálico. Onde quiser que apareça o prazo, escreva <b>{anos}</b>; para os dias da garantia legal, escreva <b>{dias}</b>. Deixar um campo de parágrafo vazio faz o parágrafo sumir da nota.</p>'+
+      blocoGarantia("seminovos", "🛞 Pneus seminovos")+
+      blocoGarantia("novos", "🆕 Pneus novos")+
+      '<div style="'+box+'"><div style="font-size:13px;font-weight:600;margin:10px 0 0;">Partes comuns aos dois termos</div>'+
+        campo("ajG_dias", "Dias da garantia legal (vale para {dias})", cfg.garantia.diasLegais, ' inputmode="numeric"')+
+        area("ajG_exclIntro", "Texto antes da lista de exclusões", cfg.garantia.exclusoesIntro, 4)+
+        area("ajG_exclLista", "Lista de exclusões (um item por linha)", cfg.garantia.exclusoesLista.join("\n"), 4)+
+        area("ajG_devolucao", "Política de devolução", cfg.garantia.devolucao, 5)+
+      '</div>'+
+      '<button class="btn ghost small" id="ajGarantiaPadrao" type="button">↺ Voltar os textos da garantia ao original</button>';
+    var painelMetas =
+      '<div style="'+box+'"><div style="font-size:13px;font-weight:600;margin:10px 0 0;">Metas de faturamento do mês (painel principal)</div>'+
+        campo("ajMeta1", "Meta 1 (R$)", cfg.metas.meta1, ' inputmode="decimal"')+
+        '<div style="'+dica+'" id="ajMeta1Rot"></div>'+
+        campo("ajMeta2", "Meta 2 (R$)", cfg.metas.meta2, ' inputmode="decimal"')+
+        '<div style="'+dica+'" id="ajMeta2Rot"></div>'+
+        '<p style="'+dica+'">O nome de cada meta ("Meta 350 mil") acompanha o valor digitado. Vale para a barra de progresso e para o "quanto falta vender por dia".</p>'+
+      '</div>'+
+      '<div style="'+box+'"><div style="font-size:13px;font-weight:600;margin:10px 0 0;">Meta mensal de pneus novos</div>'+
+        campo("ajMetaNovos", "Meta do mês (R$) — deixe vazio para não ter meta", metaNovos>0 ? metaNovos : "", ' inputmode="decimal" placeholder="0,00"')+
+      '</div>';
+    var painelEquipe =
+      '<div style="'+box+'"><div style="font-size:13px;font-weight:600;margin:10px 0 0;">Vendedores</div>'+
+        area("ajVendedores", "Um nome por linha", cfg.equipe.vendedores.join("\n"), 6)+
+        '<p style="'+dica+'">"Nenhum" e "Loja" já existem sempre e não precisam ser escritos aqui. Vendas sem vendedor continuam contando como "Loja".</p>'+
+      '</div>'+
+      '<div style="'+box+'"><div style="font-size:13px;font-weight:600;margin:10px 0 0;">Quem faz mão de obra / serviço</div>'+
+        area("ajMaoObra", "Um nome por linha", cfg.equipe.maoDeObra.join("\n"), 5)+
+      '</div>'+
+      '<p style="'+dica+'">⚠️ Cuidado ao <b>trocar o nome</b> ou <b>tirar</b> alguém: o faturamento total não muda, mas as vendas antigas daquela pessoa deixam de aparecer nos relatórios por vendedor / por pessoa. Para quem saiu da loja, o mais seguro é só não usar mais o nome.</p>';
+    var abas = [["empresa","🏪 Empresa e nota"],["garantia","🛡️ Garantia"],["metas","🎯 Metas"],["equipe","👥 Equipe"]];
+    var div = document.createElement("div");
+    div.className = "overlay";
+    div.innerHTML =
+      '<div class="modal wide" style="max-width:680px;">'+
+        '<h3>⚙️ Ajustes do sistema</h3>'+
+        '<p style="font-size:12.5px;color:var(--text-dim);margin:0 0 10px;">Só o master vê e altera esta tela. Tudo o que você mudar vale para todos os aparelhos assim que salvar.</p>'+
+        '<div id="ajAbas" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">'+
+          abas.map(function(a){ return '<button type="button" class="btn small '+(a[0]===tab?'primary':'ghost')+'" data-aba="'+a[0]+'">'+a[1]+'</button>'; }).join("")+
+        '</div>'+
+        '<div style="max-height:56vh;overflow:auto;padding-right:2px;">'+
+          '<div class="ajPainel" data-p="empresa"'+(tab==="empresa"?'':' hidden')+'>'+painelEmpresa+'</div>'+
+          '<div class="ajPainel" data-p="garantia"'+(tab==="garantia"?'':' hidden')+'>'+painelGarantia+'</div>'+
+          '<div class="ajPainel" data-p="metas"'+(tab==="metas"?'':' hidden')+'>'+painelMetas+'</div>'+
+          '<div class="ajPainel" data-p="equipe"'+(tab==="equipe"?'':' hidden')+'>'+painelEquipe+'</div>'+
+        '</div>'+
+        '<div id="ajErro" style="color:var(--red,#e2554c);font-size:12.5px;margin-top:8px;min-height:16px;"></div>'+
+        '<div class="modal-actions"><button class="btn ghost small" id="ajCancel" type="button">Cancelar</button><button class="btn primary small" id="ajSave" type="button">Salvar ajustes</button></div>'+
+      '</div>';
+    document.body.appendChild(div);
+    function el(id){ return div.querySelector("#"+id); }
+    function val(id){ var e = el(id); return e ? e.value : ""; }
+    function linhas(id){ return val(id).split(/\r?\n/); }
+    // abas (só mostram/escondem: nada do que foi digitado se perde ao trocar de aba)
+    div.querySelectorAll("#ajAbas button").forEach(function(b){
+      b.addEventListener("click", function(){
+        var alvo = b.getAttribute("data-aba");
+        state.modal.tab = alvo;
+        div.querySelectorAll(".ajPainel").forEach(function(pn){ pn.hidden = pn.getAttribute("data-p")!==alvo; });
+        div.querySelectorAll("#ajAbas button").forEach(function(o){ o.className = "btn small " + (o===b ? "primary" : "ghost"); });
+      });
+    });
+    // nome da meta ao vivo
+    function rotMeta(){
+      [["ajMeta1","ajMeta1Rot"],["ajMeta2","ajMeta2Rot"]].forEach(function(par){
+        var n = ajNumBR(val(par[0]));
+        el(par[1]).textContent = n>0 ? ('Vai aparecer como: "'+metaLabel(n)+'"  ·  '+fmtCurrency(n)) : "Digite um valor maior que zero.";
+      });
+    }
+    el("ajMeta1").addEventListener("input", rotMeta); el("ajMeta2").addEventListener("input", rotMeta); rotMeta();
+    // voltar textos da garantia ao original (só preenche os campos; vale ao salvar)
+    el("ajGarantiaPadrao").addEventListener("click", function(){
+      if (!confirm("Voltar todos os textos e prazos da garantia ao original? (só vale depois de clicar em Salvar ajustes)")) return;
+      var g = pad.garantia;
+      ["novos","seminovos"].forEach(function(t){
+        el("ajG_"+t+"_titulo").value = g[t].titulo; el("ajG_"+t+"_anos").value = g[t].anos;
+        el("ajG_"+t+"_cobertura").value = g[t].cobertura; el("ajG_"+t+"_alerta").value = g[t].alerta; el("ajG_"+t+"_lei").value = g[t].lei;
+      });
+      el("ajG_dias").value = g.diasLegais; el("ajG_exclIntro").value = g.exclusoesIntro;
+      el("ajG_exclLista").value = g.exclusoesLista.join("\n"); el("ajG_devolucao").value = g.devolucao;
+    });
+    function fechar(){ state.modal = null; render(); }
+    el("ajCancel").addEventListener("click", fechar);
+    function erro(msg, aba){
+      el("ajErro").textContent = msg;
+      if (aba){ var b = div.querySelector('#ajAbas button[data-aba="'+aba+'"]'); if (b) b.click(); }
+    }
+    el("ajSave").addEventListener("click", function(){
+      if (state.role!=="master") return;
+      var m1 = ajNumBR(val("ajMeta1")), m2 = ajNumBR(val("ajMeta2"));
+      if (!(m1>0)) return erro("A Meta 1 precisa ser um valor maior que zero.", "metas");
+      if (!(m2>0)) return erro("A Meta 2 precisa ser um valor maior que zero.", "metas");
+      var anosN = Math.round(ajNumBR(val("ajG_novos_anos"))), anosS = Math.round(ajNumBR(val("ajG_seminovos_anos")));
+      if (!(anosN>0) || !(anosS>0)) return erro("Os anos de garantia precisam ser um número maior que zero.", "garantia");
+      var dias = Math.round(ajNumBR(val("ajG_dias")));
+      if (dias<0 || val("ajG_dias").trim()==="") return erro("Informe os dias da garantia legal (pode ser 0).", "garantia");
+      if (!val("ajNomeSistema").trim()) return erro("O nome do sistema não pode ficar vazio.", "empresa");
+      if (!val("ajEmpNome").trim()) return erro("O nome da empresa não pode ficar vazio (ele sai na nota).", "empresa");
+      var vend = ajNomes(linhas("ajVendedores"), ["nenhum","loja"]);
+      var mao = ajNomes(linhas("ajMaoObra"));
+      // avisa se alguém foi tirado ou teve o nome trocado
+      var antes = cfg.equipe.vendedores.concat(cfg.equipe.maoDeObra);
+      var depois = vend.concat(mao).map(function(x){ return x.toLowerCase(); });
+      var sumiram = antes.filter(function(x){ return depois.indexOf(x.toLowerCase())===-1; });
+      if (sumiram.length && !confirm("Estes nomes deixaram de existir na lista: "+sumiram.join(", ")+".\n\nO faturamento total não muda, mas as vendas antigas deles deixam de aparecer nos relatórios por vendedor/pessoa. Salvar mesmo assim?")) return;
+      function tg(t){
+        return {titulo: val("ajG_"+t+"_titulo").trim() || pad.garantia[t].titulo, anos: t==="novos" ? anosN : anosS,
+                cobertura: val("ajG_"+t+"_cobertura").trim(), alerta: val("ajG_"+t+"_alerta").trim(), lei: val("ajG_"+t+"_lei").trim()};
+      }
+      var novo = {
+        nomeSistema: val("ajNomeSistema").trim(), tagSistema: val("ajTagSistema").trim(), rodape: val("ajRodape").trim(),
+        empresa: {nome: val("ajEmpNome").trim(), telefone: val("ajEmpTel").trim(), email: val("ajEmpEmail").trim(),
+                  cnpj: val("ajEmpCnpj").trim(), endereco: val("ajEmpEnd").trim(), cidade: val("ajEmpCidade").trim()},
+        metas: {meta1: m1, meta2: m2},
+        equipe: {vendedores: vend, maoDeObra: mao},
+        garantia: {diasLegais: dias, novos: tg("novos"), seminovos: tg("seminovos"),
+                   exclusoesIntro: val("ajG_exclIntro").trim(), exclusoesLista: linhas("ajG_exclLista").map(function(x){ return x.trim(); }).filter(Boolean),
+                   devolucao: val("ajG_devolucao").trim()}
+      };
+      lsSetJSON(K_AJUSTES, novo);
+      saveNovosMeta(Math.max(0, ajNumBR(val("ajMetaNovos"))));
+      aplicarAjustes();
+      try{ state.monthSummaryCache = {}; state.monthPartsCache = {}; }catch(e){}
+      fechar();
+    });
+  }
+
   // ---------- modal: dividir o pagamento entre até 4 formas ----------
   function renderMultiPagModal(){
     var rowId = state.modal.rowId;
@@ -12558,6 +12840,7 @@ window.__appReady.then(function(){
   // ---------- reage a mudanças feitas em outro aparelho ----------
   function handleRemoteChange(key){
     if (key===K_PERMS) aplicarPermissoes();
+    if (key===K_AJUSTES) aplicarAjustes();
     if (key.indexOf(K_REGMES)===0){
       // outro aparelho mudou um mês do registro: não atropela quem está digitando agora
       var ae = document.activeElement;
@@ -12607,7 +12890,7 @@ window.__appReady.then(function(){
     var lembrado = lerUsuarioLembrado();
     root.innerHTML =
       '<div class="login-screen"><div class="login-card">'+
-        '<div class="brand"><span class="mark"></span><h1>Painel de Vendas</h1></div>'+
+        '<div class="brand"><span class="mark"></span><h1>'+escHtml(AJ.nomeSistema)+'</h1></div>'+
         '<p class="hint">Entre com seu e-mail e senha para acessar o sistema.</p>'+
         '<input type="email" id="loginEmail" placeholder="E-mail" autocomplete="username" value="'+escAttr(lembrado)+'">'+
         '<input type="password" id="loginPassword" placeholder="Senha" autocomplete="current-password">'+
@@ -12756,7 +13039,7 @@ window.__appReady.then(function(){
     root.classList.remove("wide");
     root.innerHTML =
       '<div class="login-screen"><div class="login-card">'+
-        '<div class="brand"><span class="mark"></span><h1>Painel de Vendas</h1></div>'+
+        '<div class="brand"><span class="mark"></span><h1>'+escHtml(AJ.nomeSistema)+'</h1></div>'+
         '<p class="hint"><b>Seu login foi criado, mas o acesso ainda não foi liberado.</b><br>Peça ao dono para definir o seu cargo (Vendedor, Montador…) na tela de Usuários.</p>'+
         '<button class="btn primary" id="pendSair">Sair</button>'+
       '</div></div>';
@@ -12770,7 +13053,7 @@ window.__appReady.then(function(){
     root.classList.remove("wide");
     root.innerHTML =
       '<div class="login-screen"><div class="login-card">'+
-        '<div class="brand"><span class="mark"></span><h1>Painel de Vendas</h1></div>'+
+        '<div class="brand"><span class="mark"></span><h1>'+escHtml(AJ.nomeSistema)+'</h1></div>'+
         '<p class="hint"><b>Falta ligar o sistema ao seu Supabase.</b><br>Abra o arquivo <b>config.js</b> (no GitHub) e cole o endereço (Project URL) e a chave do seu projeto. Depois é só recarregar esta página.</p>'+
       '</div></div>';
   }
@@ -12778,7 +13061,7 @@ window.__appReady.then(function(){
     root.classList.remove("wide");
     root.innerHTML =
       '<div class="login-screen"><div class="login-card">'+
-        '<div class="brand"><span class="mark"></span><h1>Painel de Vendas</h1></div>'+
+        '<div class="brand"><span class="mark"></span><h1>'+escHtml(AJ.nomeSistema)+'</h1></div>'+
         '<p class="hint">Não consegui conectar ao servidor. Verifique a internet; vou tentar de novo sozinho.</p>'+
         '<button class="btn primary" id="semNuvemBtn">Tentar agora</button>'+
       '</div></div>';
