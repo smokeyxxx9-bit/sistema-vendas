@@ -6383,13 +6383,13 @@ window.__appReady.then(function(){
     var recC = 0, lucC = 0, nC = 0, nSemC = 0, txC = 0;
     V.forEach(function(x){
       if (!x.novo) return;
-      if (novoTemCusto(x.r)){ recC += novoReceitaPneus(x.r); lucC += novoLucroBruto(x.r); txC += taxaCartao(x.r, true); nC++; }
+      if (novoTemCusto(x.r)){ recC += novoReceitaPneus(x.r); lucC += novoLucroBruto(x.r); txC += novoTaxaPneus(x.r); nC++; }
       else if (parseNum(x.r.valorPneus)>0) nSemC++;
     });
     blocos.push(adminSec("💹 Margem de lucro estimada",
       nC ? adminLinha("Lucro dos pneus novos", '<b style="color:var(--green);">'+mv(lucC)+'</b>', nC+" venda(s) com custo informado")+
            adminLinha("Margem", '<b>'+(recC>0 ? (lucC/recC*100).toFixed(1).replace(".",",")+"%" : "—")+'</b>', "Lucro ÷ valor dos pneus")+
-           adminLinha("Lucro líquido (após taxas)", '<b>'+mv(lucC-txC)+'</b>', "Taxas dessas vendas: -"+mv(txC))
+           adminLinha("Lucro líquido (após taxas)", '<b>'+mv(lucC-txC)+'</b>', "Taxa sobre os pneus dessas vendas: -"+mv(txC))
          : adminVazio("Nenhum pneu novo com custo informado neste mês."),
       nSemC>0 ? nSemC+" venda(s) de pneus novos sem custo informado ficaram de fora. Seminovos e serviços não têm custo cadastrado." : "Seminovos e serviços não têm custo cadastrado, então ficam fora do cálculo."));
 
