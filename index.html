@@ -5037,9 +5037,14 @@ window.__appReady.then(function(){
     {k:"lucro",       l:"Lucro dos pneus novos",         moeda:true,  origem:false},
     {k:"vendas",      l:"Nº de vendas",                  moeda:false, origem:true},
     {k:"pneus",       l:"Nº de pneus vendidos",          moeda:false, origem:true},
-    {k:"serv_valor",  l:"Valor de serviços realizados",  moeda:true,  origem:false},
-    {k:"serv_qtd",    l:"Nº de serviços realizados",     moeda:false, origem:false}
+    {k:"serv_valor",  l:"Valor dos serviços vendidos (tabelas de venda)",  moeda:true,  origem:false, serv:true},
+    {k:"serv_qtd",    l:"Nº de serviços vendidos (tabelas de venda)",     moeda:false, origem:false, serv:true}
   ];
+  // serviços que podem entrar nas metas — são os mesmos do quadro "Produtos e serviços mais vendidos"
+  var CFG_SERV_VENDAS = [["Bicos","Bicos"],["Cambagem","Cambagem"],["Conserto de rodas","Rodas"],["Alinhamento","Alinhamento"],["Serviço (tabela)","Serviço"],["Peças","Peças"]];
+  var CFG_SERV_PADRAO = ["Bicos","Cambagem","Conserto de rodas","Alinhamento"];
+  // de quem é cada tipo (pelo "serviço soma em" do funcionário): Wesley→Bicos, Renan→Cambagem, João→Rodas
+  var CFG_DESTINO_TIPO = {"Bicos":"Bicos","Cambagem":"Cambagem","Rodas":"Conserto de rodas"};
   var CFG_ORIGENS = [["todas","Todas as vendas"],["novos","Só pneus novos"],["semi","Só seminovos"]];
   var CFG_DESTINOS = ["","Bicos","Cambagem","Rodas"];
   var CFG_TIPOS_SERV = ["","Bicos","Cambagem","Conserto de rodas","Alinhamento","Serviço (tabela)"];
@@ -5084,6 +5089,8 @@ window.__appReady.then(function(){
       if (!Array.isArray(x.alvos)) x.alvos = []; if (!Array.isArray(x.regras)) x.regras = [];
       if (!x.premio) x.premio = {tipo:"nenhum", valor:0, divisao:"cada"};
       if (!x.origem) x.origem = "todas"; if (!x.metrica) x.metrica = "faturamento";
+      if (!Array.isArray(x.servTipos) || !x.servTipos.length) x.servTipos = CFG_SERV_PADRAO.slice();
+      x.regras.forEach(function(r){ if (!Array.isArray(r.servTipos) || !r.servTipos.length) r.servTipos = CFG_SERV_PADRAO.slice(); });
     });
     return c;
   }
@@ -5208,7 +5215,15 @@ window.__appReady.then(function(){
         if (tot>0) a.m.vendas.novos += 1; a.m.pneus.novos += parseNum(n.quantidade);
       });
     });
-    // serviços lançados pelos montadores nas O.S. (quem lançou aparece como "por")
+    // serviços vendidos nas tabelas (os mesmos números do quadro "Produtos e serviços mais vendidos"):
+    // é isto que conta nas metas de serviço — e não o que cada montador lançou nas O.S.
+    var stv = servicosTotais(V.semi.map(function(x){ return x.r; }).filter(Boolean).concat(V.novos));
+    var vs = {
+      "Bicos":{valor:stv.totalBicos, qtd:stv.qtdBicos}, "Cambagem":{valor:stv.totalCambagem, qtd:stv.qtdCambagem},
+      "Conserto de rodas":{valor:stv.totalRodas, qtd:stv.qtdRodas}, "Alinhamento":{valor:stv.alinhamento, qtd:stv.qtdAlinhamento},
+      "Serviço (tabela)":{valor:stv.outros, qtd:0}, "Peças":{valor:stv.valorPecas, qtd:0}
+    };
+    // serviços lançados pelos montadores nas O.S. (quem lançou aparece como "por") — só para as comissões
     var oss = []; try{ oss = loadOS(); }catch(e){}
     oss.forEach(function(o){
       (o.servicos||[]).forEach(function(s){
@@ -5219,7 +5234,26 @@ window.__appReady.then(function(){
         var a = donoDe(s.por); if (a) addServ(a, tipo, valor, qtd);
       });
     });
-    return {month:month, loja:loja, P:P};
+    return {month:month, loja:loja, P:P, vs:vs};
+  }
+  // quanto das metas de serviço foi feito, olhando as tabelas de venda e só os tipos marcados na meta
+  //  • meta da loja: todos os tipos marcados
+  //  • meta conjunta: tipos de quem está no grupo + tipos sem dono (Alinhamento, Serviço, Peças)
+  //  • meta individual: só os tipos da própria pessoa (o "serviço soma em" dela)
+  function cfgMedServVendas(escopo, ids, ap, cfg, tipos, metrica){
+    tipos = (tipos && tipos.length) ? tipos : CFG_SERV_PADRAO;
+    var donos = {};
+    cfg.funcionarios.forEach(function(f){ var t = CFG_DESTINO_TIPO[f.destino]; if (t){ (donos[t] = donos[t] || []).push(f.id); } });
+    var tot = 0;
+    tipos.forEach(function(t){
+      var x = (ap.vs||{})[t]; if (!x) return;
+      var v = metrica==="serv_qtd" ? x.qtd : x.valor, own = donos[t] || [];
+      if (escopo==="loja") tot += v;
+      else if (!own.length){ if (escopo==="conjunta") tot += v; }
+      else if (escopo==="individual"){ if (ids.some(function(id){ return own.indexOf(id)>-1; })) tot += v/own.length; }
+      else if (own.some(function(id){ return ids.indexOf(id)>-1; })) tot += v;
+    });
+    return tot;
   }
 
   // ---------- metas ----------
@@ -5242,11 +5276,14 @@ window.__appReady.then(function(){
       else if (ids.length) grupos.push({ids:ids, nome:ids.map(function(id){ return cfgNomeFunc(cfg,id); }).join(" + "), ac:cfgSomaAc(ids.map(function(id){ return ap.P[id]; }))});
     }
     return grupos.map(function(g){
-      var atual = cfgMed(g.ac, meta.metrica, meta.origem), alvo = parseNum(meta.valor);
+      function med(metrica, origem, tipos){
+        return cfgMetricaInfo(metrica).serv ? cfgMedServVendas(meta.escopo, g.ids, ap, cfg, tipos, metrica) : cfgMed(g.ac, metrica, origem);
+      }
+      var atual = med(meta.metrica, meta.origem, meta.servTipos), alvo = parseNum(meta.valor);
       var okValor = alvo>0 ? atual>=alvo-0.0001 : true;
       var regras = (meta.regras||[]).map(function(r){
-        var a = cfgMed(g.ac, r.metrica, r.origem), min = parseNum(r.min);
-        return {metrica:r.metrica, origem:r.origem, atual:a, min:min, ok:a>=min-0.0001};
+        var a = med(r.metrica, r.origem, r.servTipos), min = parseNum(r.min);
+        return {metrica:r.metrica, origem:r.origem, servTipos:r.servTipos, atual:a, min:min, ok:a>=min-0.0001};
       });
       var ok = okValor && regras.every(function(r){ return r.ok; });
       var pct = alvo>0 ? Math.min(100, (atual/alvo)*100) : (ok ? 100 : 0);
@@ -5263,9 +5300,13 @@ window.__appReady.then(function(){
   function cfgMetricaInfo(k){ return CFG_METRICAS.filter(function(x){ return x.k===k; })[0] || CFG_METRICAS[0]; }
   function cfgOrigemLabel(o){ var f = CFG_ORIGENS.filter(function(x){ return x[0]===o; })[0]; return f ? f[1] : ""; }
   function cfgFmtVal(v, metrica){ return cfgMetricaInfo(metrica).moeda ? fmtCurrency(v) : String(Math.round(v*100)/100).replace(".",",")+" un."; }
-  function cfgDescCondicao(metrica, origem, valor){
+  function cfgServTiposLabel(tipos){
+    tipos = (tipos && tipos.length) ? tipos : CFG_SERV_PADRAO;
+    return tipos.map(function(t){ var f = CFG_SERV_VENDAS.filter(function(x){ return x[0]===t; })[0]; return f ? f[1] : t; }).join(", ");
+  }
+  function cfgDescCondicao(metrica, origem, valor, tipos){
     var mi = cfgMetricaInfo(metrica);
-    return mi.l.toLowerCase()+(mi.origem && origem && origem!=="todas" ? " ("+cfgOrigemLabel(origem).toLowerCase()+")" : "")+" ≥ "+cfgFmtVal(parseNum(valor), metrica);
+    return mi.l.toLowerCase()+(mi.origem && origem && origem!=="todas" ? " ("+cfgOrigemLabel(origem).toLowerCase()+")" : "")+(mi.serv ? " ["+cfgServTiposLabel(tipos)+"]" : "")+" ≥ "+cfgFmtVal(parseNum(valor), metrica);
   }
 
   // ---------- comissões ----------
@@ -5372,6 +5413,15 @@ window.__appReady.then(function(){
       cfgBtn("additem", "+ Adicionar regra de comissão", 'data-lista="comissoes"');
   }
 
+  // caixinhas "quais serviços contam" (aparecem quando a meta/condição mede serviços)
+  function cfgChecksServ(path, tipos){
+    var sel = (tipos && tipos.length) ? tipos : CFG_SERV_PADRAO;
+    return '<div style="flex:1 1 100%;min-width:0;"><div style="font-size:11.5px;color:var(--text-dim);margin:0 0 4px;">Quais serviços contam (valores das tabelas de venda, os mesmos do quadro "Produtos e serviços mais vendidos")</div>'+
+      '<div style="display:flex;gap:6px 18px;flex-wrap:wrap;">'+CFG_SERV_VENDAS.map(function(t){
+        return '<label style="display:flex;align-items:center;gap:6px;font-size:13.5px;cursor:pointer;"><input type="checkbox" data-f="'+path+'" data-multi="1" value="'+escAttr(t[0])+'"'+(sel.indexOf(t[0])>-1 ? " checked" : "")+'> '+escHtml(t[1])+'</label>';
+      }).join("")+'</div>'+
+      '<div style="font-size:11.5px;color:var(--text-faint);margin-top:4px;">Meta individual conta só o tipo da própria pessoa (Wesley→Bicos, Renan→Cambagem, João→Rodas). Alinhamento, Serviço e Peças não têm dono: contam na meta da loja e nas metas conjuntas.</div></div>';
+  }
   function cfgFormMeta(d, cfg){
     var mi = cfgMetricaInfo(d.metrica);
     var alvos = d.escopo!=="loja" ?
@@ -5389,6 +5439,7 @@ window.__appReady.then(function(){
         (ri.origem ? cfgCampo("Considerar", cfgSel(p+".origem", CFG_ORIGENS, r.origem||"todas"), "1 1 150px") : "")+
         cfgCampo("Mínimo ("+(ri.moeda ? "R$" : "un.")+")", cfgNumIn(p+".min", r.min), "0 1 110px")+
         cfgBtn("delitem", "Remover", 'data-lista="regras" data-i="'+i+'"')+
+        (ri.serv ? cfgChecksServ(p+".servTipos", r.servTipos) : "")+
       '</div>';
     }).join("");
     var premio = d.escopo!=="loja" ?
@@ -5406,6 +5457,7 @@ window.__appReady.then(function(){
         cfgCampo("O que é medido", cfgSel("metrica", CFG_METRICAS.map(function(x){ return [x.k, x.l]; }), d.metrica, true), "2 1 250px")+
         (mi.origem ? cfgCampo("Considerar", cfgSel("origem", CFG_ORIGENS, d.origem||"todas"), "1 1 170px") : "")+
         cfgCampo("Valor da meta ("+(mi.moeda ? "R$" : "unidades")+")", cfgNumIn("valor", d.valor), "0 1 150px")+
+        (mi.serv ? cfgChecksServ("servTipos", d.servTipos) : "")+
       '</div>'+
       (d.escopo==="loja" && d.metrica!=="faturamento" ? '<div style="font-size:12px;color:var(--yellow);margin:6px 0;">Metas da loja só aparecem como barra grande no topo do painel quando medem o faturamento. As demais aparecem no quadro "Metas da equipe".</div>' : "")+
       alvos+
@@ -5448,13 +5500,13 @@ window.__appReady.then(function(){
       var ids = cfgMetaAlvos(m, cfg), nomes = ids.map(function(id){ return cfgNomeFunc(cfg, id); });
       partes.push((m.escopo==="individual" ? "Para: " : "Grupo: ")+(nomes.join(", ") || "ninguém selecionado"));
     }
-    if ((m.regras||[]).length) partes.push("Condições: "+m.regras.map(function(r){ return cfgDescCondicao(r.metrica, r.origem, r.min); }).join(" · "));
+    if ((m.regras||[]).length) partes.push("Condições: "+m.regras.map(function(r){ return cfgDescCondicao(r.metrica, r.origem, r.min, r.servTipos); }).join(" · "));
     var pr = m.premio || {};
     if (pr.tipo==="fixo") partes.push("Prêmio: "+fmtCurrency(parseNum(pr.valor))+(m.escopo==="conjunta" ? (pr.divisao==="dividir" ? " (dividido)" : " (cada)") : ""));
     else if (pr.tipo==="percentual") partes.push("Prêmio: "+parseNum(pr.valor)+"% do resultado");
     return '<div style="display:flex;gap:10px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid var(--border-soft);'+(m.ativa===false ? "opacity:.55;" : "")+'">'+
       '<div style="min-width:0;flex:1 1 320px;"><b>'+escHtml(m.nome)+'</b> <span style="font-size:11.5px;color:var(--text-dim);">· '+esc+(m.ativa===false ? " · desligada" : "")+'</span>'+
-        '<div style="font-size:12.5px;color:var(--text-dim);margin-top:2px;">'+escHtml(mi.l)+(mi.origem && m.origem && m.origem!=="todas" ? " ("+escHtml(cfgOrigemLabel(m.origem).toLowerCase())+")" : "")+(parseNum(m.valor)>0 ? " ≥ <b style=\"color:var(--text);\">"+escHtml(cfgFmtVal(parseNum(m.valor), m.metrica))+"</b>" : "")+'</div>'+
+        '<div style="font-size:12.5px;color:var(--text-dim);margin-top:2px;">'+escHtml(mi.l)+(mi.origem && m.origem && m.origem!=="todas" ? " ("+escHtml(cfgOrigemLabel(m.origem).toLowerCase())+")" : "")+(mi.serv ? " ["+escHtml(cfgServTiposLabel(m.servTipos))+"]" : "")+(parseNum(m.valor)>0 ? " ≥ <b style=\"color:var(--text);\">"+escHtml(cfgFmtVal(parseNum(m.valor), m.metrica))+"</b>" : "")+'</div>'+
         (partes.length ? '<div style="font-size:12px;color:var(--text-dim);margin-top:2px;">'+escHtml(partes.join("   |   "))+'</div>' : "")+
       '</div>'+
       '<div style="display:flex;gap:6px;flex-wrap:wrap;">'+cfgBtn("editar","Editar",'data-t="meta" data-id="'+escAttr(m.id)+'"')+cfgBtn("alternar",(m.ativa===false ? "Ligar" : "Desligar"),'data-id="'+escAttr(m.id)+'"')+cfgBtn("excluir","Excluir",'data-t="meta" data-id="'+escAttr(m.id)+'"')+'</div>'+
@@ -5514,6 +5566,11 @@ window.__appReady.then(function(){
       corpo = cfgHtmlComissoesMes();
     }
     root.innerHTML = html + corpo;
+    // botões do topo (tabela, pneus novos, administrativo, menu): sem isto não respondiam nesta tela
+    root.querySelectorAll("[data-act]").forEach(function(node){
+      node.addEventListener("click", function(){ handleAction(node.getAttribute("data-act"), node); });
+    });
+    bindBackupControls();
     root.querySelectorAll("[data-cfg]").forEach(function(el){
       el.addEventListener("click", function(ev){ ev.preventDefault(); cfgClique(el); });
     });
@@ -5571,7 +5628,7 @@ window.__appReady.then(function(){
   function cfgLinhaResultado(r, mvv){
     var m = r.meta, nome = m.escopo==="loja" ? m.nome : m.nome+" — "+r.grupo.nome;
     var regras = r.regras.map(function(x){
-      return '<span style="font-size:11.5px;color:'+(x.ok ? "var(--green)" : "var(--red)")+';margin-right:12px;">'+(x.ok ? "✓" : "✗")+' '+escHtml(cfgDescCondicao(x.metrica, x.origem, x.min))+' (feito: '+(state.hideValues ? "••" : escHtml(cfgFmtVal(x.atual, x.metrica)))+')</span>';
+      return '<span style="font-size:11.5px;color:'+(x.ok ? "var(--green)" : "var(--red)")+';margin-right:12px;">'+(x.ok ? "✓" : "✗")+' '+escHtml(cfgDescCondicao(x.metrica, x.origem, x.min, x.servTipos))+' (feito: '+(state.hideValues ? "••" : escHtml(cfgFmtVal(x.atual, x.metrica)))+')</span>';
     }).join("");
     return '<div style="padding:8px 0;border-bottom:1px solid var(--border-soft);">'+
       '<div style="display:flex;justify-content:space-between;gap:10px;font-size:13.5px;"><span>'+(r.ok ? "✅ " : "")+escHtml(nome)+'</span><span style="white-space:nowrap;">'+(state.hideValues ? "••" : escHtml(cfgFmtVal(r.atual, m.metrica))+(r.alvo>0 ? " / "+escHtml(cfgFmtVal(r.alvo, m.metrica)) : ""))+'</span></div>'+
@@ -5592,7 +5649,7 @@ window.__appReady.then(function(){
 
   // ---------- ações (cliques) ----------
   function cfgNovoRascunho(t){
-    if (t==="meta") return {id:"", nome:"", escopo:"individual", metrica:"faturamento", origem:"todas", valor:"", ativa:true, alvoCargoId:"", alvos:[], regras:[], premio:{tipo:"nenhum", valor:"", divisao:"cada"}};
+    if (t==="meta") return {id:"", nome:"", escopo:"individual", metrica:"faturamento", origem:"todas", servTipos:CFG_SERV_PADRAO.slice(), valor:"", ativa:true, alvoCargoId:"", alvos:[], regras:[], premio:{tipo:"nenhum", valor:"", divisao:"cada"}};
     if (t==="func") { var c0 = cfgLoad().cargos[0]; return {id:"", nome:"", cargoId:c0 ? c0.id : "", apelidos:"", destino:"", comissaoModo:"cargo", comissoes:[]}; }
     return {id:"", nome:"", vende:false, servicos:false, comissoes:[]};
   }
@@ -5622,7 +5679,7 @@ window.__appReady.then(function(){
     if (act==="additem" || act==="delitem"){
       cfgLerForm(); var d2 = state.cfgEdit && state.cfgEdit.d; if (!d2) return;
       var nome = el.getAttribute("data-lista"), arr = cfgListaDe(d2, nome);
-      if (act==="additem") arr.push(nome==="regras" ? {metrica:"pneus", origem:"novos", min:""} : {id:uid(), base:"faturamento", origem:"todas", tipoServ:"", valor:""});
+      if (act==="additem") arr.push(nome==="regras" ? {metrica:"pneus", origem:"novos", min:"", servTipos:CFG_SERV_PADRAO.slice()} : {id:uid(), base:"faturamento", origem:"todas", tipoServ:"", valor:""});
       else arr.splice(parseInt(el.getAttribute("data-i"),10), 1);
       return renderConfig();
     }
@@ -5669,13 +5726,19 @@ window.__appReady.then(function(){
     if (e.t==="meta"){
       var mi = cfgMetricaInfo(d.metrica), valor = parseNum(d.valor);
       var regras = (d.regras||[]).filter(function(r){ return parseNum(r.min)>0; }).map(function(r){
-        return {metrica:r.metrica, origem:cfgMetricaInfo(r.metrica).origem ? (r.origem||"todas") : "todas", min:parseNum(r.min)};
+        return {metrica:r.metrica, origem:cfgMetricaInfo(r.metrica).origem ? (r.origem||"todas") : "todas", min:parseNum(r.min),
+                servTipos:(r.servTipos && r.servTipos.length) ? r.servTipos : CFG_SERV_PADRAO.slice()};
       });
+      if (mi.serv && !(d.servTipos||[]).length) return cfgErro("Marque pelo menos um serviço que conta nesta meta.");
+      for (var ri=0; ri<(d.regras||[]).length; ri++){
+        var rr0 = d.regras[ri];
+        if (parseNum(rr0.min)>0 && cfgMetricaInfo(rr0.metrica).serv && !(rr0.servTipos||[]).length) return cfgErro("Marque pelo menos um serviço em cada condição de serviços.");
+      }
       if (!(valor>0) && !regras.length) return cfgErro("Informe o valor da meta ou pelo menos uma condição com mínimo maior que zero.");
       var tmp = {alvoCargoId:d.alvoCargoId||"", alvos:d.alvos||[]};
       if (d.escopo!=="loja" && !cfgMetaAlvos(tmp, cfg).length) return cfgErro("Escolha quem participa da meta (um cargo inteiro ou pessoas).");
       var pr = d.premio || {tipo:"nenhum"};
-      var meta = {id:e.id || uid(), nome:nome, escopo:d.escopo, metrica:d.metrica, origem:mi.origem ? (d.origem||"todas") : "todas", valor:valor, ativa:d.ativa!==false,
+      var meta = {id:e.id || uid(), nome:nome, escopo:d.escopo, metrica:d.metrica, origem:mi.origem ? (d.origem||"todas") : "todas", servTipos:(d.servTipos && d.servTipos.length) ? d.servTipos : CFG_SERV_PADRAO.slice(), valor:valor, ativa:d.ativa!==false,
         alvoCargoId:d.escopo==="loja" ? "" : (d.alvoCargoId||""), alvos:d.escopo==="loja" ? [] : (d.alvos||[]), regras:regras,
         premio:{tipo:d.escopo==="loja" ? "nenhum" : (pr.tipo||"nenhum"), valor:parseNum(pr.valor), divisao:pr.divisao||"cada"}};
       var i = cfg.metas.map(function(x){ return x.id; }).indexOf(meta.id);
