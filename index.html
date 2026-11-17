@@ -5540,7 +5540,7 @@ window.__appReady.then(function(){
     } else if (tab==="metas"){
       corpo = '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;"><h3 style="margin:0;">Metas</h3>'+cfgBtn("novo","+ Nova meta",'data-t="meta"',"primary")+'</div>'+
         (cfg.metas.length ? cfg.metas.map(function(m){ return cfgLinhaMeta(m, cfg); }).join("") : '<div style="color:var(--text-dim);font-size:13px;padding:10px 0;">Nenhuma meta cadastrada.</div>')+
-        '<div style="font-size:11.5px;color:var(--text-dim);margin-top:10px;">Metas da loja que medem faturamento viram as barras do painel principal. Metas individuais e conjuntas aparecem no quadro "Metas da equipe" e valem para o mês.</div></div>';
+        '<div style="font-size:11.5px;color:var(--text-dim);margin-top:10px;">Metas da loja que medem faturamento viram as barras do painel principal. Metas individuais e conjuntas aparecem no quadro "Metas da equipe" e valem para o mês. Nas metas de serviço, você escolhe quais serviços contam (Bicos, Cambagem, Rodas, Alinhamento, Serviço, Peças).</div></div>';
     } else if (tab==="funcionarios"){
       corpo = '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;"><h3 style="margin:0;">Funcionários</h3>'+cfgBtn("novo","+ Novo funcionário",'data-t="func"',"primary")+'</div>'+
         (cfg.funcionarios.length ? cfg.funcionarios.map(function(f){
@@ -5620,9 +5620,9 @@ window.__appReady.then(function(){
         cfgBtn("mes","←",'data-v="-1"')+'<b class="cap-first" style="min-width:150px;text-align:center;">'+escHtml(monthLabel(mes))+'</b>'+cfgBtn("mes","→",'data-v="1"')+
         (mes!==today.slice(0,7) ? cfgBtn("mes","Mês atual",'data-v="0"') : "")+cfgBtn("csv","⬇ Baixar CSV","")+
       '</div>'+
-      '<div class="card" style="margin-bottom:14px;"><h3 style="margin-top:0;">Comissões do mês</h3><div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr><th '+th+'>Funcionário</th><th '+thr+'>Vendas</th><th '+thr+'>Faturamento</th><th '+thr+'>Serviços</th><th '+thr+'>Comissão</th><th '+thr+'>Prêmios</th><th '+thr+'>Total</th></tr></thead><tbody>'+linhas+
+      '<div class="card" style="margin-bottom:14px;"><h3 style="margin-top:0;">Comissões do mês</h3><div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr><th '+th+'>Funcionário</th><th '+thr+'>Vendas</th><th '+thr+'>Faturamento</th><th '+thr+'>Serviços (O.S.)</th><th '+thr+'>Comissão</th><th '+thr+'>Prêmios</th><th '+thr+'>Total</th></tr></thead><tbody>'+linhas+
         '<tr><td '+td+' colspan="6"><b>Total a pagar</b></td><td '+tdr+'><b>'+mvv(totalGeral)+'</b></td></tr></tbody></table></div>'+
-        '<div style="font-size:11.5px;color:var(--text-dim);margin-top:10px;">Os serviços de cada montador vêm das O.S. que ele lançou e das divisões de mão de obra / serviço feitas nas tabelas de venda. Confira os valores antes de pagar.</div></div>'+
+        '<div style="font-size:11.5px;color:var(--text-dim);margin-top:10px;">Comissões: os serviços de cada montador vêm das O.S. que ele lançou e das divisões de mão de obra / serviço feitas nas tabelas de venda. Metas de serviço: contam os valores das tabelas de venda (os mesmos do quadro "Produtos e serviços mais vendidos"), só dos tipos marcados em cada meta. Confira os valores antes de pagar.</div></div>'+
       '<div class="card"><h3 style="margin-top:0;">Metas no mês</h3>'+metasHtml+'</div>';
   }
   function cfgLinhaResultado(r, mvv){
