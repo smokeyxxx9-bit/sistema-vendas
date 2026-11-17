@@ -936,8 +936,6 @@ window.__appReady.then(function(){
   "use strict";
 
   var PW_SALT = "65486ebc76f65f733890d89b87194a0e", PW_ITER = 50000, PW_HASH = "011da3b83a0b945acbf6d378092c9e348b11fa72fc2fff04db39a99ab3b2aa11"; // a senha de edição não fica mais escrita no código: só o "hash" dela
-  var GOAL_1 = 350000;
-  var GOAL_2 = 450000;
   var PAYMENT_OPTIONS = ["Nenhum","Dinheiro","Débito","Crédito","Pix","Múltiplo (até 4 formas)"];
   var METODOS_PAGAMENTO = ["Dinheiro","Pix","Débito","Crédito"];
   var VENDEDORES = ["Nenhum","Loja","Bruno","Richard","Benedet","Jonas"];
@@ -3272,9 +3270,9 @@ window.__appReady.then(function(){
       '<tr>'+l('<b>Total de Serviço</b>')+n('')+n('<b>'+fmtCurrency(rel.totalServ)+'</b>')+'</tr></tbody></table>';
     var linhasTipo = [
       ['Alinhamento', sv.qtdAlinhamento, sv.alinhamento],
-      ['Bicos (inclui serviço do Wesley)', sv.qtdBicos, sv.totalBicos],
-      ['Cambagem (inclui serviço do Renan)', sv.qtdCambagem, sv.totalCambagem],
-      ['Rodas (inclui serviço do João)', sv.qtdRodas, sv.totalRodas],
+      ['Bicos'+cfgIncluiDe('Bicos'), sv.qtdBicos, sv.totalBicos],
+      ['Cambagem'+cfgIncluiDe('Cambagem'), sv.qtdCambagem, sv.totalCambagem],
+      ['Rodas'+cfgIncluiDe('Rodas'), sv.qtdRodas, sv.totalRodas],
       ['Peças', '', sv.valorPecas],
       ['Serviço sem pessoa definida', '', rel.semPessoa]
     ];
@@ -3285,18 +3283,18 @@ window.__appReady.then(function(){
   function n2(v){ return (v||0).toFixed(2).replace(".",","); }
   function exportarMesCSV(month){
     var rel = relatorioDoMes(month);
-    var cab = ["Data","Carro","Cliente","Medida","Qtd. pneus","Alinhamento","Bicos","Cambagem","Rodas","Peças","Serviço","Serviço Renan","Serviço João","Serviço Wesley","Valor dos pneus","Desconto","Total","Forma de pagamento","Pago","Vendedor"];
+    var cab = ["Data","Carro","Cliente","Medida","Qtd. pneus","Alinhamento","Bicos","Cambagem","Rodas","Peças","Serviço"].concat(MAODEOBRA_PESSOAS.map(function(pp){ return "Serviço "+pp; })).concat(["Valor dos pneus","Desconto","Total","Forma de pagamento","Pago","Vendedor"]);
     var linhas = [cab.map(csvEscape).join(";")];
     rel.v.semi.forEach(function(x){
-      var r = x.r, porP = {Renan:0,"João":0,Wesley:0};
+      var r = x.r, porP = {}; MAODEOBRA_PESSOAS.forEach(function(pp){ porP[pp] = 0; });
       itensServicoDe(r).forEach(function(it){ if (porP.hasOwnProperty(it.pessoa)) porP[it.pessoa] += it.valor; });
-      linhas.push([
+      linhas.push(([
         fmtDateBR(x.date), r.carro||"", customerNameById(r.clienteId)||"", r.medida||"", parseNum(r.quantidade),
         n2(parseNum(r.alinhamento)), n2(parseNum(r.valorBicos)), n2(parseNum(r.valorCambagem)), n2(parseNum(r.valorRodas)),
-        n2(parseNum(r.valorPecas)), n2(parseNum(r.outros)+parseNum(r.maoDeObra)), n2(porP.Renan), n2(porP["João"]), n2(porP.Wesley),
+        n2(parseNum(r.valorPecas)), n2(parseNum(r.outros)+parseNum(r.maoDeObra))].concat(MAODEOBRA_PESSOAS.map(function(pp){ return n2(porP[pp]); })).concat([
         n2(parseNum(r.valorPneus)), n2(descontoValor(r)), n2(computeValor(r)), r.formaPagamento||"", (r.pago==="✅"?"Pago":"Pendente"),
         vendedorEfetivo(r.vendedor)
-      ].map(csvEscape).join(";"));
+      ])).map(csvEscape).join(";"));
     });
     linhas.push("");
     linhas.push(["RESUMO DO MÊS "+month].map(csvEscape).join(";"));
@@ -3307,8 +3305,8 @@ window.__appReady.then(function(){
     linhas.push("");
     linhas.push(["Tipo","Qtd.","Valor"].map(csvEscape).join(";"));
     var sv = rel.sv;
-    [["Alinhamento",sv.qtdAlinhamento,sv.alinhamento],["Bicos (com serviço do Wesley)",sv.qtdBicos,sv.totalBicos],
-     ["Cambagem (com serviço do Renan)",sv.qtdCambagem,sv.totalCambagem],["Rodas (com serviço do João)",sv.qtdRodas,sv.totalRodas],["Peças","",sv.valorPecas]]
+    [["Alinhamento",sv.qtdAlinhamento,sv.alinhamento],["Bicos"+cfgIncluiDe("Bicos"),sv.qtdBicos,sv.totalBicos],
+     ["Cambagem"+cfgIncluiDe("Cambagem"),sv.qtdCambagem,sv.totalCambagem],["Rodas"+cfgIncluiDe("Rodas"),sv.qtdRodas,sv.totalRodas],["Peças","",sv.valorPecas]]
       .forEach(function(x){ linhas.push([x[0], x[1], n2(x[2])].map(csvEscape).join(";")); });
     downloadTextFile("vendas-"+month+".csv", linhas.join("\r\n"));
   }
@@ -3943,7 +3941,7 @@ window.__appReady.then(function(){
   // ======================= SAÍDAS DO MASTER + PNEUS RESERVADOS =======================
   var K_SAIDAS_MASTER = "vo_saidas_master:"; // uma lista por mês (AAAA-MM): [{id, valor, destino, cat, data, por, em}]
   var K_RESERVADOS = "vo_pneus_reservados";  // [{id, marca, medida, preco, sinal, dataSinal, cliente, contato, retirado, retiradoEm}]
-  function kExtraBackup(k){ return k===K_RESERVADOS || k.indexOf(K_SAIDAS_MASTER)===0; }
+  function kExtraBackup(k){ return k===K_RESERVADOS || k===K_CONFIG || k.indexOf(K_SAIDAS_MASTER)===0; }
 
   // ---- saídas do master: só valor + para onde foi; o sistema escolhe a categoria ----
   var SM_CATS = ["Salários","Fornecedores","Insumos","Higiene e limpeza","Alimentação (marmita)","Despesas fixas","Manutenção","Combustível / transporte","Outros"];
@@ -5029,6 +5027,691 @@ window.__appReady.then(function(){
     };
   }
 
+  // ======================= CONFIGURAÇÃO DINÂMICA: cargos, funcionários, metas e comissões =======================
+  // Tudo é guardado numa única chave ("vo_config") que sincroniza com o Supabase igual ao resto do sistema.
+  // Nada de valores fixos no código: se a chave ainda não existe, valem os padrões abaixo (os mesmos de antes).
+  var K_CONFIG = "vo_config";
+  var CFG_METRICAS = [
+    {k:"faturamento", l:"Faturamento (igual ao painel)", moeda:true,  origem:true},
+    {k:"bruto",       l:"Valor vendido bruto",           moeda:true,  origem:true},
+    {k:"lucro",       l:"Lucro dos pneus novos",         moeda:true,  origem:false},
+    {k:"vendas",      l:"Nº de vendas",                  moeda:false, origem:true},
+    {k:"pneus",       l:"Nº de pneus vendidos",          moeda:false, origem:true},
+    {k:"serv_valor",  l:"Valor de serviços realizados",  moeda:true,  origem:false},
+    {k:"serv_qtd",    l:"Nº de serviços realizados",     moeda:false, origem:false}
+  ];
+  var CFG_ORIGENS = [["todas","Todas as vendas"],["novos","Só pneus novos"],["semi","Só seminovos"]];
+  var CFG_DESTINOS = ["","Bicos","Cambagem","Rodas"];
+  var CFG_TIPOS_SERV = ["","Bicos","Cambagem","Conserto de rodas","Alinhamento","Serviço (tabela)"];
+  // bases de comissão: o que entra na conta e se o valor é % ou R$ fixo
+  var CFG_BASES = [
+    {k:"faturamento", l:"% sobre o faturamento (igual ao painel)", modo:"%",  origem:true,  serv:false},
+    {k:"bruto",       l:"% sobre o valor vendido bruto",           modo:"%",  origem:true,  serv:false},
+    {k:"lucro",       l:"% sobre o lucro dos pneus novos",         modo:"%",  origem:false, serv:false},
+    {k:"venda",       l:"R$ fixo por venda",                       modo:"R$", origem:true,  serv:false},
+    {k:"pneu",        l:"R$ fixo por pneu vendido",                modo:"R$", origem:true,  serv:false},
+    {k:"serv_valor",  l:"% sobre o valor dos serviços realizados", modo:"%",  origem:false, serv:true},
+    {k:"serv_qtd",    l:"R$ fixo por serviço realizado",           modo:"R$", origem:false, serv:true}
+  ];
+  var CFG_CACHE = {raw:undefined, obj:null};
+
+  function cfgPadrao(){
+    var vendedor = {vende:true, servicos:false}, montador = {vende:false, servicos:true};
+    function f(id, nome, cargoId, destino){ return {id:id, nome:nome, cargoId:cargoId, apelidos:"", destino:destino||"", comissaoModo:"cargo", comissoes:[]}; }
+    function m(id, nome, valor){ return {id:id, nome:nome, escopo:"loja", metrica:"faturamento", origem:"todas", valor:valor, ativa:true, alvoCargoId:"", alvos:[], regras:[], premio:{tipo:"nenhum", valor:0, divisao:"cada"}}; }
+    return {
+      versao:1,
+      cargos:[
+        {id:"c_vendedor", nome:"Vendedor", vende:vendedor.vende, servicos:vendedor.servicos, comissoes:[]},
+        {id:"c_montador", nome:"Montador", vende:montador.vende, servicos:montador.servicos, comissoes:[]}
+      ],
+      funcionarios:[
+        f("f_bruno","Bruno","c_vendedor"), f("f_richard","Richard","c_vendedor"), f("f_benedet","Benedet","c_vendedor"), f("f_jonas","Jonas","c_vendedor"),
+        f("f_renan","Renan","c_montador","Cambagem"), f("f_joao","João","c_montador","Rodas"), f("f_wesley","Wesley","c_montador","Bicos")
+      ],
+      metas:[ m("m_350","Meta 350 mil",350000), m("m_450","Meta 450 mil",450000) ]
+    };
+  }
+  function cfgNorm(t){ return String(t||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim(); }
+  function cfgClone(o){ return JSON.parse(JSON.stringify(o)); }
+  function cfgGaranteEstrutura(c){
+    var p = cfgPadrao();
+    if (!c || typeof c!=="object") return p;
+    ["cargos","funcionarios","metas"].forEach(function(k){ if (!Array.isArray(c[k])) c[k] = p[k]; });
+    c.cargos.forEach(function(x){ if (!Array.isArray(x.comissoes)) x.comissoes = []; });
+    c.funcionarios.forEach(function(x){ if (!Array.isArray(x.comissoes)) x.comissoes = []; if (!x.comissaoModo) x.comissaoModo = "cargo"; if (x.apelidos===undefined) x.apelidos = ""; if (x.destino===undefined) x.destino = ""; });
+    c.metas.forEach(function(x){
+      if (!Array.isArray(x.alvos)) x.alvos = []; if (!Array.isArray(x.regras)) x.regras = [];
+      if (!x.premio) x.premio = {tipo:"nenhum", valor:0, divisao:"cada"};
+      if (!x.origem) x.origem = "todas"; if (!x.metrica) x.metrica = "faturamento";
+    });
+    return c;
+  }
+  // lê a configuração (e, se ela mudou — por exemplo vinda de outro aparelho —, aplica de novo nas listas do sistema)
+  function cfgLoad(){
+    var raw = null;
+    try{ raw = localStorage.getItem(K_CONFIG); }catch(e){}
+    if (CFG_CACHE.obj && raw===CFG_CACHE.raw) return CFG_CACHE.obj;
+    var obj = null;
+    try{ obj = raw ? JSON.parse(raw) : null; }catch(e){ obj = null; }
+    obj = cfgGaranteEstrutura(obj);
+    CFG_CACHE.raw = raw; CFG_CACHE.obj = obj;
+    cfgAplicar(obj);
+    try{ state.monthSummaryCache = {}; state.monthPartsCache = {}; }catch(e){}
+    return obj;
+  }
+  function cfgSalvar(c){
+    if (!lsSetJSON(K_CONFIG, c)) return false;
+    cfgLoad();
+    return true;
+  }
+  // atualiza, NA MESMA lista (as colunas da tabela guardam essa lista), quem aparece como vendedor / como quem faz serviço
+  function cfgAplicar(c){
+    var porCargo = {}; c.cargos.forEach(function(x){ porCargo[x.id] = x; });
+    var v = ["Nenhum","Loja"], m = [];
+    c.funcionarios.forEach(function(f){
+      var cg = porCargo[f.cargoId]; if (!cg || !f.nome) return;
+      if (cg.vende && v.indexOf(f.nome)<0) v.push(f.nome);
+      if (cg.servicos && m.indexOf(f.nome)<0) m.push(f.nome);
+    });
+    VENDEDORES.length = 0; v.forEach(function(x){ VENDEDORES.push(x); });
+    MAODEOBRA_PESSOAS.length = 0; m.forEach(function(x){ MAODEOBRA_PESSOAS.push(x); });
+  }
+  function cfgCargo(id){ return cfgLoad().cargos.filter(function(x){ return x.id===id; })[0] || null; }
+  function cfgFunc(id){ return cfgLoad().funcionarios.filter(function(x){ return x.id===id; })[0] || null; }
+  // acha o funcionário pelo nome OU por um dos apelidos (nome antigo, nome do login nas O.S. etc.)
+  function cfgFuncPorNome(nome){
+    var n = cfgNorm(nome); if (!n) return null;
+    var lista = cfgLoad().funcionarios;
+    for (var i=0;i<lista.length;i++){
+      var f = lista[i];
+      if (cfgNorm(f.nome)===n) return f;
+      var ap = String(f.apelidos||"").split(/[,;]/).map(cfgNorm).filter(Boolean);
+      if (ap.indexOf(n)>-1) return f;
+    }
+    return null;
+  }
+  // em qual card do painel (Bicos / Cambagem / Rodas) o serviço feito por essa pessoa soma
+  function cfgDestinoDe(nome){ var f = cfgFuncPorNome(nome); return f ? (f.destino||"") : ""; }
+  function cfgDestinosMapa(){ var o = {}; cfgLoad().funcionarios.forEach(function(f){ if (f.destino) o[f.nome] = f.destino; }); return o; }
+  function cfgIncluiDe(destino){
+    var nomes = cfgLoad().funcionarios.filter(function(f){ return f.destino===destino; }).map(function(f){ return f.nome; });
+    return nomes.length ? " (inclui serviço do "+nomes.join(" e ")+")" : "";
+  }
+  // metas da loja que o painel principal mostra (faturamento do mês), da menor para a maior
+  function cfgMetasLoja(){
+    return cfgLoad().metas.filter(function(m){ return m.ativa!==false && m.escopo==="loja" && m.metrica==="faturamento" && parseNum(m.valor)>0; })
+      .sort(function(a,b){ return parseNum(a.valor)-parseNum(b.valor); });
+  }
+
+  // ---------- apuração do mês: quanto cada pessoa (e a loja) fez ----------
+  function cfgAcum(){
+    return {m:{faturamento:{novos:0,semi:0}, bruto:{novos:0,semi:0}, lucro:{novos:0,semi:0}, vendas:{novos:0,semi:0}, pneus:{novos:0,semi:0}},
+            servValor:0, servQtd:0, servTipo:{}};
+  }
+  function cfgSomaAc(lista){
+    var t = cfgAcum();
+    lista.forEach(function(a){
+      if (!a) return;
+      Object.keys(t.m).forEach(function(k){ t.m[k].novos += a.m[k].novos; t.m[k].semi += a.m[k].semi; });
+      t.servValor += a.servValor; t.servQtd += a.servQtd;
+      Object.keys(a.servTipo).forEach(function(k){
+        var x = t.servTipo[k] || (t.servTipo[k] = {valor:0, qtd:0});
+        x.valor += a.servTipo[k].valor; x.qtd += a.servTipo[k].qtd;
+      });
+    });
+    return t;
+  }
+  function cfgMed(ac, metrica, origem){
+    if (!ac) return 0;
+    if (metrica==="serv_valor") return ac.servValor;
+    if (metrica==="serv_qtd") return ac.servQtd;
+    var o = ac.m[metrica]; if (!o) return 0;
+    if (metrica==="lucro") return o.novos;
+    if (origem==="novos") return o.novos;
+    if (origem==="semi") return o.semi;
+    return o.novos + o.semi;
+  }
+  var cfgApCache = {};
+  function cfgApurar(month){
+    var cfg = cfgLoad(), V = vendasDoMes(month), P = {}, loja = cfgAcum();
+    cfg.funcionarios.forEach(function(f){ P[f.id] = cfgAcum(); });
+    function donoDe(nome){ var f = cfgFuncPorNome(nome); return f ? P[f.id] : null; }
+    function addServ(ac, tipo, valor, qtd){
+      ac.servValor += valor; ac.servQtd += qtd;
+      var x = ac.servTipo[tipo] || (ac.servTipo[tipo] = {valor:0, qtd:0}); x.valor += valor; x.qtd += qtd;
+    }
+    function servicosDaLinha(r){
+      itensServicoDe(r).forEach(function(it){
+        var d = cfgDestinoDe(it.pessoa);
+        var tipo = d==="Bicos" ? "Bicos" : (d==="Cambagem" ? "Cambagem" : (d==="Rodas" ? "Conserto de rodas" : "Serviço (tabela)"));
+        addServ(loja, tipo, it.valor, 1);
+        var a = donoDe(it.pessoa); if (a) addServ(a, tipo, it.valor, 1);
+      });
+    }
+    V.semi.forEach(function(x){
+      var r = x.r; if (!r) return;
+      servicosDaLinha(r);
+      var v = computeValor(r); if (!(v>0)) return;
+      var alvos = [loja], d = donoDe(vendedorEfetivo(r.vendedor)); if (d) alvos.push(d);
+      alvos.forEach(function(a){
+        a.m.faturamento.semi += v; a.m.bruto.semi += v; a.m.vendas.semi += 1; a.m.pneus.semi += parseNum(r.quantidade);
+      });
+    });
+    V.novos.forEach(function(n){
+      servicosDaLinha(n);
+      var tot = novoTotal(n), l = novoLucro(n), sv = novoServicos(n);
+      if (!(tot>0) && !l && !sv) return;
+      var alvos = [loja], d = donoDe(vendedorEfetivo(n.vendedor)); if (d) alvos.push(d);
+      alvos.forEach(function(a){
+        a.m.faturamento.novos += l + sv; a.m.bruto.novos += tot; a.m.lucro.novos += l;
+        if (tot>0) a.m.vendas.novos += 1; a.m.pneus.novos += parseNum(n.quantidade);
+      });
+    });
+    // serviços lançados pelos montadores nas O.S. (quem lançou aparece como "por")
+    var oss = []; try{ oss = loadOS(); }catch(e){}
+    oss.forEach(function(o){
+      (o.servicos||[]).forEach(function(s){
+        if (!s) return;
+        var dia = String(s.data || o.dia || ""); if (dia.slice(0,7)!==month) return;
+        var valor = Number(s.valor)||0, qtd = parseInt(s.qtd,10)||1, tipo = s.tipo || "Serviço (tabela)";
+        addServ(loja, tipo, valor, qtd);
+        var a = donoDe(s.por); if (a) addServ(a, tipo, valor, qtd);
+      });
+    });
+    return {month:month, loja:loja, P:P};
+  }
+
+  // ---------- metas ----------
+  function cfgMetaAlvos(meta, cfg){
+    var ids = [];
+    if (meta.alvoCargoId) cfg.funcionarios.forEach(function(f){ if (f.cargoId===meta.alvoCargoId) ids.push(f.id); });
+    (meta.alvos||[]).forEach(function(id){
+      if (ids.indexOf(id)<0 && cfg.funcionarios.some(function(f){ return f.id===id; })) ids.push(id);
+    });
+    return ids;
+  }
+  function cfgNomeFunc(cfg, id){ var f = cfg.funcionarios.filter(function(x){ return x.id===id; })[0]; return f ? f.nome : "?"; }
+  // devolve um resultado por "grupo": loja = 1; individual = 1 por pessoa; conjunta = 1 para o grupo todo
+  function cfgAvaliarMeta(meta, ap, cfg){
+    var grupos = [];
+    if (meta.escopo==="loja") grupos.push({ids:[], nome:"Loja", ac:ap.loja});
+    else {
+      var ids = cfgMetaAlvos(meta, cfg);
+      if (meta.escopo==="individual") ids.forEach(function(id){ grupos.push({ids:[id], nome:cfgNomeFunc(cfg,id), ac:ap.P[id]}); });
+      else if (ids.length) grupos.push({ids:ids, nome:ids.map(function(id){ return cfgNomeFunc(cfg,id); }).join(" + "), ac:cfgSomaAc(ids.map(function(id){ return ap.P[id]; }))});
+    }
+    return grupos.map(function(g){
+      var atual = cfgMed(g.ac, meta.metrica, meta.origem), alvo = parseNum(meta.valor);
+      var okValor = alvo>0 ? atual>=alvo-0.0001 : true;
+      var regras = (meta.regras||[]).map(function(r){
+        var a = cfgMed(g.ac, r.metrica, r.origem), min = parseNum(r.min);
+        return {metrica:r.metrica, origem:r.origem, atual:a, min:min, ok:a>=min-0.0001};
+      });
+      var ok = okValor && regras.every(function(r){ return r.ok; });
+      var pct = alvo>0 ? Math.min(100, (atual/alvo)*100) : (ok ? 100 : 0);
+      var premios = {}, pr = meta.premio || {tipo:"nenhum"};
+      if (ok && pr.tipo && pr.tipo!=="nenhum" && g.ids.length){
+        var total = pr.tipo==="fixo" ? parseNum(pr.valor) : atual*parseNum(pr.valor)/100;
+        g.ids.forEach(function(id){
+          premios[id] = (meta.escopo==="conjunta" && pr.divisao==="dividir") ? total/g.ids.length : (pr.tipo==="fixo" ? total : total/(meta.escopo==="conjunta" ? g.ids.length : 1));
+        });
+      }
+      return {meta:meta, grupo:g, atual:atual, alvo:alvo, pct:pct, okValor:okValor, ok:ok, regras:regras, premios:premios};
+    });
+  }
+  function cfgMetricaInfo(k){ return CFG_METRICAS.filter(function(x){ return x.k===k; })[0] || CFG_METRICAS[0]; }
+  function cfgOrigemLabel(o){ var f = CFG_ORIGENS.filter(function(x){ return x[0]===o; })[0]; return f ? f[1] : ""; }
+  function cfgFmtVal(v, metrica){ return cfgMetricaInfo(metrica).moeda ? fmtCurrency(v) : String(Math.round(v*100)/100).replace(".",",")+" un."; }
+  function cfgDescCondicao(metrica, origem, valor){
+    var mi = cfgMetricaInfo(metrica);
+    return mi.l.toLowerCase()+(mi.origem && origem && origem!=="todas" ? " ("+cfgOrigemLabel(origem).toLowerCase()+")" : "")+" ≥ "+cfgFmtVal(parseNum(valor), metrica);
+  }
+
+  // ---------- comissões ----------
+  function cfgRegrasDe(f, cfg){
+    var cg = cfg.cargos.filter(function(x){ return x.id===f.cargoId; })[0];
+    var modo = f.comissaoModo || "cargo", out = [];
+    if ((modo==="cargo" || modo==="cargo_mais") && cg) out = out.concat(cg.comissoes||[]);
+    if (modo==="propria" || modo==="cargo_mais") out = out.concat(f.comissoes||[]);
+    return out;
+  }
+  function cfgCalcRegra(r, ac){
+    var b = null, base = r.base, val = parseNum(r.valor), tipo = r.tipoServ || "", desc = "", valor = 0, qtd = 0;
+    var oTxt = (r.origem && r.origem!=="todas") ? " ("+cfgOrigemLabel(r.origem).toLowerCase()+")" : "";
+    if (base==="faturamento" || base==="bruto" || base==="lucro"){
+      b = cfgMed(ac, base, r.origem); valor = b*val/100;
+      desc = val+"% de "+fmtCurrency(b)+" ("+cfgMetricaInfo(base).l.toLowerCase()+oTxt+")";
+    } else if (base==="venda" || base==="pneu"){
+      qtd = cfgMed(ac, base==="venda" ? "vendas" : "pneus", r.origem); valor = qtd*val;
+      desc = fmtCurrency(val)+" × "+qtd+(base==="venda" ? " venda(s)" : " pneu(s)")+oTxt;
+    } else if (base==="serv_valor"){
+      b = tipo ? ((ac.servTipo[tipo]||{}).valor||0) : ac.servValor; valor = b*val/100;
+      desc = val+"% de "+fmtCurrency(b)+" em serviços"+(tipo ? " de "+tipo : "");
+    } else if (base==="serv_qtd"){
+      qtd = tipo ? ((ac.servTipo[tipo]||{}).qtd||0) : ac.servQtd; valor = qtd*val;
+      desc = fmtCurrency(val)+" × "+qtd+" serviço(s)"+(tipo ? " de "+tipo : "");
+    }
+    return {desc:desc, valor:valor};
+  }
+  function cfgApuracaoCompleta(month){
+    var cfg = cfgLoad(), ap = cfgApurar(month);
+    var metasRes = [];
+    cfg.metas.forEach(function(m){ if (m.ativa===false) return; cfgAvaliarMeta(m, ap, cfg).forEach(function(r){ metasRes.push(r); }); });
+    var pessoas = cfg.funcionarios.map(function(f){
+      var ac = ap.P[f.id], itens = [], total = 0;
+      cfgRegrasDe(f, cfg).forEach(function(r){ var x = cfgCalcRegra(r, ac); itens.push(x); total += x.valor; });
+      var premios = [], totalPrem = 0;
+      metasRes.forEach(function(r){
+        if (r.premios[f.id]>0){ premios.push({desc:"Meta atingida: "+r.meta.nome+(r.meta.escopo==="conjunta" ? " (conjunta)" : ""), valor:r.premios[f.id]}); totalPrem += r.premios[f.id]; }
+      });
+      var cg = cfg.cargos.filter(function(x){ return x.id===f.cargoId; })[0];
+      return {f:f, cargo:cg ? cg.nome : "—", ac:ac, itens:itens, total:total, premios:premios, totalPrem:totalPrem, geral:total+totalPrem};
+    });
+    return {cfg:cfg, ap:ap, metas:metasRes, pessoas:pessoas};
+  }
+  cfgLoad(); // aplica logo na abertura (VENDEDORES e quem faz serviço)
+
+  // ---------- painel administrativo: Metas / Funcionários / Cargos / Comissões do mês (só master) ----------
+  var CFG_IN = 'style="background:var(--panel-alt);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:7px 9px;font:inherit;font-size:13.5px;min-width:0;max-width:100%;width:100%;box-sizing:border-box;"';
+  function cfgCampo(rotulo, html, flex){
+    return '<div style="flex:'+(flex||"1 1 180px")+';min-width:0;"><label style="display:block;font-size:11.5px;color:var(--text-dim);margin:0 0 4px;">'+rotulo+'</label>'+html+'</div>';
+  }
+  function cfgSel(path, opts, val, rr){
+    return '<select '+CFG_IN+' data-f="'+path+'"'+(rr ? ' data-rr="1"' : '')+'>'+opts.map(function(o){
+      return '<option value="'+escAttr(o[0])+'"'+(String(o[0])===String(val) ? " selected" : "")+'>'+escHtml(o[1])+'</option>';
+    }).join("")+'</select>';
+  }
+  function cfgTxt(path, val, ph){ return '<input type="text" '+CFG_IN+' data-f="'+path+'" value="'+escAttr(val===undefined||val===null ? "" : val)+'" placeholder="'+escAttr(ph||"")+'">'; }
+  function cfgNumIn(path, val, ph){ return '<input type="text" inputmode="decimal" '+CFG_IN+' data-f="'+path+'" value="'+escAttr(val===undefined||val===null ? "" : val)+'" placeholder="'+escAttr(ph||"0")+'">'; }
+  function cfgChk(path, rotulo, on, rr){
+    return '<label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer;"><input type="checkbox" data-f="'+path+'"'+(rr ? ' data-rr="1"' : '')+(on ? " checked" : "")+'> '+rotulo+'</label>';
+  }
+  function cfgBtn(act, rotulo, extra, cls){
+    return '<button class="btn small '+(cls||"ghost")+'" data-cfg="'+act+'" '+(extra||"")+'>'+rotulo+'</button>';
+  }
+  function cfgSetPath(obj, path, val){
+    var p = path.split("."), o = obj;
+    for (var i=0;i<p.length-1;i++){
+      var k = p[i];
+      if (o[k]===undefined || o[k]===null) o[k] = /^\d+$/.test(p[i+1]) ? [] : {};
+      o = o[k];
+    }
+    o[p[p.length-1]] = val;
+  }
+  function cfgLerForm(){
+    if (!state.cfgEdit) return;
+    var d = state.cfgEdit.d, multis = {};
+    root.querySelectorAll("[data-f]").forEach(function(el){
+      var p = el.getAttribute("data-f");
+      if (el.type==="checkbox" && el.hasAttribute("data-multi")){ if (!multis[p]) multis[p] = []; if (el.checked) multis[p].push(el.value); }
+      else if (el.type==="checkbox") cfgSetPath(d, p, el.checked);
+      else cfgSetPath(d, p, el.value);
+    });
+    Object.keys(multis).forEach(function(p){ cfgSetPath(d, p, multis[p]); });
+  }
+  function cfgOptsCargos(cfg, comVazio, rotuloVazio){
+    var o = comVazio ? [["", rotuloVazio||"—"]] : [];
+    cfg.cargos.forEach(function(c){ o.push([c.id, c.nome]); });
+    return o;
+  }
+
+  // editor de regras de comissão (usado no cargo e no funcionário)
+  function cfgEditorComissoes(lista){
+    var html = (lista||[]).map(function(r, i){
+      var b = CFG_BASES.filter(function(x){ return x.k===r.base; })[0] || CFG_BASES[0], p = "comissoes."+i;
+      return '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;padding:10px;border:1px solid var(--border-soft);border-radius:4px;margin-bottom:8px;">'+
+        cfgCampo("Como calcular", cfgSel(p+".base", CFG_BASES.map(function(x){ return [x.k, x.l]; }), r.base, true), "2 1 260px")+
+        (b.origem ? cfgCampo("Vendas consideradas", cfgSel(p+".origem", CFG_ORIGENS, r.origem||"todas"), "1 1 150px") : "")+
+        (b.serv ? cfgCampo("Tipo de serviço", cfgSel(p+".tipoServ", CFG_TIPOS_SERV.map(function(t){ return [t, t||"Todos os serviços"]; }), r.tipoServ||""), "1 1 170px") : "")+
+        cfgCampo(b.modo==="%" ? "Percentual (%)" : "Valor (R$)", cfgNumIn(p+".valor", r.valor), "0 1 110px")+
+        cfgBtn("delitem", "Remover", 'data-lista="comissoes" data-i="'+i+'"')+
+      '</div>';
+    }).join("");
+    return (html || '<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:8px;">Nenhuma regra: esta pessoa não recebe comissão por aqui.</div>')+
+      cfgBtn("additem", "+ Adicionar regra de comissão", 'data-lista="comissoes"');
+  }
+
+  function cfgFormMeta(d, cfg){
+    var mi = cfgMetricaInfo(d.metrica);
+    var alvos = d.escopo!=="loja" ?
+      '<div style="margin:12px 0;"><div style="font-size:12.5px;color:var(--text-dim);margin-bottom:6px;">'+(d.escopo==="individual" ? "Quem tem esta meta (cada um com a sua):" : "Quem participa da meta conjunta (os resultados somam):")+'</div>'+
+        '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:8px;">'+
+          cfgCampo("Todos de um cargo", cfgSel("alvoCargoId", cfgOptsCargos(cfg, true, "(nenhum cargo inteiro)"), d.alvoCargoId||""), "0 1 240px")+
+        '</div>'+
+        '<div style="display:flex;gap:6px 18px;flex-wrap:wrap;">'+cfg.funcionarios.map(function(f){
+          return '<label style="display:flex;align-items:center;gap:6px;font-size:13.5px;"><input type="checkbox" data-f="alvos" data-multi="1" value="'+escAttr(f.id)+'"'+((d.alvos||[]).indexOf(f.id)>-1 ? " checked" : "")+'> '+escHtml(f.nome)+'</label>';
+        }).join("")+'</div></div>' : "";
+    var regras = (d.regras||[]).map(function(r, i){
+      var ri = cfgMetricaInfo(r.metrica), p = "regras."+i;
+      return '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;padding:10px;border:1px solid var(--border-soft);border-radius:4px;margin-bottom:8px;">'+
+        cfgCampo("Condição obrigatória", cfgSel(p+".metrica", CFG_METRICAS.map(function(x){ return [x.k, x.l]; }), r.metrica, true), "2 1 230px")+
+        (ri.origem ? cfgCampo("Considerar", cfgSel(p+".origem", CFG_ORIGENS, r.origem||"todas"), "1 1 150px") : "")+
+        cfgCampo("Mínimo ("+(ri.moeda ? "R$" : "un.")+")", cfgNumIn(p+".min", r.min), "0 1 110px")+
+        cfgBtn("delitem", "Remover", 'data-lista="regras" data-i="'+i+'"')+
+      '</div>';
+    }).join("");
+    var premio = d.escopo!=="loja" ?
+      '<div style="margin-top:14px;"><div style="font-size:12.5px;color:var(--text-dim);margin-bottom:6px;">Prêmio ao bater a meta (opcional):</div>'+
+        '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">'+
+          cfgCampo("Tipo de prêmio", cfgSel("premio.tipo", [["nenhum","Sem prêmio"],["fixo","Valor fixo (R$)"],["percentual","% sobre o resultado da meta"]], (d.premio||{}).tipo||"nenhum", true), "1 1 200px")+
+          ((d.premio||{}).tipo && d.premio.tipo!=="nenhum" ? cfgCampo(d.premio.tipo==="fixo" ? "Valor (R$)" : "Percentual (%)", cfgNumIn("premio.valor", d.premio.valor), "0 1 120px") : "")+
+          (d.escopo==="conjunta" && (d.premio||{}).tipo && d.premio.tipo!=="nenhum" ? cfgCampo("Em meta conjunta", cfgSel("premio.divisao", [["cada","Cada participante recebe o valor"],["dividir","Dividir o valor entre os participantes"]], d.premio.divisao||"cada"), "1 1 260px") : "")+
+        '</div></div>' : "";
+    return '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">'+
+        cfgCampo("Nome da meta", cfgTxt("nome", d.nome, "Ex.: Meta de pneus do mês"), "2 1 240px")+
+        cfgCampo("Tipo de meta", cfgSel("escopo", [["loja","Da loja (resultado geral)"],["individual","Individual"],["conjunta","Conjunta (grupo)"]], d.escopo, true), "1 1 220px")+
+      '</div>'+
+      '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:6px;align-items:flex-end;">'+
+        cfgCampo("O que é medido", cfgSel("metrica", CFG_METRICAS.map(function(x){ return [x.k, x.l]; }), d.metrica, true), "2 1 250px")+
+        (mi.origem ? cfgCampo("Considerar", cfgSel("origem", CFG_ORIGENS, d.origem||"todas"), "1 1 170px") : "")+
+        cfgCampo("Valor da meta ("+(mi.moeda ? "R$" : "unidades")+")", cfgNumIn("valor", d.valor), "0 1 150px")+
+      '</div>'+
+      (d.escopo==="loja" && d.metrica!=="faturamento" ? '<div style="font-size:12px;color:var(--yellow);margin:6px 0;">Metas da loja só aparecem como barra grande no topo do painel quando medem o faturamento. As demais aparecem no quadro "Metas da equipe".</div>' : "")+
+      alvos+
+      '<div style="margin:14px 0 6px;font-size:12.5px;color:var(--text-dim);">Condições obrigatórias além do valor (opcional). Exemplo: para bater a meta conjunta, vender no mínimo 5 pneus novos <b>e</b> no mínimo 10 seminovos — adicione duas condições (Nº de pneus vendidos · só pneus novos · 5) e (Nº de pneus vendidos · só seminovos · 10). A meta só conta como batida se TODAS forem cumpridas.</div>'+
+      regras+cfgBtn("additem", "+ Adicionar condição", 'data-lista="regras"')+
+      premio+
+      '<div style="margin-top:14px;">'+cfgChk("ativa", "Meta ativa (valendo)", d.ativa!==false)+'</div>';
+  }
+  function cfgFormCargo(d){
+    return '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">'+cfgCampo("Nome do cargo", cfgTxt("nome", d.nome, "Ex.: Vendedor, Montador, Gerente"), "2 1 260px")+'</div>'+
+      '<div style="display:flex;gap:6px 24px;flex-wrap:wrap;margin-bottom:14px;">'+
+        cfgChk("vende", "Quem tem este cargo aparece como <b>vendedor</b> nas tabelas de vendas", d.vende)+
+        cfgChk("servicos", "Quem tem este cargo <b>faz serviços</b> (aparece na divisão de mão de obra e nas O.S.)", d.servicos)+
+      '</div>'+
+      '<div style="font-size:13px;margin:0 0 8px;"><b>Comissão padrão do cargo</b> <span style="color:var(--text-dim);">(vale para todos deste cargo, a não ser que o funcionário tenha a sua)</span></div>'+
+      cfgEditorComissoes(d.comissoes);
+  }
+  function cfgFormFunc(d, cfg){
+    var cg = cfg.cargos.filter(function(x){ return x.id===d.cargoId; })[0];
+    return '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">'+
+        cfgCampo("Nome", cfgTxt("nome", d.nome, "Nome como aparece nas tabelas"), "2 1 220px")+
+        cfgCampo("Cargo", cfgSel("cargoId", cfgOptsCargos(cfg, false), d.cargoId, true), "1 1 200px")+
+      '</div>'+
+      '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">'+
+        cfgCampo("Outros nomes (opcional, separados por vírgula)", cfgTxt("apelidos", d.apelidos, "Ex.: nome do login nas O.S., nome antigo"), "2 1 280px")+
+        (cg && cg.servicos ? cfgCampo("Serviço dele soma no card de…", cfgSel("destino", CFG_DESTINOS.map(function(x){ return [x, x||"Nenhum card em especial"]; }), d.destino||""), "1 1 200px") : "")+
+      '</div>'+
+      '<div style="font-size:11.5px;color:var(--text-dim);margin:-4px 0 12px;">O sistema liga as vendas e as O.S. à pessoa pelo nome ou por um dos "outros nomes". Se você mudar o nome de alguém, o nome antigo é guardado aqui automaticamente para as contas continuarem certas.</div>'+
+      '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">'+
+        cfgCampo("Comissão", cfgSel("comissaoModo", [["cargo","Usar a comissão do cargo"],["cargo_mais","Comissão do cargo + regras próprias"],["propria","Só regras próprias (ignora o cargo)"],["nenhuma","Sem comissão"]], d.comissaoModo||"cargo", true), "1 1 300px")+
+      '</div>'+
+      ((d.comissaoModo==="propria" || d.comissaoModo==="cargo_mais") ? cfgEditorComissoes(d.comissoes) : "");
+  }
+
+  function cfgLinhaMeta(m, cfg){
+    var esc = m.escopo==="loja" ? "Loja" : (m.escopo==="individual" ? "Individual" : "Conjunta");
+    var mi = cfgMetricaInfo(m.metrica);
+    var partes = [];
+    if (m.escopo!=="loja"){
+      var ids = cfgMetaAlvos(m, cfg), nomes = ids.map(function(id){ return cfgNomeFunc(cfg, id); });
+      partes.push((m.escopo==="individual" ? "Para: " : "Grupo: ")+(nomes.join(", ") || "ninguém selecionado"));
+    }
+    if ((m.regras||[]).length) partes.push("Condições: "+m.regras.map(function(r){ return cfgDescCondicao(r.metrica, r.origem, r.min); }).join(" · "));
+    var pr = m.premio || {};
+    if (pr.tipo==="fixo") partes.push("Prêmio: "+fmtCurrency(parseNum(pr.valor))+(m.escopo==="conjunta" ? (pr.divisao==="dividir" ? " (dividido)" : " (cada)") : ""));
+    else if (pr.tipo==="percentual") partes.push("Prêmio: "+parseNum(pr.valor)+"% do resultado");
+    return '<div style="display:flex;gap:10px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid var(--border-soft);'+(m.ativa===false ? "opacity:.55;" : "")+'">'+
+      '<div style="min-width:0;flex:1 1 320px;"><b>'+escHtml(m.nome)+'</b> <span style="font-size:11.5px;color:var(--text-dim);">· '+esc+(m.ativa===false ? " · desligada" : "")+'</span>'+
+        '<div style="font-size:12.5px;color:var(--text-dim);margin-top:2px;">'+escHtml(mi.l)+(mi.origem && m.origem && m.origem!=="todas" ? " ("+escHtml(cfgOrigemLabel(m.origem).toLowerCase())+")" : "")+(parseNum(m.valor)>0 ? " ≥ <b style=\"color:var(--text);\">"+escHtml(cfgFmtVal(parseNum(m.valor), m.metrica))+"</b>" : "")+'</div>'+
+        (partes.length ? '<div style="font-size:12px;color:var(--text-dim);margin-top:2px;">'+escHtml(partes.join("   |   "))+'</div>' : "")+
+      '</div>'+
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;">'+cfgBtn("editar","Editar",'data-t="meta" data-id="'+escAttr(m.id)+'"')+cfgBtn("alternar",(m.ativa===false ? "Ligar" : "Desligar"),'data-id="'+escAttr(m.id)+'"')+cfgBtn("excluir","Excluir",'data-t="meta" data-id="'+escAttr(m.id)+'"')+'</div>'+
+    '</div>';
+  }
+  function cfgResumoComissao(regras){
+    if (!regras.length) return "Sem comissão";
+    return regras.map(function(r){
+      var b = CFG_BASES.filter(function(x){ return x.k===r.base; })[0] || CFG_BASES[0];
+      var v = parseNum(r.valor);
+      return (b.modo==="%" ? v+"%" : fmtCurrency(v))+" "+b.l.replace(/^% sobre /,"sobre ").replace(/^R\$ fixo /,"");
+    }).join(" + ");
+  }
+
+  function renderConfig(){
+    if (state.role!=="master"){ state.view = "dashboard"; return renderDashboard(); }
+    root.classList.remove("wide");
+    var cfg = cfgLoad(), tab = state.cfgTab || "metas", ed = state.cfgEdit;
+    var tabs = [["metas","🎯 Metas"],["funcionarios","👥 Funcionários"],["cargos","🏷 Cargos"],["comissoes","💰 Comissões do mês"]];
+    var html = clientesTopbarHtml("Metas e comissões", "MASTER")+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px;">'+tabs.map(function(t){
+        return '<button class="btn small '+(tab===t[0] ? "primary" : "ghost")+'" data-cfg="tab" data-v="'+t[0]+'">'+t[1]+'</button>';
+      }).join("")+'</div>';
+    var corpo = "";
+    if (ed && ed.t===({metas:"meta", funcionarios:"func", cargos:"cargo"})[tab]){
+      var titulo = ed.t==="meta" ? "meta" : (ed.t==="func" ? "funcionário" : "cargo");
+      corpo = '<div class="card" style="margin-bottom:14px;"><h3 style="margin-top:0;">'+(ed.id ? "Editar " : "Nova ")+titulo+'</h3>'+
+        (ed.t==="meta" ? cfgFormMeta(ed.d, cfg) : (ed.t==="func" ? cfgFormFunc(ed.d, cfg) : cfgFormCargo(ed.d)))+
+        (state.cfgErro ? '<div style="color:var(--red);font-size:13px;margin-top:12px;">'+escHtml(state.cfgErro)+'</div>' : "")+
+        '<div style="display:flex;gap:8px;margin-top:16px;">'+cfgBtn("salvar","Salvar","","primary")+cfgBtn("cancelar","Cancelar")+'</div></div>';
+    } else if (tab==="metas"){
+      corpo = '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;"><h3 style="margin:0;">Metas</h3>'+cfgBtn("novo","+ Nova meta",'data-t="meta"',"primary")+'</div>'+
+        (cfg.metas.length ? cfg.metas.map(function(m){ return cfgLinhaMeta(m, cfg); }).join("") : '<div style="color:var(--text-dim);font-size:13px;padding:10px 0;">Nenhuma meta cadastrada.</div>')+
+        '<div style="font-size:11.5px;color:var(--text-dim);margin-top:10px;">Metas da loja que medem faturamento viram as barras do painel principal. Metas individuais e conjuntas aparecem no quadro "Metas da equipe" e valem para o mês.</div></div>';
+    } else if (tab==="funcionarios"){
+      corpo = '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;"><h3 style="margin:0;">Funcionários</h3>'+cfgBtn("novo","+ Novo funcionário",'data-t="func"',"primary")+'</div>'+
+        (cfg.funcionarios.length ? cfg.funcionarios.map(function(f){
+          var cg = cfg.cargos.filter(function(x){ return x.id===f.cargoId; })[0];
+          var modo = f.comissaoModo || "cargo";
+          var com = modo==="nenhuma" ? "Sem comissão" : (modo==="cargo" ? "Comissão do cargo: "+cfgResumoComissao(cg ? cg.comissoes : []) : (modo==="propria" ? "Própria: "+cfgResumoComissao(f.comissoes) : "Cargo + própria: "+cfgResumoComissao(((cg && cg.comissoes)||[]).concat(f.comissoes||[]))));
+          return '<div style="display:flex;gap:10px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid var(--border-soft);">'+
+            '<div style="min-width:0;flex:1 1 300px;"><b>'+escHtml(f.nome)+'</b> <span style="font-size:11.5px;color:var(--text-dim);">· '+escHtml(cg ? cg.nome : "sem cargo")+(f.destino ? " · serviço soma em "+escHtml(f.destino) : "")+'</span>'+
+              '<div style="font-size:12px;color:var(--text-dim);margin-top:2px;">'+escHtml(com)+'</div></div>'+
+            '<div style="display:flex;gap:6px;">'+cfgBtn("editar",'Editar','data-t="func" data-id="'+escAttr(f.id)+'"')+cfgBtn("excluir","Excluir",'data-t="func" data-id="'+escAttr(f.id)+'"')+'</div></div>';
+        }).join("") : '<div style="color:var(--text-dim);font-size:13px;padding:10px 0;">Nenhum funcionário cadastrado.</div>')+
+        '<div style="font-size:11.5px;color:var(--text-dim);margin-top:10px;">Quem tem cargo de vendedor aparece na coluna "Vendedor" das tabelas; quem tem cargo de serviço aparece na divisão de mão de obra. "Loja" e "Nenhum" continuam existindo sempre.</div></div>';
+    } else if (tab==="cargos"){
+      corpo = '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;"><h3 style="margin:0;">Cargos e comissão padrão</h3>'+cfgBtn("novo","+ Novo cargo",'data-t="cargo"',"primary")+'</div>'+
+        cfg.cargos.map(function(c){
+          var qtd = cfg.funcionarios.filter(function(f){ return f.cargoId===c.id; }).length;
+          return '<div style="display:flex;gap:10px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid var(--border-soft);">'+
+            '<div style="min-width:0;flex:1 1 300px;"><b>'+escHtml(c.nome)+'</b> <span style="font-size:11.5px;color:var(--text-dim);">· '+qtd+' pessoa(s)'+(c.vende ? " · vende" : "")+(c.servicos ? " · faz serviços" : "")+'</span>'+
+              '<div style="font-size:12px;color:var(--text-dim);margin-top:2px;">'+escHtml(cfgResumoComissao(c.comissoes||[]))+'</div></div>'+
+            '<div style="display:flex;gap:6px;">'+cfgBtn("editar","Editar",'data-t="cargo" data-id="'+escAttr(c.id)+'"')+cfgBtn("excluir","Excluir",'data-t="cargo" data-id="'+escAttr(c.id)+'"')+'</div></div>';
+        }).join("")+'</div>';
+    } else {
+      corpo = cfgHtmlComissoesMes();
+    }
+    root.innerHTML = html + corpo;
+    root.querySelectorAll("[data-cfg]").forEach(function(el){
+      el.addEventListener("click", function(ev){ ev.preventDefault(); cfgClique(el); });
+    });
+    root.querySelectorAll("[data-rr]").forEach(function(el){
+      el.addEventListener("change", function(){ cfgLerForm(); cfgAjustaRascunho(); renderConfig(); });
+    });
+  }
+  // depois de mudar um campo que altera o formulário, arruma o que ficou sem sentido
+  function cfgAjustaRascunho(){
+    var e = state.cfgEdit; if (!e) return;
+    var d = e.d;
+    if (e.t==="meta"){
+      var mi = cfgMetricaInfo(d.metrica);
+      if (!mi.origem) d.origem = "todas";
+      (d.regras||[]).forEach(function(r){ if (!cfgMetricaInfo(r.metrica).origem) r.origem = "todas"; });
+      if (d.escopo==="loja"){ d.alvos = []; d.alvoCargoId = ""; }
+    }
+    var lista = (d.comissoes||[]);
+    lista.forEach(function(r){
+      var b = CFG_BASES.filter(function(x){ return x.k===r.base; })[0] || CFG_BASES[0];
+      if (!b.origem) r.origem = "todas"; if (!b.serv) r.tipoServ = "";
+    });
+  }
+  function cfgHtmlComissoesMes(){
+    var mes = state.cfgMes || today.slice(0,7);
+    var A = cfgApuracaoCompleta(mes), cfg = A.cfg;
+    var mvv = function(v){ return state.hideValues ? "••••" : fmtCurrency(v); };
+    var th = 'style="text-align:left;padding:8px 10px;font-size:12px;color:var(--text-dim);border-bottom:1px solid var(--border);white-space:nowrap;"';
+    var thr = 'style="text-align:right;padding:8px 10px;font-size:12px;color:var(--text-dim);border-bottom:1px solid var(--border);white-space:nowrap;"';
+    var td = 'style="padding:8px 10px;border-bottom:1px solid var(--border-soft);"';
+    var tdr = 'style="padding:8px 10px;border-bottom:1px solid var(--border-soft);text-align:right;white-space:nowrap;"';
+    var totalGeral = 0;
+    var linhas = A.pessoas.map(function(p){
+      totalGeral += p.geral;
+      var det = p.itens.map(function(x){ return '<div style="font-size:12px;color:var(--text-dim);">• '+escHtml(x.desc)+' = <b style="color:var(--text);">'+mvv(x.valor)+'</b></div>'; }).join("")+
+        p.premios.map(function(x){ return '<div style="font-size:12px;color:var(--text-dim);">🏆 '+escHtml(x.desc)+' = <b style="color:var(--text);">'+mvv(x.valor)+'</b></div>'; }).join("");
+      return '<tr><td '+td+'><b>'+escHtml(p.f.nome)+'</b> <span style="font-size:11.5px;color:var(--text-dim);">'+escHtml(p.cargo)+'</span>'+(det ? '<details style="margin-top:4px;"><summary style="font-size:12px;color:var(--text-dim);cursor:pointer;">ver conta</summary>'+det+'</details>' : "")+'</td>'+
+        '<td '+tdr+'>'+(state.hideValues ? "••" : (p.ac.m.vendas.novos+p.ac.m.vendas.semi))+'</td>'+
+        '<td '+tdr+'>'+mvv(cfgMed(p.ac,"faturamento","todas"))+'</td>'+
+        '<td '+tdr+'>'+(state.hideValues ? "••" : p.ac.servQtd)+' · '+mvv(p.ac.servValor)+'</td>'+
+        '<td '+tdr+'>'+mvv(p.total)+'</td><td '+tdr+'>'+mvv(p.totalPrem)+'</td>'+
+        '<td '+tdr+'><b style="color:var(--green);">'+mvv(p.geral)+'</b></td></tr>';
+    }).join("");
+    if (!linhas) linhas = '<tr><td '+td+' colspan="7"><span style="color:var(--text-dim);">Cadastre funcionários para ver as comissões.</span></td></tr>';
+    var metasHtml = A.metas.length ? A.metas.map(function(r){ return cfgLinhaResultado(r, mvv); }).join("") : '<div style="font-size:13px;color:var(--text-dim);">Nenhuma meta ativa.</div>';
+    return '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 14px;">'+
+        cfgBtn("mes","←",'data-v="-1"')+'<b class="cap-first" style="min-width:150px;text-align:center;">'+escHtml(monthLabel(mes))+'</b>'+cfgBtn("mes","→",'data-v="1"')+
+        (mes!==today.slice(0,7) ? cfgBtn("mes","Mês atual",'data-v="0"') : "")+cfgBtn("csv","⬇ Baixar CSV","")+
+      '</div>'+
+      '<div class="card" style="margin-bottom:14px;"><h3 style="margin-top:0;">Comissões do mês</h3><div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr><th '+th+'>Funcionário</th><th '+thr+'>Vendas</th><th '+thr+'>Faturamento</th><th '+thr+'>Serviços</th><th '+thr+'>Comissão</th><th '+thr+'>Prêmios</th><th '+thr+'>Total</th></tr></thead><tbody>'+linhas+
+        '<tr><td '+td+' colspan="6"><b>Total a pagar</b></td><td '+tdr+'><b>'+mvv(totalGeral)+'</b></td></tr></tbody></table></div>'+
+        '<div style="font-size:11.5px;color:var(--text-dim);margin-top:10px;">Os serviços de cada montador vêm das O.S. que ele lançou e das divisões de mão de obra / serviço feitas nas tabelas de venda. Confira os valores antes de pagar.</div></div>'+
+      '<div class="card"><h3 style="margin-top:0;">Metas no mês</h3>'+metasHtml+'</div>';
+  }
+  function cfgLinhaResultado(r, mvv){
+    var m = r.meta, nome = m.escopo==="loja" ? m.nome : m.nome+" — "+r.grupo.nome;
+    var regras = r.regras.map(function(x){
+      return '<span style="font-size:11.5px;color:'+(x.ok ? "var(--green)" : "var(--red)")+';margin-right:12px;">'+(x.ok ? "✓" : "✗")+' '+escHtml(cfgDescCondicao(x.metrica, x.origem, x.min))+' (feito: '+(state.hideValues ? "••" : escHtml(cfgFmtVal(x.atual, x.metrica)))+')</span>';
+    }).join("");
+    return '<div style="padding:8px 0;border-bottom:1px solid var(--border-soft);">'+
+      '<div style="display:flex;justify-content:space-between;gap:10px;font-size:13.5px;"><span>'+(r.ok ? "✅ " : "")+escHtml(nome)+'</span><span style="white-space:nowrap;">'+(state.hideValues ? "••" : escHtml(cfgFmtVal(r.atual, m.metrica))+(r.alvo>0 ? " / "+escHtml(cfgFmtVal(r.alvo, m.metrica)) : ""))+'</span></div>'+
+      adminBarra(state.hideValues ? 0 : r.pct, r.ok ? "var(--green)" : "var(--yellow)")+
+      (regras ? '<div>'+regras+'</div>' : "")+'</div>';
+  }
+  // quadro "Metas da equipe" no painel principal (todas as metas ativas que não são as barras de faturamento da loja)
+  function cfgMetasDashHtml(month){
+    var cfg = cfgLoad();
+    var metas = cfg.metas.filter(function(m){ return m.ativa!==false && !(m.escopo==="loja" && m.metrica==="faturamento"); });
+    if (!metas.length) return "";
+    var ap = cfgApurar(month), mvv = function(v){ return state.hideValues ? "••••" : v; }, out = [];
+    metas.forEach(function(m){ cfgAvaliarMeta(m, ap, cfg).forEach(function(r){ out.push(r); }); });
+    if (!out.length) return "";
+    return '<div class="card" style="margin:0 0 14px;"><h3 style="margin-top:0;">Metas da equipe <span style="font-size:11.5px;color:var(--text-faint);">· '+escHtml(monthLabel(month))+'</span></h3>'+
+      out.map(function(r){ return cfgLinhaResultado(r, mvv); }).join("")+'</div>';
+  }
+
+  // ---------- ações (cliques) ----------
+  function cfgNovoRascunho(t){
+    if (t==="meta") return {id:"", nome:"", escopo:"individual", metrica:"faturamento", origem:"todas", valor:"", ativa:true, alvoCargoId:"", alvos:[], regras:[], premio:{tipo:"nenhum", valor:"", divisao:"cada"}};
+    if (t==="func") { var c0 = cfgLoad().cargos[0]; return {id:"", nome:"", cargoId:c0 ? c0.id : "", apelidos:"", destino:"", comissaoModo:"cargo", comissoes:[]}; }
+    return {id:"", nome:"", vende:false, servicos:false, comissoes:[]};
+  }
+  function cfgListaDe(d, nome){ if (!Array.isArray(d[nome])) d[nome] = []; return d[nome]; }
+  function cfgErro(msg){ state.cfgErro = msg; renderConfig(); }
+  function cfgClique(el){
+    var act = el.getAttribute("data-cfg");
+    var cfg0 = cfgLoad();
+    if (act==="tab"){ cfgLerForm(); state.cfgTab = el.getAttribute("data-v"); state.cfgEdit = null; state.cfgErro = ""; return renderConfig(); }
+    if (act==="mes"){
+      var v = parseInt(el.getAttribute("data-v"),10);
+      state.cfgMes = v===0 ? today.slice(0,7) : addMonths(state.cfgMes || today.slice(0,7), v);
+      return renderConfig();
+    }
+    if (act==="csv") return cfgExportarCSV();
+    if (act==="novo"){ var t = el.getAttribute("data-t"); state.cfgEdit = {t:t, id:"", d:cfgNovoRascunho(t)}; state.cfgErro = ""; return renderConfig(); }
+    if (act==="editar"){
+      var t2 = el.getAttribute("data-t"), id = el.getAttribute("data-id");
+      var lista = t2==="meta" ? cfg0.metas : (t2==="func" ? cfg0.funcionarios : cfg0.cargos);
+      var o = lista.filter(function(x){ return x.id===id; })[0]; if (!o) return;
+      var d = cfgClone(o);
+      if (t2==="meta"){ if (d.valor!==undefined) d.valor = String(d.valor).replace(".",","); (d.regras||[]).forEach(function(r){ r.min = String(r.min).replace(".",","); }); if (d.premio) d.premio.valor = String(d.premio.valor||"").replace(".",","); }
+      else (d.comissoes||[]).forEach(function(r){ r.valor = String(r.valor).replace(".",","); });
+      state.cfgEdit = {t:t2, id:id, d:d, nomeAntigo:o.nome}; state.cfgErro = ""; return renderConfig();
+    }
+    if (act==="cancelar"){ state.cfgEdit = null; state.cfgErro = ""; return renderConfig(); }
+    if (act==="additem" || act==="delitem"){
+      cfgLerForm(); var d2 = state.cfgEdit && state.cfgEdit.d; if (!d2) return;
+      var nome = el.getAttribute("data-lista"), arr = cfgListaDe(d2, nome);
+      if (act==="additem") arr.push(nome==="regras" ? {metrica:"pneus", origem:"novos", min:""} : {id:uid(), base:"faturamento", origem:"todas", tipoServ:"", valor:""});
+      else arr.splice(parseInt(el.getAttribute("data-i"),10), 1);
+      return renderConfig();
+    }
+    if (act==="alternar"){
+      var c1 = cfgClone(cfg0), mm = c1.metas.filter(function(x){ return x.id===el.getAttribute("data-id"); })[0];
+      if (mm){ mm.ativa = mm.ativa===false; cfgSalvar(c1); }
+      return renderConfig();
+    }
+    if (act==="excluir") return cfgExcluir(el.getAttribute("data-t"), el.getAttribute("data-id"));
+    if (act==="salvar"){ cfgLerForm(); return cfgSalvarRascunho(); }
+  }
+  function cfgExcluir(t, id){
+    var cfg = cfgClone(cfgLoad());
+    if (t==="meta"){
+      var m = cfg.metas.filter(function(x){ return x.id===id; })[0]; if (!m) return;
+      if (!confirm('Excluir a meta "'+m.nome+'"? Isso não apaga nenhuma venda.')) return;
+      cfg.metas = cfg.metas.filter(function(x){ return x.id!==id; });
+    } else if (t==="func"){
+      var f = cfg.funcionarios.filter(function(x){ return x.id===id; })[0]; if (!f) return;
+      if (!confirm('Excluir "'+f.nome+'"? As vendas antigas continuam com o nome dele, mas ele deixa de aparecer nas listas e nas comissões.')) return;
+      cfg.funcionarios = cfg.funcionarios.filter(function(x){ return x.id!==id; });
+      cfg.metas.forEach(function(x){ x.alvos = (x.alvos||[]).filter(function(a){ return a!==id; }); });
+    } else {
+      var c = cfg.cargos.filter(function(x){ return x.id===id; })[0]; if (!c) return;
+      var usados = cfg.funcionarios.filter(function(x){ return x.cargoId===id; });
+      if (usados.length){ alert('Não dá para excluir o cargo "'+c.nome+'": ainda tem gente nele ('+usados.map(function(x){ return x.nome; }).join(", ")+'). Mude o cargo dessas pessoas primeiro.'); return; }
+      if (!confirm('Excluir o cargo "'+c.nome+'"?')) return;
+      cfg.cargos = cfg.cargos.filter(function(x){ return x.id!==id; });
+      cfg.metas.forEach(function(x){ if (x.alvoCargoId===id) x.alvoCargoId = ""; });
+    }
+    if (!cfgSalvar(cfg)) alert("Não consegui salvar (sem espaço no navegador). Tente de novo.");
+    render();
+  }
+  function cfgLimpaComissoes(lista){
+    return (lista||[]).filter(function(r){ return parseNum(r.valor)>0; }).map(function(r){
+      var b = CFG_BASES.filter(function(x){ return x.k===r.base; })[0] || CFG_BASES[0];
+      return {id:r.id||uid(), base:b.k, origem:b.origem ? (r.origem||"todas") : "todas", tipoServ:b.serv ? (r.tipoServ||"") : "", valor:parseNum(r.valor)};
+    });
+  }
+  function cfgSalvarRascunho(){
+    var e = state.cfgEdit; if (!e) return;
+    var d = e.d, cfg = cfgClone(cfgLoad()), nome = String(d.nome||"").trim();
+    if (!nome) return cfgErro("Preencha o nome.");
+    if (e.t==="meta"){
+      var mi = cfgMetricaInfo(d.metrica), valor = parseNum(d.valor);
+      var regras = (d.regras||[]).filter(function(r){ return parseNum(r.min)>0; }).map(function(r){
+        return {metrica:r.metrica, origem:cfgMetricaInfo(r.metrica).origem ? (r.origem||"todas") : "todas", min:parseNum(r.min)};
+      });
+      if (!(valor>0) && !regras.length) return cfgErro("Informe o valor da meta ou pelo menos uma condição com mínimo maior que zero.");
+      var tmp = {alvoCargoId:d.alvoCargoId||"", alvos:d.alvos||[]};
+      if (d.escopo!=="loja" && !cfgMetaAlvos(tmp, cfg).length) return cfgErro("Escolha quem participa da meta (um cargo inteiro ou pessoas).");
+      var pr = d.premio || {tipo:"nenhum"};
+      var meta = {id:e.id || uid(), nome:nome, escopo:d.escopo, metrica:d.metrica, origem:mi.origem ? (d.origem||"todas") : "todas", valor:valor, ativa:d.ativa!==false,
+        alvoCargoId:d.escopo==="loja" ? "" : (d.alvoCargoId||""), alvos:d.escopo==="loja" ? [] : (d.alvos||[]), regras:regras,
+        premio:{tipo:d.escopo==="loja" ? "nenhum" : (pr.tipo||"nenhum"), valor:parseNum(pr.valor), divisao:pr.divisao||"cada"}};
+      var i = cfg.metas.map(function(x){ return x.id; }).indexOf(meta.id);
+      if (i>-1) cfg.metas[i] = meta; else cfg.metas.push(meta);
+    } else if (e.t==="cargo"){
+      if (cfg.cargos.some(function(x){ return x.id!==e.id && cfgNorm(x.nome)===cfgNorm(nome); })) return cfgErro("Já existe um cargo com esse nome.");
+      var cargo = {id:e.id || uid(), nome:nome, vende:!!d.vende, servicos:!!d.servicos, comissoes:cfgLimpaComissoes(d.comissoes)};
+      var j = cfg.cargos.map(function(x){ return x.id; }).indexOf(cargo.id);
+      if (j>-1) cfg.cargos[j] = cargo; else cfg.cargos.push(cargo);
+    } else {
+      if (!d.cargoId) return cfgErro("Escolha o cargo (crie um na aba Cargos, se precisar).");
+      if (cfg.funcionarios.some(function(x){ return x.id!==e.id && cfgNorm(x.nome)===cfgNorm(nome); })) return cfgErro("Já existe um funcionário com esse nome.");
+      var cg = cfg.cargos.filter(function(x){ return x.id===d.cargoId; })[0];
+      var apelidos = String(d.apelidos||"").trim();
+      // se o nome mudou, o nome antigo vira "outro nome" para as vendas antigas continuarem ligadas a ele
+      if (e.nomeAntigo && cfgNorm(e.nomeAntigo)!==cfgNorm(nome) && apelidos.split(/[,;]/).map(cfgNorm).indexOf(cfgNorm(e.nomeAntigo))<0)
+        apelidos = apelidos ? apelidos+", "+e.nomeAntigo : e.nomeAntigo;
+      var func = {id:e.id || uid(), nome:nome, cargoId:d.cargoId, apelidos:apelidos, destino:(cg && cg.servicos) ? (d.destino||"") : "",
+        comissaoModo:d.comissaoModo||"cargo", comissoes:cfgLimpaComissoes(d.comissoes)};
+      var k = cfg.funcionarios.map(function(x){ return x.id; }).indexOf(func.id);
+      if (k>-1) cfg.funcionarios[k] = func; else cfg.funcionarios.push(func);
+    }
+    if (!cfgSalvar(cfg)) return cfgErro("Não consegui salvar (sem espaço no navegador). Tente de novo.");
+    state.cfgEdit = null; state.cfgErro = "";
+    render();
+  }
+  function cfgExportarCSV(){
+    var mes = state.cfgMes || today.slice(0,7), A = cfgApuracaoCompleta(mes);
+    var linhas = [["Funcionário","Cargo","Vendas","Faturamento","Serviços (qtd)","Serviços (R$)","Comissão","Prêmios de meta","Total"].map(csvEscape).join(";")];
+    A.pessoas.forEach(function(p){
+      linhas.push([p.f.nome, p.cargo, p.ac.m.vendas.novos+p.ac.m.vendas.semi, n2(cfgMed(p.ac,"faturamento","todas")), p.ac.servQtd, n2(p.ac.servValor), n2(p.total), n2(p.totalPrem), n2(p.geral)].map(csvEscape).join(";"));
+    });
+    downloadTextFile("comissoes-"+mes+".csv", linhas.join("\r\n"));
+  }
+
+
   // ---------- state ----------
   var today = toISO(new Date());
   var yesterday = addDays(today, -1);
@@ -5076,6 +5759,7 @@ window.__appReady.then(function(){
   var AUTO_BACKUP_IDLE_MS = 120000; // 2 minutos sem alterações
 
   function render(){
+    cfgLoad(); // pega mudanças de configuração vindas de outro aparelho
     var estoquista = state.role === "estoquista";
     var isMaster = state.role === "master";
     if (!(state.view==="novos" && state.novosTab==="vendas")) state.novosRows = null;
@@ -5104,6 +5788,7 @@ window.__appReady.then(function(){
     else if (state.view==="historico" && isMaster) renderHistorico();
     else if (state.view==="usuarios" && isMaster) renderUsuarios();
     else if (state.view==="admin" && isMaster) renderAdmin();
+    else if (state.view==="config" && isMaster) renderConfig();
     else if (state.view==="saidasmaster" && isMaster) renderSaidasMaster();
     else if (state.view==="reservados") renderReservados();
     else if (state.view==="dashboard") renderDashboard();
@@ -5213,8 +5898,7 @@ window.__appReady.then(function(){
         monthTotal += v;
         points.push({day:i, iso:iso, v:Math.max(0, v)});
       }
-      var pct1 = Math.min(100, (monthTotal/GOAL_1)*100);
-      var pct2 = Math.min(100, (monthTotal/GOAL_2)*100);
+      var metasLoja = cfgMetasLoja(); // metas da loja (faturamento do mês) cadastradas em Metas e comissões
 
       var evoAno = state.evoMode !== "day"; // gráfico do painel: "year" (padrão) ou "day"
       // faturamento e evolução do ano exibido (visível para todos os papéis)
@@ -5300,9 +5984,9 @@ window.__appReady.then(function(){
 
       // barra de progresso da meta do dia (só faz sentido olhando o mês atual)
       var todayGoalBarHtml = "";
-      if (state.dashMonth===curMonthKey){
+      if (state.dashMonth===curMonthKey && metasLoja.length){
         var hojeTotal = sumRows(rowsOfDay(today)) + (nvS.aporteDia[today]||0);
-        var remainingHoje = GOAL_1 - monthTotal + hojeTotal;
+        var remainingHoje = parseNum(metasLoja[0].valor) - monthTotal + hojeTotal;
         var metaHoje = daysLeft>0 ? remainingHoje/daysLeft : 0;
         var hojePct = metaHoje>0 ? Math.min(100, (hojeTotal/metaHoje)*100) : 100;
         var hojeReached = metaHoje<=0 || hojeTotal>=metaHoje;
@@ -5331,14 +6015,13 @@ window.__appReady.then(function(){
             '<div class="big-total">'+(state.hideValues?'••••••':(totalParts[0]+(totalParts[1]?','+totalParts[1]:'')))+'</div>'+
             '<div class="sub">faturamento total do mês</div>'+nvIncludeHtml+
             '<div class="sub" style="margin-top:2px;">faturamento de '+yearKey+': <b style="color:var(--text);">'+(state.hideValues?'••••••':fmtCurrency(yearTotal))+'</b></div>'+
-            '<div class="goal-row">'+
-              '<div class="goal-label"><span>Meta 350 mil</span><b>'+(state.hideValues?'••%':pct1.toFixed(0)+'%')+'</b></div>'+
-              '<div class="goal-track"><div class="goal-fill'+(pct1>=100?' reached':'')+'" style="width:'+(state.hideValues?0:pct1)+'%"></div></div>'+
-            '</div>'+
-            '<div class="goal-row">'+
-              '<div class="goal-label"><span>Meta 450 mil</span><b>'+(state.hideValues?'••%':pct2.toFixed(0)+'%')+'</b></div>'+
-              '<div class="goal-track"><div class="goal-fill'+(pct2>=100?' reached':'')+'" style="width:'+(state.hideValues?0:pct2)+'%"></div></div>'+
-            '</div>'+
+            metasLoja.map(function(mt){
+              var pctM = Math.min(100, (monthTotal/parseNum(mt.valor))*100);
+              return '<div class="goal-row">'+
+                '<div class="goal-label"><span>'+escHtml(mt.nome)+'</span><b>'+(state.hideValues?'••%':pctM.toFixed(0)+'%')+'</b></div>'+
+                '<div class="goal-track"><div class="goal-fill'+(pctM>=100?' reached':'')+'" style="width:'+(state.hideValues?0:pctM)+'%"></div></div>'+
+              '</div>';
+            }).join('')+
           '</div>'+
           '<div class="hero-right">'+
             '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px;">'+
@@ -5354,11 +6037,11 @@ window.__appReady.then(function(){
 
         buildDayDetailHtml(selDay, det)+
 
-        '<div class="daily-target-head">Quanto falta vender por dia para bater a meta <span style="color:var(--text-faint);">(sem contar domingos e feriados)</span></div>'+
+        (metasLoja.length ? '<div class="daily-target-head">Quanto falta vender por dia para bater a meta <span style="color:var(--text-faint);">(sem contar domingos e feriados)</span></div>'+
         '<div class="daily-target">'+
-          dailyTargetCardHtml("Meta 350 mil", GOAL_1)+
-          dailyTargetCardHtml("Meta 450 mil", GOAL_2)+
-        '</div>'+
+          metasLoja.map(function(mt){ return dailyTargetCardHtml(mt.nome, parseNum(mt.valor)); }).join('')+
+        '</div>' : '')+
+        cfgMetasDashHtml(state.dashMonth)+
         saidasDashHtml(selDay)+
 
         '<div class="row2">'+
@@ -6228,7 +6911,7 @@ window.__appReady.then(function(){
   var VIEW_PERM = {dashboard:"vendas", table:"vendas", estoque:"estoque", clientes:"clientes", notas:"notas",
     orcamento:"notas", orcamentos:"notas", novos:"novos", regmes:"registro", avisos:"avisos", os:"os", conversor:"vendas"};
   VIEW_PERM.reservados = "reservados";
-  function viewPermitida(v){ if (v==="admin") return state.role==="master"; var k = VIEW_PERM[v]; return !k || can(k); }
+  function viewPermitida(v){ if (v==="admin" || v==="config") return state.role==="master"; var k = VIEW_PERM[v]; return !k || can(k); }
   // ---------- Área administrativa (só master): entradas, saídas e taxas das maquininhas ----------
   function adminDadosMes(month){
     var nd = daysInMonth(month);
@@ -7002,6 +7685,7 @@ window.__appReady.then(function(){
       (avisosCount>0 ? '<span class="nav-badge">'+avisosCount+'</span>' : '')+'</button>';
     var historicoBtn = isMaster ? '<button class="btn ghost small" data-act="openhistorico" title="Ver logins e movimentações de estoque">🕘 Histórico'+histBadgeHtml()+'</button>' : '';
     var usuariosBtn = isMaster ? '<button class="btn ghost small" data-act="openusuarios" title="Criar logins e alterar cargos">👤 Usuários</button>' : '';
+    var configBtn = isMaster ? '<button class="btn ghost small" data-act="openconfig" title="Metas, comissões, funcionários e cargos">🎯 Metas e comissões</button>' : '';
     if (isMaster) usuariosBtn += '<button class="btn ghost small" data-act="opentaxas" title="Maquininhas e juros de cada parcela do crédito">💳 Taxas</button>';
     if (isMaster) usuariosBtn += '<button class="btn ghost small" data-act="openferramentas" title="Relatório do mês por pessoa, backups automáticos e migração de dados">🛠 Ferramentas</button>';
     if (!can("estoque")) estoqueBtn = "";
@@ -7017,7 +7701,7 @@ window.__appReady.then(function(){
     var rsN = rsVencidos().length;
     var reservBtn = can("reservados") ? '<button class="btn ghost small" data-act="openreservados" title="Pneus reservados com sinal: aviso depois de 30 dias">🔖 Reservados'+(rsN>0 ? '<span class="nav-badge">'+rsN+'</span>' : '')+'</button>' : '';
     var saidasMBtn = isMaster ? '<button class="btn ghost small" data-act="opensaidasmaster" title="Saídas do master: salários, fornecedores, insumos... com categoria automática">📤 Saídas (master)</button>' : '';
-    var menuItems = inicioBtn+osBtn+estoqueBtn+clientesBtn+notasBtn+orcamentosBtn+regBtn+reservBtn+avisosBtn+conversorBtn+historicoBtn+saidasMBtn+usuariosBtn+backupBtns;
+    var menuItems = inicioBtn+osBtn+estoqueBtn+clientesBtn+notasBtn+orcamentosBtn+regBtn+reservBtn+avisosBtn+conversorBtn+historicoBtn+saidasMBtn+usuariosBtn+configBtn+backupBtns;
     // atalhos só com ícone, ao lado das Opções: tabela dos pneus novos e tabela principal (pneus usados, de hoje)
     var svgTire = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 3v5M12 16v5M3 12h5M16 12h5"/></svg>';
     var svgTable = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v16"/></svg>';
@@ -7288,6 +7972,7 @@ window.__appReady.then(function(){
     else if (act==="historicotab"){ state.historicoTab = node.getAttribute("data-tab"); state.historicoQuery = ""; render(); }
     else if (act==="openconversor"){ if (can("vendas")){ state.view="conversor"; render(); } }
     else if (act==="openusuarios"){ if (state.role==="master"){ state.view="usuarios"; render(); } }
+    else if (act==="openconfig"){ if (state.role==="master"){ state.view="config"; state.cfgEdit=null; state.cfgErro=""; render(); } }
     else if (act==="selectmedida"){
       state.modal = {type:"selectMedida", rowId: node.getAttribute("data-id")};
       render();
@@ -7628,7 +8313,9 @@ window.__appReady.then(function(){
         escHtml(row.medida || "Escolher medida")+'</button></div>';
     }
     if (col.type==="select"){
-      var opts = col.options.map(function(o){
+      var optList = col.options;
+      if (col.key==="vendedor" && val && optList.indexOf(val)<0) optList = optList.concat([val]); // vendedor que saiu do cadastro: a venda antiga continua mostrando o nome dele
+      var opts = optList.map(function(o){
         return '<option value="'+escAttr(o)+'"'+(o===val?" selected":"")+'>'+escHtml(o)+'</option>';
       }).join("");
       var selectHtml = '<select class="cellval" data-field="'+col.key+'" data-id="'+row.id+'" '+(editable?"":"disabled")+'>'+opts+'</select>';
@@ -7669,14 +8356,14 @@ window.__appReady.then(function(){
         ? row.outrosLista.map(function(o){ return (o.nome||"(sem descrição)")+(Array.isArray(o.split)&&o.split.length ? " ["+o.split.filter(function(q){return parseNum(q.valor)>0;}).map(function(q){return q.pessoa+" "+fmtCurrency(parseNum(q.valor));}).join(" · ")+"]" : (o.pessoa?" ["+o.pessoa+"]":""))+" — "+fmtCurrency(parseNum(o.valor)); }).join("\n")
         : ((row.outrosDescricao ? String(row.outrosDescricao) : "") + (temSplitOutros ? "\n"+row.outrosSplit.map(function(o){ return o.pessoa+": "+fmtCurrency(parseNum(o.valor)); }).join(" · ") : ""));
       return '<div class="'+cellClass+'"'+warnTitle+' style="display:flex;gap:4px;align-items:center;">'+otInput+
-        '<button class="icon-btn'+(hasOutros?' has':'')+'" data-act="outrosdesc" data-id="'+row.id+'" title="'+(hasOutros?('Serviço:\n'+escAttr(outrosTip)+'\n(clique para ver/alterar)'):'Informar o que foi e dividir entre Renan, João e Wesley')+'" '+(editable?"":"disabled")+' style="flex:0 0 auto;">⚙</button>'+
+        '<button class="icon-btn'+(hasOutros?' has':'')+'" data-act="outrosdesc" data-id="'+row.id+'" title="'+(hasOutros?('Serviço:\n'+escAttr(outrosTip)+'\n(clique para ver/alterar)'):'Informar o que foi e dividir entre os montadores')+'" '+(editable?"":"disabled")+' style="flex:0 0 auto;">⚙</button>'+
       '</div>';
     }
     if (col.type==="maodeobra"){
       var mdInput = '<input class="cellval" type="text" inputmode="decimal" data-field="maoDeObra" data-id="'+row.id+'" value="'+escAttr(val)+'" '+(editable?"":"disabled")+' placeholder="R$ 0,00" style="flex:1;min-width:0;">';
       var hasSplit = Array.isArray(row.maoDeObraSplit) && row.maoDeObraSplit.length>0;
       return '<div class="'+cellClass+'" style="display:flex;gap:4px;align-items:center;">'+mdInput+
-        '<button class="icon-btn'+(hasSplit?' has':'')+'" data-act="maodeobra" data-id="'+row.id+'" title="Dividir a mão de obra entre Renan, João e Wesley" '+(editable?"":"disabled")+' style="flex:0 0 auto;">⚙</button>'+
+        '<button class="icon-btn'+(hasSplit?' has':'')+'" data-act="maodeobra" data-id="'+row.id+'" title="Dividir a mão de obra entre os montadores" '+(editable?"":"disabled")+' style="flex:0 0 auto;">⚙</button>'+
       '</div>';
     }
     if (col.type==="number"){
@@ -7708,9 +8395,10 @@ window.__appReady.then(function(){
           if (!t.porPessoaMaoObra.hasOwnProperty(p.pessoa)) return;
           var v = parseNum(p.valor);
           t.porPessoaMaoObra[p.pessoa] += v;
-          if (p.pessoa==="Wesley") t.moBicos += v;
-          else if (p.pessoa==="Renan") t.moCambagem += v;
-          else if (p.pessoa==="João") t.moRodas += v;
+          var dstP = cfgDestinoDe(p.pessoa);
+          if (dstP==="Bicos") t.moBicos += v;
+          else if (dstP==="Cambagem") t.moCambagem += v;
+          else if (dstP==="Rodas") t.moRodas += v;
         });
       }
       // "Outros" (⚙): cada item com pessoa soma no card dela — Wesley→Bicos, Renan→Cambagem, João→Rodas
@@ -7720,9 +8408,10 @@ window.__appReady.then(function(){
         var partes = Array.isArray(p.split) && p.split.length ? p.split : [p];
         partes.forEach(function(q){
           var v = parseNum(q.valor);
-          if (q.pessoa==="Wesley") t.moBicos += v;
-          else if (q.pessoa==="Renan") t.moCambagem += v;
-          else if (q.pessoa==="João") t.moRodas += v;
+          var dstQ = cfgDestinoDe(q.pessoa);
+          if (dstQ==="Bicos") t.moBicos += v;
+          else if (dstQ==="Cambagem") t.moCambagem += v;
+          else if (dstQ==="Rodas") t.moRodas += v;
         });
       });
     });
@@ -11407,7 +12096,7 @@ window.__appReady.then(function(){
     });
   }
 
-  // ---------- modal: dividir a mão de obra entre Renan / João / Wesley ----------
+  // ---------- modal: dividir a mão de obra entre os montadores cadastrados ----------
   function renderMaoDeObraFormModal(){
     var rowId = state.modal.rowId;
     var row = findTblRow(rowId);
@@ -11421,7 +12110,7 @@ window.__appReady.then(function(){
 
     var div = document.createElement("div");
     div.className = "overlay";
-    var destinos = {"Renan":"Cambagem","Wesley":"Bicos","João":"Rodas"};
+    var destinos = cfgDestinosMapa();
     var linhasHtml = MAODEOBRA_PESSOAS.map(function(p, i){
       return '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">'+
         '<span style="flex:1.2;font-size:13px;">'+escHtml(p)+' <span style="color:var(--text-faint);font-size:11px;">→ '+escHtml(destinos[p]||"")+'</span></span>'+
@@ -11564,7 +12253,7 @@ window.__appReady.then(function(){
     var row = findTblRow(state.modal.rowId);
     if (!row){ state.modal = null; render(); return; }
     var lista;
-    var destinos = {"Renan":"Cambagem","Wesley":"Bicos","João":"Rodas"};
+    var destinos = cfgDestinosMapa();
     var descAntiga = row.outrosDescricao ? String(row.outrosDescricao).trim() : "";
     if (Array.isArray(row.outrosLista) && row.outrosLista.length){
       lista = row.outrosLista.map(function(o){ return {nome:o.nome||"", valor:o.valor, pessoa:o.pessoa||"", split:(Array.isArray(o.split)&&o.split.length ? o.split.map(function(q){return {pessoa:q.pessoa,valor:q.valor};}) : null)}; });
@@ -11580,7 +12269,7 @@ window.__appReady.then(function(){
     div.innerHTML =
       '<div class="modal wide">'+
         '<h3>Serviço desta venda</h3>'+
-        '<p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;">Informe o que foi, o valor e quem fez. Se o serviço foi feito por mais de uma pessoa, use "÷ Dividir" e coloque o valor de cada uma (até 3). A soma vai para o campo "Serviço" e cada valor soma no card de quem fez (Renan → Cambagem, Wesley → Bicos, João → Rodas). Na nota sai só o serviço normal, sem a divisão.</p>'+
+        '<p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;">Informe o que foi, o valor e quem fez. Se o serviço foi feito por mais de uma pessoa, use "÷ Dividir" e coloque o valor de cada uma. A soma vai para o campo "Serviço" e cada valor soma no card de quem fez (cada pessoa soma no card que estiver configurado para ela em Metas e comissões → Funcionários). Na nota sai só o serviço normal, sem a divisão.</p>'+
         '<div id="otLinhas"></div>'+
         '<button class="btn ghost small" id="otAdd" style="margin:4px 0 10px;">+ Adicionar serviço</button>'+
         '<div id="otResumo" style="font-size:12.5px;color:var(--text-dim);margin:6px 2px 12px;"></div>'+
