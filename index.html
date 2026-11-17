@@ -5239,7 +5239,7 @@ window.__appReady.then(function(){
   // quanto das metas de serviço foi feito, olhando as tabelas de venda e só os tipos marcados na meta
   //  • meta da loja: todos os tipos marcados
   //  • meta conjunta: tipos de quem está no grupo + tipos sem dono (Alinhamento, Serviço, Peças)
-  //  • meta individual: só os tipos da própria pessoa (o "serviço soma em" dela)
+  //  • meta individual: os tipos da própria pessoa (o "serviço soma em" dela) + os sem dono que estiverem marcados
   function cfgMedServVendas(escopo, ids, ap, cfg, tipos, metrica){
     tipos = (tipos && tipos.length) ? tipos : CFG_SERV_PADRAO;
     var donos = {};
@@ -5249,7 +5249,7 @@ window.__appReady.then(function(){
       var x = (ap.vs||{})[t]; if (!x) return;
       var v = metrica==="serv_qtd" ? x.qtd : x.valor, own = donos[t] || [];
       if (escopo==="loja") tot += v;
-      else if (!own.length){ if (escopo==="conjunta") tot += v; }
+      else if (!own.length) tot += v; // sem dono (Alinhamento, Serviço, Peças): se estiver marcado na meta, conta inteiro
       else if (escopo==="individual"){ if (ids.some(function(id){ return own.indexOf(id)>-1; })) tot += v/own.length; }
       else if (own.some(function(id){ return ids.indexOf(id)>-1; })) tot += v;
     });
@@ -5420,7 +5420,7 @@ window.__appReady.then(function(){
       '<div style="display:flex;gap:6px 18px;flex-wrap:wrap;">'+CFG_SERV_VENDAS.map(function(t){
         return '<label style="display:flex;align-items:center;gap:6px;font-size:13.5px;cursor:pointer;"><input type="checkbox" data-f="'+path+'" data-multi="1" value="'+escAttr(t[0])+'"'+(sel.indexOf(t[0])>-1 ? " checked" : "")+'> '+escHtml(t[1])+'</label>';
       }).join("")+'</div>'+
-      '<div style="font-size:11.5px;color:var(--text-faint);margin-top:4px;">Meta individual conta só o tipo da própria pessoa (Wesley→Bicos, Renan→Cambagem, João→Rodas). Alinhamento, Serviço e Peças não têm dono: contam na meta da loja e nas metas conjuntas.</div></div>';
+      '<div style="font-size:11.5px;color:var(--text-faint);margin-top:4px;">Na meta individual, Bicos, Cambagem e Rodas contam só para quem faz aquele serviço (Wesley→Bicos, Renan→Cambagem, João→Rodas). Alinhamento, Serviço e Peças não têm dono: se marcados, contam inteiros em qualquer meta (loja, conjunta ou individual).</div></div>';
   }
   function cfgFormMeta(d, cfg){
     var mi = cfgMetricaInfo(d.metrica);
